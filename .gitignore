@@ -1,0 +1,30 @@
+node_modules/
+dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+.DS_Store
+
+# Local configuration and credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Generated test and browser artifacts
+coverage/
+test-results/
+playwright-report/
+artifacts/browser/
+.playwright/
+.cache/
+tmp/
+*.tmp
+
+# Local Supabase CLI link and runtime metadata
+.supabase/
+supabase/.temp/

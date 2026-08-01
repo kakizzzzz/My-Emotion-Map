@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Afacad:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Serif+KR:wght@400;500;600;700&display=swap');
+
+:root {
+  color-scheme: light;
+
+  --em-page: #f3f3f3;
+  --em-card: #d9d9d9;
+  --em-icon: #c3c3c3;
+  --em-dark: #5c5c5c;
+
+  --em-active-surface: #ffffff;
+  --em-card-surface: rgba(255, 255, 255, 0.8);
+  --em-chrome-surface: rgba(255, 255, 255, 0.95);
+  --em-soft-surface: rgba(255, 255, 255, 0.55);
+  --em-soft-card: rgba(255, 255, 255, 0.6);
+
+  --em-text-primary: rgba(0, 0, 0, 0.9);
+  --em-text-secondary: rgba(0, 0, 0, 0.62);
+  --em-text-muted: rgba(0, 0, 0, 0.48);
+  --em-text-faint: rgba(0, 0, 0, 0.28);
+  --em-on-dark: #ffffff;
+  --em-border: rgba(0, 0, 0, 0.08);
+  --em-scrim: rgba(0, 0, 0, 0.28);
+
+  --em-calm: #7f9e91;
+  --em-calm-soft: #dce8e1;
+  --em-joy: #d9b94f;
+  --em-joy-soft: #f6e9a9;
+  --em-tender: #d2936d;
+  --em-tender-soft: #f1d6c6;
+  --em-heavy: #777f8f;
+  --em-heavy-soft: #d8dae2;
+  --em-restless: #a48caa;
+  --em-restless-soft: #e7dde8;
+  --em-focused: #7297ae;
+  --em-focused-soft: #d8e7ed;
+
+  --em-radius-row: 14px;
+  --em-radius-card: 18px;
+  --em-radius-content: 20px;
+  --em-radius-hero: 24px;
+  --em-radius-pill: 999px;
+
+  --em-control-standard: 44px;
+  --em-control-floating: 48px;
+  --em-control-prominent: 56px;
+  --em-icon-stroke: 2.2;
+
+  --em-shadow-card: 0 1px 3px rgba(30, 30, 28, 0.08);
+  --em-shadow-float: 0 5px 18px rgba(30, 30, 28, 0.14);
+  --em-shadow-sheet: 0 16px 42px rgba(20, 20, 18, 0.2);
+
+  --em-fast: 100ms;
+  --em-local: 140ms;
+  --em-scrim-time: 170ms;
+  --em-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --em-chrome-top: max(24px, calc(env(safe-area-inset-top) + 16px));
+  --em-chrome-bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px));
+  --em-floating-bottom: calc(var(--em-chrome-bottom) + 16px);
+  --em-scroll-reserve: calc(var(--em-chrome-bottom) + 72px);
+
+  --em-layer-map: 0;
+  --em-layer-screen: 900;
+  --em-layer-chrome: 1000;
+  --em-layer-placement: 1400;
+  --em-layer-sheet: 2000;
+  --em-layer-feedback: 3000;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--em-page);
+  color: var(--em-text-primary);
+  font-family:
+    "Afacad",
+    "Noto Serif SC",
+    "Noto Serif KR",
+    "Songti SC",
+    "Apple SD Gothic Neo",
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(114, 151, 174, 0.44);
+  outline-offset: 2px;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lucide {
+  stroke-width: 2.2 !important;
+}

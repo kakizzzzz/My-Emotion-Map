@@ -1,0 +1,441 @@
+.theme-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.theme-preset-grid > button {
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--em-soft-surface);
+  text-align: left;
+}
+
+.theme-preset-grid > button.is-selected {
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+.theme-preset-grid > button > span {
+  display: flex;
+  gap: 4px;
+}
+
+.theme-preset-grid > button i {
+  height: 24px;
+  flex: 1;
+  border-radius: 7px;
+}
+
+.theme-preset-grid > button strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.theme-color-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.theme-color-control {
+  position: relative;
+}
+
+.theme-color-control > button {
+  display: flex;
+  width: 100%;
+  height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.theme-color-control > button > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-color-control > button small {
+  color: var(--em-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.theme-color-control > button i {
+  width: 40px;
+  height: 24px;
+  border: 1px solid var(--em-border);
+  border-radius: 8px;
+}
+
+.theme-color-popover {
+  position: relative;
+  z-index: 20;
+  width: 124px;
+  margin: 8px 0 4px auto;
+  padding: 10px;
+  border-radius: 20px;
+  background: var(--em-dark);
+  box-shadow: var(--em-shadow-float);
+}
+
+.theme-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 20px);
+  gap: 8px;
+}
+
+.theme-color-swatches button {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.theme-color-swatches .theme-custom-swatch {
+  border-radius: 6px;
+  background: linear-gradient(135deg, #12c2e9, #c471ed, #f64f59);
+}
+
+.theme-custom-picker {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.theme-custom-picker .react-colorful {
+  width: 104px;
+  height: 92px;
+}
+
+.theme-custom-color-input {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.theme-custom-picker input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: white;
+  font-family: inherit;
+  outline: 0;
+}
+
+.settings-submenu,
+.mock-settings-options {
+  display: grid;
+  width: min(calc(100% - 40px), 350px);
+  gap: 8px;
+  margin: 24px auto 0;
+}
+
+.settings-submenu > button {
+  display: grid;
+  height: 52px;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: var(--em-card);
+  text-align: left;
+}
+
+.settings-submenu > button span {
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings-submenu > button .lucide:first-child {
+  color: var(--em-text-secondary);
+}
+
+.settings-submenu > button .lucide:last-child {
+  color: var(--em-text-faint);
+}
+
+.language-card > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.language-card > div button {
+  height: 36px;
+  border-radius: 999px;
+  background: var(--em-soft-card);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.language-card > div button.is-selected {
+  background: var(--em-dark);
+  color: white;
+}
+
+.ai-preferences-card {
+  display: grid;
+  gap: 18px;
+}
+
+.ai-avatar-preference {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding-bottom: 2px;
+}
+
+.ai-avatar-preference > span {
+  justify-self: start;
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-avatar-picker {
+  display: grid;
+  width: 74px;
+  height: 74px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--em-active-surface);
+  color: var(--em-text-secondary);
+  box-shadow: var(--em-shadow-card);
+  transition: transform 120ms var(--em-ease-out);
+}
+
+.ai-avatar-picker:active {
+  transform: scale(0.97);
+}
+
+.ai-avatar-picker img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ai-about-field {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-about-field > span,
+.ai-preference-group > span {
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-about-field textarea {
+  width: 100%;
+  min-height: 108px;
+  resize: none;
+  padding: 14px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--em-soft-surface);
+  font-size: 16px;
+  line-height: 1.55;
+  outline: 0;
+}
+
+.ai-preference-group {
+  display: grid;
+  gap: 9px;
+}
+
+.ai-preference-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ai-preference-group button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--em-soft-card);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ai-preference-group button.is-selected {
+  background: var(--em-dark);
+  color: white;
+}
+
+.mock-toggle {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 20px;
+  background: var(--em-card);
+  text-align: left;
+}
+
+.mock-toggle > span:first-child {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--em-soft-surface);
+}
+
+.mock-toggle strong,
+.mock-toggle small {
+  display: block;
+}
+
+.mock-toggle strong {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.mock-toggle small {
+  color: var(--em-text-muted);
+  font-size: 9px;
+}
+
+.mock-toggle > i {
+  position: relative;
+  width: 42px;
+  height: 25px;
+  border-radius: 20px;
+  background: var(--em-icon);
+  transition: background 150ms;
+}
+
+.mock-toggle > i b {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  transition: transform 180ms var(--em-ease-out);
+}
+
+.mock-toggle > i.is-on {
+  background: var(--em-dark);
+}
+
+.mock-toggle > i.is-on b {
+  transform: translateX(17px);
+}
+
+.settings-honesty-note {
+  margin: 12px 0 0;
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.connection-card__header {
+  min-height: 64px;
+}
+
+.connection-check-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: var(--em-radius-pill);
+  background: var(--em-soft-surface);
+  color: var(--em-text-muted);
+}
+
+.data-management-card > p,
+.location-settings-card > p {
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.data-management-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.data-management-actions button,
+.location-request-button {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: 16px;
+  background: var(--em-soft-surface);
+  font-weight: 700;
+}
+
+.data-management-actions .is-destructive {
+  color: #8f3535;
+}
+
+.location-permission-status {
+  min-height: 1.5em;
+}
+.cloud-login-form {
+  display: grid;
+  gap: 12px;
+}
+
+.cloud-login-form label {
+  display: grid;
+  gap: 7px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.cloud-login-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--theme-dark) 20%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-card) 92%, white);
+  padding: 0 13px;
+  color: var(--theme-dark);
+  font: inherit;
+}
+
+.cloud-login-form button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--theme-dark);
+  color: var(--theme-card);
+  font: inherit;
+  font-weight: 700;
+}
+
+.cloud-login-form button:disabled {
+  opacity: 0.48;
+}

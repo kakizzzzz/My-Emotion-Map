@@ -1,0 +1,450 @@
+/* Note editor */
+
+.note-editor-overlay {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.note-editor-sheet {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 92%;
+  max-height: 92%;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border-radius: 30px 30px 0 0;
+  background: var(--em-page);
+  box-shadow: var(--em-shadow-sheet);
+}
+
+.note-view-sheet {
+  display: grid;
+  width: 100%;
+  height: 92%;
+  max-height: 92%;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border-radius: 30px 30px 0 0;
+  background: var(--em-page);
+  box-shadow: var(--em-shadow-sheet);
+}
+
+[data-theme-tone="night"] .note-editor-sheet,
+[data-theme-tone="night"] .note-view-sheet,
+[data-theme-tone="night"] .revisit-modal {
+  background: rgba(42, 45, 47, 0.99);
+}
+
+.sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--em-border);
+}
+
+.sheet-header h2 {
+  margin: 0 0 3px;
+  font-size: 23px;
+  letter-spacing: -0.045em;
+}
+
+.sheet-header small {
+  color: var(--em-text-muted);
+  font-size: 10px;
+}
+
+.note-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin: 12px 18px 0;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--em-card);
+}
+
+.note-view-tabs button {
+  min-height: 44px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--em-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background 140ms var(--em-ease-out),
+    color 140ms var(--em-ease-out);
+}
+
+.note-view-tabs button.is-active {
+  background: var(--em-dark);
+  color: white;
+}
+
+.note-editor-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 72px;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.note-editor-header > small {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.note-page-indicator {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 48px;
+}
+
+.note-page-indicator > div {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.note-page-indicator button {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+}
+
+.note-page-indicator button::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--em-icon);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.note-page-indicator button.is-current::before {
+  width: 15px;
+  border-radius: 999px;
+  background: var(--em-dark);
+}
+
+.note-page-indicator button:disabled {
+  cursor: default;
+}
+
+.note-editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.note-header-action {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--em-card);
+  transition: transform 120ms var(--em-ease-out);
+}
+
+.note-header-action:active {
+  transform: scale(0.96);
+}
+
+.note-editor-scroll {
+  overflow-y: auto;
+  padding: 16px 18px 46px;
+}
+
+.note-wizard-viewport {
+  overflow: hidden;
+  padding: 0;
+}
+
+.note-wizard-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.note-wizard-page {
+  width: 100%;
+  height: 100%;
+  flex: 0 0 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 18px 54px;
+  scrollbar-width: none;
+}
+
+.note-wizard-page::-webkit-scrollbar {
+  display: none;
+}
+
+.note-view-scroll {
+  overflow-y: auto;
+  padding: 18px 18px 26px;
+}
+
+.note-view-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 2px 18px;
+  border-bottom: 1px solid var(--em-border);
+  background: transparent;
+}
+
+.note-view-hero h3 {
+  margin: 0 0 4px;
+  font-size: 19px;
+}
+
+.note-view-hero span {
+  color: var(--em-text-muted);
+  font-size: 12px;
+}
+
+.note-view-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--em-border);
+  background: transparent;
+  font-size: 12px;
+}
+
+.note-view-summary span {
+  color: var(--em-text-muted);
+}
+
+.note-view-prompts {
+  display: grid;
+  gap: 0;
+  margin-top: 2px;
+}
+
+.note-view-prompts article,
+.note-view-excerpt {
+  margin: 0;
+  padding: 17px 2px;
+  border-bottom: 1px solid var(--em-border);
+  background: transparent;
+}
+
+.note-view-prompts h3 {
+  margin: 0 0 7px;
+  color: var(--em-text-muted);
+  font-size: 11px;
+}
+
+.note-view-prompts p,
+.note-view-excerpt {
+  color: var(--em-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.note-view-prompts p {
+  margin: 0;
+}
+
+.note-follow-up-list {
+  display: grid;
+  padding: 0 2px;
+}
+
+.note-follow-up-record {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--em-border);
+}
+
+.note-follow-up-record > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.note-follow-up-record h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.note-follow-up-record time {
+  flex: 0 0 auto;
+  color: var(--em-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.note-follow-up-record p {
+  margin: 0;
+  color: var(--em-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.note-follow-up-record strong {
+  display: block;
+  margin-top: 10px;
+  color: var(--em-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.note-follow-up-record small {
+  display: block;
+  margin-top: 5px;
+  color: var(--em-text-muted);
+  font-size: 10px;
+}
+
+.note-follow-up-empty {
+  display: grid;
+  min-height: 42vh;
+  place-items: center;
+  color: var(--em-text-muted);
+  font-size: 12px;
+}
+
+.title-input {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 0;
+  background: transparent;
+}
+
+.title-input span {
+  color: var(--em-text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.title-input input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--em-border);
+  border-radius: 16px;
+  background: var(--em-soft-surface);
+  font-size: 15px;
+  font-weight: 500;
+  outline: 0;
+}
+
+.editor-section {
+  min-height: 72px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--em-border);
+  border-radius: 22px;
+  background: var(--em-card-surface);
+}
+
+.editor-step {
+  overflow: hidden;
+}
+
+.identity-step {
+  margin-top: 0;
+  padding: 18px 16px 20px;
+}
+
+.identity-step .title-input {
+  margin-bottom: 14px;
+}
+
+.identity-step .place-name-input {
+  margin-bottom: 24px;
+}
+
+.editor-step-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+}
+
+.editor-step-heading > span {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.editor-step-heading > .lucide {
+  color: var(--em-text-secondary);
+}
+
+.editor-section > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+}
+
+.editor-section h3 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.025em;
+}
+
+.editor-section-toggle {
+  display: grid;
+  width: 100%;
+  height: 46px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px;
+  border-radius: 15px;
+  background: transparent;
+  text-align: left;
+}
+
+.editor-section-toggle > span {
+  color: var(--em-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.editor-section-toggle > .lucide {
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+  border-radius: 50%;
+  background: var(--em-soft-surface);
+  transition: transform 140ms var(--em-ease-out);
+}
+
+.editor-section-toggle > .lucide.is-open {
+  transform: rotate(180deg);
+}
+
+.editor-section-body {
+  overflow: hidden;
+  padding-top: 12px;
+}

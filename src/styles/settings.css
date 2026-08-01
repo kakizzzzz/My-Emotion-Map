@@ -1,0 +1,491 @@
+/* Settings */
+
+.settings-screen {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(23, 23, 22, 0.26);
+  backdrop-filter: blur(4px);
+}
+
+.settings-paper {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 92%;
+  overflow-y: auto;
+  border-radius: 30px 30px 0 0;
+  background: var(--em-page);
+  box-shadow: var(--em-shadow-sheet);
+}
+
+.settings-paper > .screen-header {
+  justify-content: flex-end;
+  min-height: 82px;
+  padding: 18px 18px 8px;
+}
+
+.profile-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  justify-items: center;
+  gap: 14px;
+  width: min(calc(100% - 80px), 350px);
+  margin: 10px auto 40px;
+  padding: 0;
+  background: transparent;
+  text-align: center;
+}
+
+.profile-avatar {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--em-card);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-card h2 {
+  margin: 0 0 5px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+
+.profile-card p {
+  margin: 0;
+  color: var(--em-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.profile-card code {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  margin-top: 7px;
+  color: var(--em-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-list {
+  display: grid;
+  width: min(calc(100% - 80px), 350px);
+  gap: 10px;
+  margin: 0 auto 28px;
+}
+
+.settings-list > button {
+  display: grid;
+  height: 58px;
+  grid-template-columns: 24px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--em-card);
+  text-align: left;
+}
+
+.settings-list strong {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.settings-list > button > .lucide:last-child {
+  color: rgba(0, 0, 0, 0.15);
+}
+
+.settings-panel {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  overflow-y: auto;
+  padding:
+    max(28px, calc(env(safe-area-inset-top) + 18px))
+    20px
+    30px;
+  background: var(--em-active-surface);
+}
+
+.settings-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(calc(100% - 40px), 350px);
+  margin: 0 auto;
+}
+
+.settings-back-pill {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--em-card);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.copied-settings-card {
+  width: min(calc(100% - 40px), 350px);
+  margin: 16px auto 0;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--em-card);
+}
+
+.copied-settings-card > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.copied-settings-card > header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.connections-card-list {
+  display: grid;
+  width: min(calc(100% - 40px), 350px);
+  gap: 10px;
+  margin: 16px auto 0;
+}
+
+.connection-card {
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--em-card);
+}
+
+.connection-card__header {
+  display: grid;
+  width: 100%;
+  min-height: 68px;
+  grid-template-columns: 40px minmax(0, 1fr) auto 20px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  text-align: left;
+}
+
+.connection-card__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--em-soft-surface);
+}
+
+.connection-card__title {
+  min-width: 0;
+}
+
+.connection-card__title strong,
+.connection-card__title small {
+  display: block;
+}
+
+.connection-card__title strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-card__title small {
+  margin-top: 3px;
+  color: var(--em-text-muted);
+  font-size: 10px;
+}
+
+.connection-status {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.connection-card__header > .lucide:last-child {
+  color: var(--em-text-muted);
+  transition: transform var(--em-local);
+}
+
+.connection-card.is-open .connection-card__header > .lucide:last-child {
+  transform: rotate(180deg);
+}
+
+.connection-card__body {
+  display: grid;
+  gap: 8px;
+  overflow: hidden;
+  padding: 0 12px 12px;
+}
+
+.connection-meta,
+.connection-switch {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: var(--em-soft-surface);
+  text-align: left;
+}
+
+.connection-meta span,
+.connection-switch span {
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.connection-meta strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.connection-switch > i {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--em-icon);
+  transition: background var(--em-local);
+}
+
+.connection-switch > i::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--em-active-surface);
+  content: '';
+  transition: transform var(--em-local);
+}
+
+.connection-switch > i.is-on {
+  background: var(--em-dark);
+}
+
+.connection-switch > i.is-on::after {
+  transform: translateX(16px);
+}
+
+.connection-check-button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: var(--em-dark);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.health-settings-card {
+  display: grid;
+  gap: 14px;
+}
+
+.location-settings-card {
+  display: grid;
+  gap: 14px;
+}
+
+.location-settings-card > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.location-settings-card > header h2,
+.location-settings-card > p {
+  margin: 0;
+}
+
+.location-settings-card > p {
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  line-height: 1.42;
+}
+
+.location-settings-card > small {
+  color: var(--em-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.location-request-button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: var(--em-soft-card);
+  color: black;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.location-request-button:disabled {
+  opacity: 0.58;
+}
+
+.location-permission-status:empty {
+  display: none;
+}
+
+.health-settings-card > header {
+  margin-bottom: 0;
+}
+
+.health-range-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.health-range-fields label {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--em-soft-surface);
+}
+
+.health-range-fields label > span:first-child {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.health-range-fields label > span:last-child {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.health-range-fields input {
+  width: 64px;
+  border: 0;
+  background: transparent;
+  color: var(--em-text-primary);
+  font-size: 24px;
+  font-weight: 600;
+  outline: 0;
+}
+
+.health-range-fields small {
+  color: var(--em-text-muted);
+  font-size: 10px;
+}
+
+.health-settings-card > p {
+  margin: 0 2px;
+  color: var(--em-text-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.health-range-reset {
+  min-height: 42px;
+  border-radius: 999px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-editor-avatar {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  overflow: hidden;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: var(--em-soft-surface);
+}
+
+.profile-editor-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-editor-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-editor-fields label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+}
+
+.profile-editor-fields input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 500;
+  outline: 0;
+}
+
+.profile-editor-fields .profile-id-field input {
+  color: var(--em-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.profile-editor-fields label > button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--em-card);
+}
