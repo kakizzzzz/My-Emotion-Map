@@ -54,18 +54,38 @@ export function useFollowUpCoordinator({
         (conversation) =>
           conversation.id === FOLLOW_UP_CONVERSATION_ID,
       );
-      if (
-        !companion ||
-        companion.messages.some(
-          (message) => message.followUpId === activeFollowUp.id,
-        )
-      ) {
+      if (companion?.messages.some(
+        (message) => message.followUpId === activeFollowUp.id,
+      )) {
         return current;
       }
       const isVisible =
         activeView === 'chat' &&
         communicationSurface === 'conversation' &&
         activeConversationId === FOLLOW_UP_CONVERSATION_ID;
+      const followUpMessage = {
+        id: createRecordId('follow-up'),
+        role: 'assistant' as const,
+        body: activeFollowUp.prompt,
+        noteIds: [activeFollowUp.noteId],
+        options: getFollowUpOptions(language),
+        followUpId: activeFollowUp.id,
+        createdAt:
+          activeFollowUp.promptedAt ?? new Date().toISOString(),
+      };
+      if (!companion) {
+        return [
+          {
+            id: FOLLOW_UP_CONVERSATION_ID,
+            title: navigationCopy.chat,
+            preview: activeFollowUp.prompt,
+            kind: 'companion' as const,
+            unread: !isVisible,
+            messages: [followUpMessage],
+          },
+          ...current,
+        ];
+      }
       return current.map((conversation) =>
         conversation.id === FOLLOW_UP_CONVERSATION_ID
           ? {
@@ -75,17 +95,7 @@ export function useFollowUpCoordinator({
               unread: !isVisible,
               messages: [
                 ...conversation.messages,
-                {
-                  id: createRecordId('follow-up'),
-                  role: 'assistant',
-                  body: activeFollowUp.prompt,
-                  noteIds: [activeFollowUp.noteId],
-                  options: getFollowUpOptions(language),
-                  followUpId: activeFollowUp.id,
-                  createdAt:
-                    activeFollowUp.promptedAt ??
-                    new Date().toISOString(),
-                },
+                followUpMessage,
               ],
             }
           : conversation,

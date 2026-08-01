@@ -28,9 +28,8 @@ export type SettingsScreenProps = {
   onRequestLocation: () => void;
   onToast: ToastHandler;
   cloudConfigured: boolean;
-  cloudEmail: string | null;
+  cloudAccount: string | null;
   cloudStatus: CloudSyncStatus;
-  onRequestMagicLink: (email: string) => Promise<boolean>;
   onSignOut: () => Promise<unknown>;
   onConfirmInitialUpload: () => void;
   onUseRemoteVersion: () => void;

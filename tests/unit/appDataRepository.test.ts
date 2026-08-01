@@ -206,6 +206,7 @@ describe('app data repository', () => {
 
     expect(empty.dataMode).toBe('real');
     expect(empty.moments).toEqual([]);
+    expect(empty.conversations).toEqual([]);
     expect(empty.starInboxItems).toEqual([]);
     expect(demo.dataMode).toBe('demo');
     expect(demo.moments.length).toBeGreaterThan(0);

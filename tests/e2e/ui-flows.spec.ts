@@ -2,15 +2,42 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 const STORAGE_KEY = 'my-emotion-map.app-data.v1';
+const SUPABASE_AUTH_STORAGE_KEY = 'sb-uifgpmmlvmfrauzbbrem-auth-token';
 const DEMO_PROFILE_ID = '7c5e2f8a-4c6f-4c1d-9b2f-2a6f5e8d2026';
 
-async function startBlank(page: Page) {
-  await page.addInitScript((storageKey) => {
+async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
+  await page.route(
+    'https://uifgpmmlvmfrauzbbrem.supabase.co/rest/v1/**',
+    async (route) => {
+      const isSave = route.request().url().includes('/rpc/save_app_state');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(isSave ? [{ revision: 1 }] : []),
+      });
+    },
+  );
+  await page.addInitScript(({ storageKey, authStorageKey, blank }) => {
     if (window.sessionStorage.getItem('e2e-storage-initialized')) return;
     window.localStorage.clear();
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
+    window.localStorage.setItem(authStorageKey, JSON.stringify({
+      access_token: 'e2e-access-token',
+      refresh_token: 'e2e-refresh-token',
+      expires_in: 315360000,
+      expires_at: Math.floor(Date.now() / 1000) + 315360000,
+      token_type: 'bearer',
+      user: {
+        id: '00000000-0000-4000-8000-000000000001',
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: 'internal-account-identifier',
+        user_metadata: { account_id: 'e2e_student' },
+        app_metadata: { provider: 'email', providers: ['email'] },
+        created_at: '2026-08-01T00:00:00.000Z',
+      },
+    }));
+    if (blank) {
+      window.localStorage.setItem(storageKey, JSON.stringify({
         schemaVersion: 3,
         dataMode: 'real',
         moments: [],
@@ -19,10 +46,18 @@ async function startBlank(page: Page) {
         followUps: [],
         revisits: [],
         starInboxItems: [],
-      }),
-    );
+      }));
+    }
     window.sessionStorage.setItem('e2e-storage-initialized', 'true');
-  }, STORAGE_KEY);
+  }, {
+    storageKey: STORAGE_KEY,
+    authStorageKey: SUPABASE_AUTH_STORAGE_KEY,
+    blank: includeBlankData,
+  });
+}
+
+async function startBlank(page: Page) {
+  await seedAuthenticatedSession(page, true);
   await page.goto('/');
   await expect(page.locator('.map-screen')).toBeVisible();
 }
@@ -72,9 +107,20 @@ async function openCalendar(page: Page) {
   await expect(page.getByRole('dialog', { name: '记录日历' })).toBeVisible();
 }
 
-test('fresh preview shows labelled Demo content and a fictional profile', async ({
+test('login uses account and password without an email field', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'My Emotion Map' })).toBeVisible();
+  await expect(page.getByLabel('账号')).toBeVisible();
+  await expect(page.getByLabel('密码')).toBeVisible();
+  await expect(page.getByLabel('邮箱')).toHaveCount(0);
+  await page.getByRole('button', { name: '注册' }).click();
+  await expect(page.getByLabel('再次输入密码')).toBeVisible();
+});
+
+test('authenticated preview shows labelled Demo content and a fictional profile', async ({
   page,
 }) => {
+  await seedAuthenticatedSession(page, false);
   await page.goto('/');
 
   await expect(page.locator('.demo-mode-banner')).toContainText('演示数据');
@@ -112,6 +158,19 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: '页面导航' })).toHaveCount(0);
   await expect(menu).toBeFocused();
+
+  await menu.click();
+  await page.getByRole('button', { name: '交流回访' }).click();
+  await expect(page.locator('.chat-screen')).toBeVisible();
+  await expect(
+    page.getByText('发送第一条消息后，这段对话才会保存。'),
+  ).toBeVisible();
+  await expect(page.locator('.message-row')).toHaveCount(0);
+  await expect(page.locator('.composer-row > *')).toHaveCount(2);
+  await page.getByRole('button', { name: '返回地图并打开导航' }).click();
+  await expect(page.locator('.map-screen')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await openCalendar(page);
   const calendarActions = page.locator('.calendar-header-actions > button');
@@ -197,7 +256,7 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
     .first()
     .click();
   await page
-    .getByRole('button', { name: '现在回看，感受轻了一些。' })
+    .getByRole('button', { name: '现在回看，我仍然很喜欢这段经历。' })
     .click();
   await expect(
     page.getByRole('dialog', { name: /现在想起/ }),

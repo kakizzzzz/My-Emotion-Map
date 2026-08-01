@@ -455,20 +455,12 @@ const sanitizeRevisit = (
   };
 };
 
-const createCompanionConversation = (): Conversation => ({
-  id: 'thread-revisit',
-  title: '交流回访',
-  preview: '',
-  kind: 'companion',
-  messages: [],
-});
-
 export const createEmptyAppData = (): AppDataSnapshot => ({
   schemaVersion: CURRENT_SCHEMA_VERSION,
   dataMode: 'real',
   moments: [],
   notes: [],
-  conversations: [createCompanionConversation()],
+  conversations: [],
   followUps: [],
   revisits: [],
   starInboxItems: [],
@@ -560,9 +552,11 @@ export const migrateAppData = (
       (conversation) =>
         conversation.id === 'thread-revisit' ||
         conversation.kind === 'companion',
-    ) ?? createCompanionConversation();
+    ) ?? null;
   const normalizedConversations = [
-    { ...companion, id: 'thread-revisit', kind: 'companion' as const },
+    ...(companion
+      ? [{ ...companion, id: 'thread-revisit', kind: 'companion' as const }]
+      : []),
     ...conversations
       .filter((conversation) => conversation !== companion)
       .map((conversation) => ({

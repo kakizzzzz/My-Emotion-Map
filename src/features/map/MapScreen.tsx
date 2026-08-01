@@ -603,8 +603,8 @@ export function MapScreen({
         key={mapReloadKey}
         ref={mapRef}
         initialViewState={{
-          longitude: 126.9545,
-          latitude: 37.5557,
+          longitude: 127.0001,
+          latitude: 37.5583,
           zoom: 16,
         }}
         mapStyle={MAP_STYLES[mapStyle]}
