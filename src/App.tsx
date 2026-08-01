@@ -58,6 +58,8 @@ import { useSupabaseSession } from './services/useSupabaseSession';
 import type { PhotoAssistDelivery } from './app/appTypes';
 import { useCloudSync } from './services/useCloudSync';
 import { createRecordId } from './app/createRecordId';
+import { LoginScreen } from './features/auth/LoginScreen';
+import { authenticateAccount } from './services/accountAuth';
 
 const CalendarScreen = lazy(() =>
   import('./features/calendar/CalendarScreen').then((module) => ({
@@ -77,6 +79,45 @@ const SettingsScreen = lazy(() =>
     default: module.SettingsScreen,
   })),
 );
+
+function AppToast({
+  notice,
+  onDismiss,
+}: {
+  notice: ToastNotice | null;
+  onDismiss: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {notice ? (
+        <motion.div
+          key={notice.id}
+          className={`toast toast--${notice.placement}`}
+          initial={{ opacity: 0, y: 8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.98 }}
+          transition={{ duration: 0.12 }}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span>{notice.message}</span>
+          {notice.actionLabel && notice.onAction ? (
+            <button
+              type="button"
+              onClick={() => {
+                notice.onAction?.();
+                onDismiss();
+              }}
+            >
+              {notice.actionLabel}
+            </button>
+          ) : null}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
 
 export function App() {
   const initialData = useMemo(() => loadAppData(), []);
@@ -251,15 +292,20 @@ export function App() {
     applySnapshot,
   });
 
-  const requestMagicLink = async (email: string) => {
-    if (!cloudSession.client) return false;
-    const { error } = await cloudSession.client.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
-      },
+  const authenticateCloudAccount = async (
+    mode: 'login' | 'register',
+    account: string,
+    password: string,
+    passwordConfirmation: string,
+  ) => {
+    if (!cloudSession.client) return 'unavailable' as const;
+    return authenticateAccount({
+      client: cloudSession.client,
+      mode,
+      account,
+      password,
+      passwordConfirmation,
     });
-    return !error;
   };
 
   const appendGroundedChat = (
@@ -269,19 +315,41 @@ export function App() {
     noteIds: string[],
   ) => {
     const createdAt = new Date().toISOString();
-    setConversations((current) => current.map((conversation) =>
-      conversation.id === conversationId
-        ? {
-            ...conversation,
-            preview: assistantBody.slice(0, 120),
-            messages: [
-              ...conversation.messages,
-              { id: createRecordId('message'), role: 'user', body: userBody, createdAt },
-              { id: createRecordId('message'), role: 'assistant', body: assistantBody, noteIds, createdAt },
-            ],
-          }
-        : conversation,
-    ));
+    const messages = [
+      { id: createRecordId('message'), role: 'user' as const, body: userBody, createdAt },
+      { id: createRecordId('message'), role: 'assistant' as const, body: assistantBody, noteIds, createdAt },
+    ];
+    setConversations((current) => {
+      if (current.some((conversation) => conversation.id === conversationId)) {
+        return current.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                preview: assistantBody.slice(0, 120),
+                messages: [...conversation.messages, ...messages],
+              }
+            : conversation,
+        );
+      }
+      const firstLine = userBody.split(/\r?\n/, 1)[0]?.trim() ?? '';
+      const createdConversation: Conversation = {
+        id: conversationId,
+        title: firstLine.slice(0, 42) || copy.chat.newConversation,
+        preview: assistantBody.slice(0, 120),
+        kind: 'regular',
+        messages,
+      };
+      const companion = current.find(
+        (conversation) => conversation.id === FOLLOW_UP_CONVERSATION_ID,
+      );
+      return companion
+        ? [
+            companion,
+            createdConversation,
+            ...current.filter((conversation) => conversation !== companion),
+          ]
+        : [createdConversation, ...current];
+    });
   };
 
   useEffect(() => {
@@ -344,6 +412,19 @@ export function App() {
     setCommunicationSurface('conversation');
     setActiveView('chat');
     setSideOpen(false);
+  };
+
+  const startNewConversation = () => {
+    setActiveConversationId(createRecordId('conversation'));
+    setCommunicationSurface('conversation');
+    setActiveView('chat');
+    setSideOpen(false);
+  };
+
+  const exitConversationToMap = () => {
+    setActiveView('map');
+    setCommunicationSurface('conversation');
+    setSideOpen(true);
   };
 
   const openStarInbox = () => {
@@ -509,6 +590,24 @@ export function App() {
     showToast(copy.feedback.feelingSaved);
   };
 
+  if (!cloudSession.session) {
+    return (
+      <AppLanguageContext.Provider value={languageContextValue}>
+        <div className="app-stage">
+          <main className="app-shell" data-theme-tone={themeTone} style={themeStyle}>
+            <LoginScreen
+              ready={cloudSession.ready}
+              configured={Boolean(cloudSession.client)}
+              onAuthenticate={authenticateCloudAccount}
+              onToast={showToast}
+            />
+            <AppToast notice={toast} onDismiss={() => setToast(null)} />
+          </main>
+        </div>
+      </AppLanguageContext.Provider>
+    );
+  }
+
   return (
     <AppLanguageContext.Provider value={languageContextValue}>
       <div className="app-stage">
@@ -602,6 +701,7 @@ export function App() {
                 />
               ) : (
                 <ChatScreen
+                  key={activeConversationId}
                   notes={savedNotes}
                   conversations={conversations}
                   activeConversationId={activeConversationId}
@@ -613,6 +713,9 @@ export function App() {
                   cloudStatus={cloudSync.status}
                   dataMode={dataMode}
                   onGroundedChat={appendGroundedChat}
+                  onNewConversation={startNewConversation}
+                  onExitToMap={exitConversationToMap}
+                  onToast={showToast}
                 />
               )}
             </motion.div>
@@ -650,9 +753,12 @@ export function App() {
                 }
                 onToast={showToast}
                 cloudConfigured={Boolean(cloudSession.client)}
-                cloudEmail={cloudSession.session?.user.email ?? null}
+                cloudAccount={
+                  typeof cloudSession.session?.user.user_metadata.account_id === 'string'
+                    ? cloudSession.session.user.user_metadata.account_id
+                    : null
+                }
                 cloudStatus={cloudSync.status}
-                onRequestMagicLink={requestMagicLink}
                 onSignOut={() => cloudSession.client?.auth.signOut() ?? Promise.resolve()}
                 onConfirmInitialUpload={cloudSync.confirmInitialUpload}
                 onUseRemoteVersion={cloudSync.useRemoteVersion}
@@ -687,6 +793,7 @@ export function App() {
               conversations={conversations}
               onNavigate={navigate}
               onOpenConversation={openConversation}
+              onNewConversation={startNewConversation}
               onClose={() => {
                 setSideOpen(false);
                 window.setTimeout(() => {
@@ -753,34 +860,7 @@ export function App() {
           onRequest={locationController.confirmLocationRequest}
         />
 
-        <AnimatePresence>
-          {toast ? (
-            <motion.div
-              key={toast.id}
-              className={`toast toast--${toast.placement}`}
-              initial={{ opacity: 0, y: 8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.98 }}
-              transition={{ duration: 0.12 }}
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              <span>{toast.message}</span>
-              {toast.actionLabel && toast.onAction ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    toast.onAction?.();
-                    setToast(null);
-                  }}
-                >
-                  {toast.actionLabel}
-                </button>
-              ) : null}
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        <AppToast notice={toast} onDismiss={() => setToast(null)} />
         </main>
       </div>
     </AppLanguageContext.Provider>

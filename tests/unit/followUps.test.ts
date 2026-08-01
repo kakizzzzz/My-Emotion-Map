@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { promoteNextDueFollowUp } from '../../src/domain/followUps';
+import {
+  getFollowUpOptions,
+  promoteNextDueFollowUp,
+} from '../../src/domain/followUps';
 import type { FollowUpRecord } from '../../src/types';
 
 const records: FollowUpRecord[] = [
@@ -30,6 +33,16 @@ const records: FollowUpRecord[] = [
 ];
 
 describe('follow-up promotion', () => {
+  it.each(['zh', 'en', 'ko'] as const)(
+    'offers an explicit positive response in %s',
+    (language) => {
+      expect(getFollowUpOptions(language)[0]).toMatchObject({
+        id: 'positive',
+        responseKind: 'positive',
+      });
+    },
+  );
+
   it('activates only records whose dueAt is not in the future', () => {
     const next = promoteNextDueFollowUp(
       records,

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { MessageSquarePlus, Send, Sparkles, X } from 'lucide-react';
+import { ChevronLeft, MessageSquarePlus, Send, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { EmotionStar } from '../../EmotionStar';
 import { MOTION } from '../../motion';
@@ -10,9 +10,10 @@ import { useDialogFocus } from '../../app/useDialogFocus';
 import type { CloudAuth } from '../../services/supabaseClient';
 import type { CloudSyncStatus } from '../../services/useCloudSync';
 import { requestEmotionChat } from '../../services/emotionChat';
+import type { ToastHandler } from '../../app/appTypes';
 
 function AiAvatar() {
-  return <span className="ai-avatar" aria-hidden="true"><Sparkles size={17} strokeWidth={2.2} /></span>;
+  return <span className="ai-avatar" aria-hidden="true">AI</span>;
 }
 
 export function ChatScreen({
@@ -25,6 +26,9 @@ export function ChatScreen({
   cloudStatus,
   dataMode,
   onGroundedChat,
+  onNewConversation,
+  onExitToMap,
+  onToast,
 }: {
   notes: EmotionNote[];
   conversations: Conversation[];
@@ -35,20 +39,32 @@ export function ChatScreen({
   cloudStatus: CloudSyncStatus;
   dataMode: DataMode;
   onGroundedChat: (conversationId: string, userBody: string, assistantBody: string, noteIds: string[]) => void;
+  onNewConversation: () => void;
+  onExitToMap: () => void;
+  onToast: ToastHandler;
 }) {
   const { copy, language } = useAppLanguage();
   const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState('');
   const abortRef = useRef<AbortController | null>(null);
-  const conversation = conversations.find((item) => item.id === activeConversationId) ??
-    conversations.find((item) => item.id === FOLLOW_UP_CONVERSATION_ID) ?? {
-      id: FOLLOW_UP_CONVERSATION_ID, title: copy.navigation.chat, preview: '', kind: 'companion' as const, messages: [],
-    };
+  const savedConversation = conversations.find(
+    (item) => item.id === activeConversationId,
+  );
+  const conversation = savedConversation ?? {
+    id: activeConversationId,
+    title: copy.chat.newConversation,
+    preview: '',
+    kind: 'regular' as const,
+    messages: [],
+  };
   const previewNote = notes.find((note) => note.id === previewNoteId) ?? null;
   const previewDialogRef = useDialogFocus<HTMLDivElement>({ isOpen: Boolean(previewNote), onEscape: () => setPreviewNoteId(null) });
-  const isFollowUp = conversation.id === FOLLOW_UP_CONVERSATION_ID || conversation.kind === 'companion';
+  const isFollowUp = Boolean(
+    savedConversation &&
+      (conversation.id === FOLLOW_UP_CONVERSATION_ID ||
+        conversation.kind === 'companion'),
+  );
   const available = Boolean(cloudAuth && cloudRevision !== null && cloudStatus === 'synced' && dataMode === 'real');
   const unavailableMessage = !cloudAuth ? copy.chat.signInRequired : copy.chat.syncRequired;
 
@@ -56,7 +72,6 @@ export function ChatScreen({
     const message = draft.trim();
     if (!available || !cloudAuth || cloudRevision === null || !message || sending || message.length > 1_200) return;
     setSending(true);
-    setError('');
     const controller = new AbortController();
     abortRef.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 22_000);
@@ -66,13 +81,15 @@ export function ChatScreen({
         clientRevision: cloudRevision, signal: controller.signal,
       });
       if (!result || !result.answer.trim()) {
-        setError(copy.chat.chatUnavailable);
+        onToast(copy.chat.chatUnavailable, { durationMs: 2800 });
         return;
       }
       onGroundedChat(conversation.id, message, result.answer, result.evidence.map((item) => item.noteId));
       setDraft('');
     } catch {
-      if (!controller.signal.aborted) setError(copy.chat.chatUnavailable);
+      if (!controller.signal.aborted) {
+        onToast(copy.chat.chatUnavailable, { durationMs: 2800 });
+      }
     } finally {
       window.clearTimeout(timer);
       abortRef.current = null;
@@ -84,22 +101,31 @@ export function ChatScreen({
     <section className="paper-screen chat-screen" aria-busy={sending}>
       <header className="chat-header chat-header--thread">
         <div><h1>{isFollowUp ? copy.navigation.chat : conversation.title}</h1></div>
-        <button
-          className="round-back-button"
-          aria-label={sending ? copy.chat.stopGenerating : copy.chat.newConversation}
-          disabled={!sending}
-          onClick={() => abortRef.current?.abort()}
-        >
-          {sending ? <X size={22} strokeWidth={2.2} /> : <MessageSquarePlus size={22} strokeWidth={2.2} />}
-        </button>
+        <div className="chat-header-actions">
+          <button
+            className="round-back-button"
+            aria-label={copy.chat.exitToMap}
+            onClick={onExitToMap}
+          >
+            <ChevronLeft size={23} strokeWidth={2.2} />
+          </button>
+          <button
+            className="round-back-button"
+            aria-label={sending ? copy.chat.stopGenerating : copy.chat.newConversation}
+            onClick={() => {
+              if (sending) {
+                abortRef.current?.abort();
+                return;
+              }
+              onNewConversation();
+            }}
+          >
+            {sending ? <X size={22} strokeWidth={2.2} /> : <MessageSquarePlus size={22} strokeWidth={2.2} />}
+          </button>
+        </div>
       </header>
 
       <div className="message-scroll">
-        <section className="ai-preview-notice" aria-label={copy.chat.aiPreviewTitle}>
-          <Sparkles size={20} strokeWidth={2.2} />
-          <div><strong>{copy.chat.aiPreviewTitle}</strong><p>{available ? copy.chat.aiPreviewBody : unavailableMessage}</p></div>
-        </section>
-
         {conversation.messages.length ? conversation.messages.map((message) => (
           <article key={message.id} className={`message-row message-row--${message.role}`}>
             {message.role === 'assistant' ? <AiAvatar /> : null}
@@ -127,11 +153,11 @@ export function ChatScreen({
               ) : null}
             </div>
           </article>
-        )) : (
+        )) : isFollowUp ? (
           <div className="chat-disabled-empty"><strong>{copy.chat.noFollowUpTitle}</strong><p>{copy.chat.noFollowUpBody}</p></div>
+        ) : (
+          <p className="chat-new-empty">{copy.chat.emptyConversation}</p>
         )}
-        {sending ? <p className="chat-request-status" role="status" aria-live="polite">{copy.chat.sending}</p> : null}
-        {error ? <p className="chat-request-error" role="alert">{error}</p> : null}
       </div>
 
       <form className={`chat-composer ${available ? '' : 'chat-composer--disabled'}`} onSubmit={(event) => { event.preventDefault(); void send(); }}>

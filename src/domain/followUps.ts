@@ -10,6 +10,11 @@ export const FOLLOW_UP_CONVERSATION_ID = 'thread-revisit';
 
 const FOLLOW_UP_OPTIONS: ChatOption[] = [
   {
+    id: 'positive',
+    label: '现在回看，我仍然很喜欢这段经历。',
+    responseKind: 'positive',
+  },
+  {
     id: 'better',
     label: '现在回看，感受轻了一些。',
     responseKind: 'calm',
@@ -42,6 +47,11 @@ export const getFollowUpOptions = (
   if (language === 'en') {
     return [
       {
+        id: 'positive',
+        label: 'I still feel positively about this experience.',
+        responseKind: 'positive',
+      },
+      {
         id: 'better',
         label: 'It feels a little lighter now.',
         responseKind: 'calm',
@@ -70,6 +80,11 @@ export const getFollowUpOptions = (
   }
   if (language === 'ko') {
     return [
+      {
+        id: 'positive',
+        label: '지금 돌아봐도 이 경험이 여전히 좋게 느껴져요.',
+        responseKind: 'positive',
+      },
       {
         id: 'better',
         label: '지금은 조금 가볍게 느껴져요.',

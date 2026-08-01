@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, ChevronDown, ChevronRight, Inbox, Map as MapIcon, MessageCircle, PanelLeft, Settings as SettingsIcon, Sparkles } from "lucide-react";
+import { Calendar, ChevronDown, ChevronRight, Inbox, Map as MapIcon, MessageCircle, PanelLeft, Settings as SettingsIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { MOTION } from "../motion";
 import { useAppLanguage } from "../i18n";
@@ -63,12 +63,14 @@ export function SideDrawer({
   conversations,
   onNavigate,
   onOpenConversation,
+  onNewConversation,
   onClose,
 }: {
   activeView: AppView;
   conversations: Conversation[];
   onNavigate: (view: AppView) => void;
   onOpenConversation: (id: string) => void;
+  onNewConversation: () => void;
   onClose: () => void;
 }) {
   const { copy } = useAppLanguage();
@@ -124,7 +126,17 @@ export function SideDrawer({
                 <div key={item.key}>
                   <button
                     className={`side-nav__item ${active ? 'is-active' : ''}`}
-                    onClick={() => (isChat ? setAiExpanded((current) => !current) : onNavigate(item.key))}
+                    onClick={() => {
+                      if (!isChat) {
+                        onNavigate(item.key);
+                        return;
+                      }
+                      if (!conversations.length) {
+                        onNewConversation();
+                        return;
+                      }
+                      setAiExpanded((current) => !current);
+                    }}
                   >
                     <span className="side-nav__icon">
                       <Icon size={22} strokeWidth={2.2} />
@@ -219,7 +231,6 @@ export function CelebrationLayer() {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ delay: 0.16, ...MOTION.nav }}
       >
-        <Sparkles size={19} strokeWidth={2.2} />
         <span>
           <strong>{copy.feedback.celebration}</strong>
         </span>

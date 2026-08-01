@@ -114,20 +114,20 @@ export const relinkLegacyInboxDrafts = (
 export const DEMO_INBOX_ITEMS: StarInboxItem[] = [
   {
     id: 'inbox-library', sourceEventId: 'demo-library',
-    eventAt: '2026-07-27T18:42:00+09:00', receivedAt: '2026-07-27T18:43:00+09:00',
-    heartRate: 126, latitude: 37.5578, longitude: 126.9527,
+    eventAt: '2026-08-01T18:42:00+09:00', receivedAt: '2026-08-01T18:43:00+09:00',
+    heartRate: 126, latitude: 37.5591, longitude: 127.0008,
     status: 'pending', source: 'heart-rate',
   },
   {
     id: 'inbox-cafeteria', sourceEventId: 'demo-cafeteria',
-    eventAt: '2026-07-27T14:16:00+09:00', receivedAt: '2026-07-27T14:17:00+09:00',
-    heartRate: 121, latitude: 37.5562, longitude: 126.9553,
+    eventAt: '2026-08-01T14:16:00+09:00', receivedAt: '2026-08-01T14:17:00+09:00',
+    heartRate: 121, latitude: 37.5587, longitude: 127.0012,
     status: 'pending', source: 'heart-rate',
   },
   {
     id: 'inbox-studio', sourceEventId: 'demo-studio',
-    eventAt: '2026-07-26T21:08:00+09:00', receivedAt: '2026-07-26T21:09:00+09:00',
-    heartRate: 52, latitude: 37.5547, longitude: 126.9581,
+    eventAt: '2026-07-31T21:08:00+09:00', receivedAt: '2026-07-31T21:09:00+09:00',
+    heartRate: 52, latitude: 37.5582, longitude: 126.9994,
     status: 'pending', source: 'heart-rate',
   },
 ];

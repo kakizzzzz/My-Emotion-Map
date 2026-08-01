@@ -1,14 +1,12 @@
-import { useState, type FormEvent } from 'react';
-import { Cloud, HeartPulse, LogOut, Mail, Smartphone } from 'lucide-react';
+import { Cloud, HeartPulse, LogOut, Smartphone } from 'lucide-react';
 import { useAppLanguage } from '../../i18n';
 import type { CloudSyncStatus } from '../../services/useCloudSync';
 
 export function PlannedFeaturePanel({
   feature,
   cloudConfigured,
-  cloudEmail,
+  cloudAccount,
   cloudStatus,
-  onRequestMagicLink,
   onSignOut,
   onConfirmInitialUpload,
   onUseRemoteVersion,
@@ -16,18 +14,14 @@ export function PlannedFeaturePanel({
 }: {
   feature: 'connections' | 'health';
   cloudConfigured: boolean;
-  cloudEmail: string | null;
+  cloudAccount: string | null;
   cloudStatus: CloudSyncStatus;
-  onRequestMagicLink: (email: string) => Promise<boolean>;
   onSignOut: () => Promise<unknown>;
   onConfirmInitialUpload: () => void;
   onUseRemoteVersion: () => void;
   onOverwriteRemote: () => void;
 }) {
   const { copy } = useAppLanguage();
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
 
   if (feature === 'health') {
     return (
@@ -48,14 +42,6 @@ export function PlannedFeaturePanel({
   }
 
   const statusLabel = copy.settings.cloudStatus[cloudStatus];
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const normalizedEmail = email.trim();
-    if (!normalizedEmail || busy) return;
-    setBusy(true);
-    setSent(await onRequestMagicLink(normalizedEmail));
-    setBusy(false);
-  };
 
   return (
     <section className="connections-card-list">
@@ -83,9 +69,11 @@ export function PlannedFeaturePanel({
         <div className="connection-card__body">
           {!cloudConfigured ? (
             <p className="settings-honesty-note">{copy.settings.cloudNotConfigured}</p>
-          ) : cloudEmail ? (
+          ) : cloudAccount ? (
             <>
-              <p className="settings-honesty-note">{cloudEmail}</p>
+              <p className="settings-honesty-note">
+                {copy.settings.cloudAccountLabel}: {cloudAccount}
+              </p>
               <p className="settings-honesty-note">{copy.settings.cloudStatusHint[cloudStatus]}</p>
               {cloudStatus === 'upload_confirmation_required' ? (
                 <button className="connection-check-button" onClick={onConfirmInitialUpload}>
@@ -107,17 +95,9 @@ export function PlannedFeaturePanel({
               </button>
             </>
           ) : (
-            <form className="cloud-login-form" onSubmit={(event) => void submit(event)}>
-              <label>
-                <span>{copy.settings.emailLabel}</span>
-                <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-              </label>
-              <button type="submit" disabled={busy || !email.trim()}>
-                <Mail size={18} strokeWidth={2.2} />
-                {busy ? copy.settings.sendingLink : copy.settings.sendMagicLink}
-              </button>
-              {sent ? <p role="status">{copy.settings.magicLinkSent}</p> : null}
-            </form>
+            <p className="settings-honesty-note">
+              {copy.settings.cloudSessionMissing}
+            </p>
           )}
         </div>
       </article>

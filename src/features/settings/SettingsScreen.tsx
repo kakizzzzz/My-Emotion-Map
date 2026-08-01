@@ -43,9 +43,8 @@ export function SettingsScreen({
   onRequestLocation,
   onToast,
   cloudConfigured,
-  cloudEmail,
+  cloudAccount,
   cloudStatus,
-  onRequestMagicLink,
   onSignOut,
   onConfirmInitialUpload,
   onUseRemoteVersion,
@@ -278,9 +277,8 @@ export function SettingsScreen({
                 <PlannedFeaturePanel
                   feature={panel}
                   cloudConfigured={cloudConfigured}
-                  cloudEmail={cloudEmail}
+                  cloudAccount={cloudAccount}
                   cloudStatus={cloudStatus}
-                  onRequestMagicLink={onRequestMagicLink}
                   onSignOut={onSignOut}
                   onConfirmInitialUpload={onConfirmInitialUpload}
                   onUseRemoteVersion={onUseRemoteVersion}
