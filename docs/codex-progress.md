@@ -60,6 +60,32 @@ Phase 1 evidence:
   storage and camera remain separate from the disposable Demo workspace.
 - `schemaVersion` remains 4 and no MCP surface was added or expanded.
 
+## Product-direction checkpoint — account-only workspace
+
+Status: complete. This user-directed change supersedes the Phase 1 Demo-entry
+surface without rewriting the earlier checkpoint.
+
+| Requirement | Status | Verification |
+| --- | --- | --- |
+| Account-only entry | fixed | login has no Demo control or guest bypass; an authenticated Supabase session is required before any workspace opens |
+| Own-data workspace | fixed | every successful session loads only `loadAppData(user.id, 'real')`; settings no longer exposes Demo loading or exit controls |
+| Account ID semantics | fixed | Supabase `account_id` is shown as a read-only ID and never used as the editable local profile-name value |
+| Legacy same-name cleanup | fixed | an old local profile name equal to the account ID is normalized to blank and saved separately from the account identity |
+
+Checkpoint evidence:
+
+- Checkpoint-scope Vitest: 25 test files / 128 tests passed. The separately
+  preserved, uncommitted Phase 3 heart-observation draft was excluded from this
+  count.
+- Full working-tree `npm run check`: 26 test files / 133 tests passed;
+  typecheck, lint, architecture gates and production build passed.
+- Playwright: 8/8 Chromium Mobile and 8/8 WebKit iPhone tests passed. Both
+  engines verify that signed-out users cannot open a workspace, the Demo entry
+  is absent, and a legacy `profileName === account_id` value is not rendered as
+  the editable local profile name.
+- Historical Demo-format parsing and rejection tests remain as compatibility
+  safeguards, but no user-facing route can enter or upload that workspace.
+
 ## Phase 2 — Chat, follow-up, inbox and editor polish
 
 Status: complete; this section and its changes form the dedicated Phase 2

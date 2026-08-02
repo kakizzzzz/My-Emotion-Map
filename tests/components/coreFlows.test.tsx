@@ -81,6 +81,7 @@ const PhotoAssistHarness = () => {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
 });
 
 describe('core component flows', () => {
@@ -322,7 +323,6 @@ describe('core component flows', () => {
         ready
         configured
         onAuthenticate={onAuthenticate}
-        onOpenDemo={vi.fn()}
       />,
     );
 
@@ -344,38 +344,17 @@ describe('core component flows', () => {
     );
   });
 
-  it('keeps Demo outside the auth card and requires confirmation without clearing login input', async () => {
-    const user = userEvent.setup();
-    const onOpenDemo = vi.fn();
+  it('does not expose a Demo bypass from the account login screen', () => {
     renderWithLanguage(
       <LoginScreen
         ready
         configured
         onAuthenticate={vi.fn()}
-        onOpenDemo={onOpenDemo}
       />,
     );
 
-    await user.type(screen.getByLabelText('账号'), 'student_01');
-    const demoButton = screen.getByRole('button', { name: '预览演示' });
-    expect(demoButton).toHaveClass('login-demo-icon');
-    expect(document.querySelector('.login-card .login-demo-icon')).toBeNull();
-
-    await user.click(demoButton);
-    expect(onOpenDemo).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog', { name: '进入演示？' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '取消' }));
-    expect(screen.getByLabelText('账号')).toHaveValue('student_01');
-    expect(onOpenDemo).not.toHaveBeenCalled();
-
-    await user.click(demoButton);
-    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('button', { name: '预览演示' })).toBeNull();
     expect(screen.queryByRole('dialog', { name: '进入演示？' })).toBeNull();
-    expect(screen.getByLabelText('账号')).toHaveValue('student_01');
-
-    await user.click(demoButton);
-    await user.click(screen.getByRole('button', { name: '进入演示' }));
-    expect(onOpenDemo).toHaveBeenCalledTimes(1);
   });
 
   it('uses the same three-screen onboarding shell and skips without touching records', async () => {
@@ -405,18 +384,19 @@ describe('core component flows', () => {
   it('closes settings through a discoverable button', async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
+    window.localStorage.setItem(
+      'my-emotion-map.user-preferences.00000000-0000-4000-8000-000000000001.v2',
+      JSON.stringify({ profileName: 'student_01' }),
+    );
     renderWithLanguage(
       <SettingsScreen
         themeTone="original"
         themePalette={DEFAULT_THEME}
         onThemeTone={() => undefined}
         onThemeColor={() => undefined}
-        dataMode="real"
         onExportData={() => undefined}
         onImportData={async () => undefined}
         onDeleteAllData={() => undefined}
-        onLoadDemo={() => true}
-        onExitDemo={() => true}
         locationRequestState="idle"
         onRequestLocation={() => undefined}
         onToast={() => undefined}
@@ -444,6 +424,17 @@ describe('core component flows', () => {
       />,
     );
 
+    expect(screen.getByRole('heading', { name: 'student_01' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '个人' }));
+    expect(screen.getByText('ID')).toBeInTheDocument();
+    expect(document.querySelector('.profile-account-id-row strong')).toHaveTextContent(
+      'student_01',
+    );
+    expect(screen.getByRole('textbox', { name: '本地档案名称' })).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('textbox', { name: '本地档案名称' })).toBeNull();
+    });
     await user.click(screen.getByRole('button', { name: '关闭' }));
     expect(onBack).toHaveBeenCalledTimes(1);
   });

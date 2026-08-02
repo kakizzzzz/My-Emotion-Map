@@ -33,12 +33,9 @@ export function SettingsScreen({
   themePalette,
   onThemeTone,
   onThemeColor,
-  dataMode,
   onExportData,
   onImportData,
   onDeleteAllData,
-  onLoadDemo,
-  onExitDemo,
   locationRequestState,
   onRequestLocation,
   onToast,
@@ -65,10 +62,15 @@ export function SettingsScreen({
     () => loadLocalSettings(cloudUserId),
     [cloudUserId],
   );
+  const initialProfileName =
+    initialSettings.profileName.trim().toLocaleLowerCase() ===
+    cloudAccount?.trim().toLocaleLowerCase()
+      ? ''
+      : initialSettings.profileName;
   const [panel, setPanel] = useState<SettingsPanel | null>(null);
   const [avatarSrc, setAvatarSrc] = useState(initialSettings.avatarSrc);
   const [profileName, setProfileName] = useState(
-    initialSettings.profileName,
+    initialProfileName,
   );
   const [aiStyles, setAiStyles] = useState(initialSettings.aiToneTags);
   const rows: Array<{
@@ -243,6 +245,7 @@ export function SettingsScreen({
                 <ProfileSettingsPanel
                   avatarSrc={avatarSrc}
                   profileName={profileName}
+                  accountId={cloudAccount}
                   canChangePassword={Boolean(cloudUserId)}
                   onAvatarSrc={setAvatarSrc}
                   onProfileName={setProfileName}
@@ -282,14 +285,11 @@ export function SettingsScreen({
               ) : (
                 <GeneralSettingsPanel
                   panel={panel}
-                  dataMode={dataMode}
                   locationRequestState={locationRequestState}
                   onPanel={setPanel}
                   onRequestLocation={onRequestLocation}
                   onImportData={onImportData}
                   onDeleteAllData={onDeleteAllData}
-                  onLoadDemo={onLoadDemo}
-                  onExitDemo={onExitDemo}
                 />
               )}
             </motion.div>

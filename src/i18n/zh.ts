@@ -321,7 +321,7 @@ export const zhCopy = {
       synced: '当前版本已安全保存。', upload_confirmation_required: '云端尚无数据；确认后才会上传这台设备的本地记录。', upgrade_required: '这份数据来自更新版本。当前应用不会打开、覆盖或降级保存它。', conflict: '发现版本差异，已保存恢复副本并停止覆盖。请明确选择保留哪一份。', offline: '离线时只写本地。', error: '云端暂时不可用，本地不受影响。', demo: '演示数据永远不会上传。',
     },
     dataManagement: '本地数据管理',
-    dataManagementBody: '导出、导入、演示模式与删除都只作用于这台设备。',
+    dataManagementBody: '导出、导入与删除只作用于当前账号在这台设备上的数据。',
     exportData: '导出数据',
     exportDataBody: '生成一份可离线阅读的记录报告；不会包含精确坐标、草稿或其他用户的数据。',
     exportAll: '全部记录',

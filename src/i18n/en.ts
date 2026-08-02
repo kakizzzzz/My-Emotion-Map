@@ -323,7 +323,7 @@ export const enCopy: AppCopy = {
       synced: 'This revision is safely stored.', upload_confirmation_required: 'The cloud is empty. Local records upload only after you confirm.', upgrade_required: 'This data was created by a newer app. It will not be opened, overwritten, or downgraded.', conflict: 'A revision difference was found. Recovery copies were saved and overwrite is paused. Choose which version to keep.', offline: 'Offline changes stay local.', error: 'Cloud is unavailable; local data is unaffected.', demo: 'Demo data is never uploaded.',
     },
     dataManagement: 'Local data management',
-    dataManagementBody: 'Export, import, demo mode, and deletion affect only this device.',
+    dataManagementBody: 'Export, import, and deletion affect only this account on this device.',
     exportData: 'Export records',
     exportDataBody: 'Create an offline readable report. It excludes exact coordinates, drafts, and other users’ data.',
     exportAll: 'All records',

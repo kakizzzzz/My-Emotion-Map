@@ -450,6 +450,32 @@
   outline: 0;
 }
 
+.profile-account-id-row {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: 24px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+}
+
+.profile-account-id-row span {
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-account-id-row strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .profile-editor-fields label > button {
   display: grid;
   width: 32px;

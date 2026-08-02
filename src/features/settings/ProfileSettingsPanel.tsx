@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Lock, UserRound } from 'lucide-react';
+import { AtSign, Lock, UserRound } from 'lucide-react';
 import { useAppLanguage } from '../../i18n';
 import { createAvatarDataUrl } from '../../app/profilePreferences';
 import type { ToastHandler } from '../../app/appTypes';
@@ -7,6 +7,7 @@ import type { ToastHandler } from '../../app/appTypes';
 export function ProfileSettingsPanel({
   avatarSrc,
   profileName,
+  accountId,
   canChangePassword,
   onAvatarSrc,
   onProfileName,
@@ -15,6 +16,7 @@ export function ProfileSettingsPanel({
 }: {
   avatarSrc: string;
   profileName: string;
+  accountId: string | null;
   canChangePassword: boolean;
   onAvatarSrc: (value: string) => void;
   onProfileName: (value: string) => void;
@@ -96,6 +98,13 @@ export function ProfileSettingsPanel({
         }}
       />
       <div className="profile-editor-fields">
+        {accountId ? (
+          <div className="profile-account-id-row">
+            <AtSign size={24} strokeWidth={2.2} aria-hidden="true" />
+            <span>ID</span>
+            <strong>{accountId}</strong>
+          </div>
+        ) : null}
         <label>
           <UserRound size={24} strokeWidth={2.2} />
           <input

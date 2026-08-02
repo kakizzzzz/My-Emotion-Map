@@ -3,38 +3,30 @@ import {
   Download,
   Languages,
   MapPin,
-  Play,
   Trash2,
   Upload,
 } from 'lucide-react';
 import { LANGUAGE_OPTIONS, useAppLanguage } from '../../i18n';
-import type { DataMode } from '../../types';
 import type { LocationRequestState } from '../../useLocationController';
 import type { SettingsPanel } from './settingsTypes';
 
 export function GeneralSettingsPanel({
   panel,
-  dataMode,
   locationRequestState,
   onPanel,
   onRequestLocation,
   onImportData,
   onDeleteAllData,
-  onLoadDemo,
-  onExitDemo,
 }: {
   panel: Extract<
     SettingsPanel,
     'settings' | 'language' | 'location' | 'data'
   >;
-  dataMode: DataMode;
   locationRequestState: LocationRequestState;
   onPanel: (panel: SettingsPanel) => void;
   onRequestLocation: () => void;
   onImportData: (file: File) => Promise<void>;
   onDeleteAllData: () => void;
-  onLoadDemo: () => boolean;
-  onExitDemo: () => boolean;
 }) {
   const { copy, language, setLanguage } = useAppLanguage();
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -155,14 +147,6 @@ export function GeneralSettingsPanel({
             if (file) await onImportData(file);
           }}
         />
-        <button
-          onClick={dataMode === 'demo' ? onExitDemo : onLoadDemo}
-        >
-          <Play size={19} strokeWidth={2.2} />
-          {dataMode === 'demo'
-            ? copy.settings.exitDemo
-            : copy.settings.loadDemo}
-        </button>
         <button
           className="is-destructive"
           onClick={onDeleteAllData}

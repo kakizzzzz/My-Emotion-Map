@@ -127,7 +127,6 @@ export function App() {
   const [starInboxItems, setStarInboxItems] =
     useState<StarInboxItem[]>(initialData.starInboxItems);
   const [dataMode, setDataMode] = useState(initialData.dataMode);
-  const [guestDemo, setGuestDemo] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [workspaceUpgradeRequired, setWorkspaceUpgradeRequired] =
     useState(false);
@@ -221,15 +220,13 @@ export function App() {
     exportData,
     importData,
     deleteAllData,
-    loadDemoMode,
-    exitDemoMode,
   } = useLocalDataController({
     initialData,
     userId: cloudSession.session?.user.id ?? null,
     persistenceEnabled:
       workspaceReady &&
       !workspaceUpgradeRequired &&
-      (Boolean(cloudSession.session) || guestDemo),
+      Boolean(cloudSession.session),
     moments,
     notes,
     conversations,
@@ -267,12 +264,11 @@ export function App() {
       if (activeWorkspaceUserRef.current) applySnapshot(createEmptyAppData());
       activeWorkspaceUserRef.current = null;
       setWorkspaceUpgradeRequired(false);
-      if (!guestDemo) setWorkspaceReady(false);
+      setWorkspaceReady(false);
       return;
     }
     if (activeWorkspaceUserRef.current === userId && workspaceReady) return;
     setWorkspaceReady(false);
-    setGuestDemo(false);
     const loaded = loadAppData(userId, 'real');
     const upgradeRequired = loaded.loadIssue === 'upgrade-required';
     setWorkspaceUpgradeRequired(upgradeRequired);
@@ -291,7 +287,6 @@ export function App() {
     cloudSession.ready,
     cloudSession.session?.user.id,
     copy.feedback.dataUpgradeRequired,
-    guestDemo,
     openOnboardingIfNeeded,
     showToast,
     workspaceReady,
@@ -613,7 +608,7 @@ export function App() {
     showToast(copy.feedback.feelingSaved);
   };
 
-  if ((!cloudSession.session && !guestDemo) || !workspaceReady) {
+  if (!cloudSession.session || !workspaceReady) {
     return (
       <AppLanguageContext.Provider value={languageContextValue}>
         <div className="app-stage">
@@ -622,12 +617,6 @@ export function App() {
               ready={cloudSession.ready && !cloudSession.session}
               configured={Boolean(cloudSession.client)}
               onAuthenticate={authenticateCloudAccount}
-              onOpenDemo={() => {
-                applySnapshot(loadAppData(null, 'demo'));
-                setGuestDemo(true);
-                setWorkspaceReady(true);
-                openOnboardingIfNeeded('demo', null);
-              }}
             />
           </main>
         </div>
@@ -769,26 +758,9 @@ export function App() {
                     [key]: color,
                   }))
                 }
-                dataMode={dataMode}
                 onExportData={exportData}
                 onImportData={importData}
                 onDeleteAllData={deleteAllData}
-                onLoadDemo={() => {
-                  const loaded = loadDemoMode();
-                  if (loaded) {
-                    setGuestDemo(!cloudSession.session);
-                    openOnboardingIfNeeded('demo', null);
-                  }
-                  return loaded;
-                }}
-                onExitDemo={() => {
-                  const exited = exitDemoMode();
-                  if (!cloudSession.session) {
-                    setGuestDemo(false);
-                    setWorkspaceReady(false);
-                  }
-                  return exited;
-                }}
                 locationRequestState={locationController.requestState}
                 onRequestLocation={() =>
                   locationController.openLocationRequest('settings')
@@ -806,7 +778,6 @@ export function App() {
                   const signingOutUserId = cloudSession.session?.user.id;
                   if (signingOutUserId) clearChatDraftsForUser(signingOutUserId);
                   setWorkspaceReady(false);
-                  setGuestDemo(false);
                   activeWorkspaceUserRef.current = null;
                   applySnapshot(createEmptyAppData());
                   await (cloudSession.client?.auth.signOut() ?? Promise.resolve());
@@ -946,7 +917,6 @@ export function App() {
           onRequest={locationController.confirmLocationRequest}
         />
 
-        {dataMode === 'demo' ? <span className="demo-mode-badge">{copy.demo.badge}</span> : null}
         {onboardingTarget ? (
           <FirstRunOnboarding
             dataMode={onboardingTarget.dataMode}

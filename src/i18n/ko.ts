@@ -323,7 +323,7 @@ export const koCopy: AppCopy = {
       synced: '현재 버전이 안전하게 저장되었습니다.', upload_confirmation_required: '클라우드가 비어 있습니다. 확인한 뒤에만 로컬 기록을 업로드합니다.', upgrade_required: '이 데이터는 더 새로운 앱에서 만들어졌습니다. 현재 앱은 열거나 덮어쓰거나 낮은 버전으로 저장하지 않습니다.', conflict: '버전 차이를 발견해 복구 사본을 저장하고 덮어쓰기를 멈췄습니다. 보관할 버전을 선택하세요.', offline: '오프라인 변경은 로컬에 남습니다.', error: '클라우드를 사용할 수 없지만 로컬 데이터에는 영향이 없습니다.', demo: '데모 데이터는 업로드하지 않습니다.',
     },
     dataManagement: '로컬 데이터 관리',
-    dataManagementBody: '내보내기, 가져오기, 데모 모드와 삭제는 이 기기에만 적용됩니다.',
+    dataManagementBody: '내보내기, 가져오기와 삭제는 이 기기의 현재 계정 데이터에만 적용됩니다.',
     exportData: '기록 내보내기',
     exportDataBody: '오프라인에서 읽을 수 있는 보고서를 만듭니다. 정확한 좌표, 초안, 다른 사용자의 데이터는 포함하지 않습니다.',
     exportAll: '모든 기록',

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { AtSign, KeyRound, Lock, MapPinned } from 'lucide-react';
+import { AtSign, KeyRound, Lock } from 'lucide-react';
 import { LANGUAGE_OPTIONS, useAppLanguage } from '../../i18n';
 import {
   isValidAccountId,
@@ -7,13 +7,11 @@ import {
   type AuthResult,
 } from '../../services/accountAuth';
 import { LoginWaterBackground } from './LoginWaterBackground';
-import { useDialogFocus } from '../../app/useDialogFocus';
 
 export function LoginScreen({
   ready,
   configured,
   onAuthenticate,
-  onOpenDemo,
 }: {
   ready: boolean;
   configured: boolean;
@@ -23,7 +21,6 @@ export function LoginScreen({
     password: string,
     passwordConfirmation: string,
   ) => Promise<AuthResult>;
-  onOpenDemo: () => void;
 }) {
   const { copy, language, setLanguage } = useAppLanguage();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -32,12 +29,6 @@ export function LoginScreen({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [authError, setAuthError] = useState('');
-  const [demoConfirmationOpen, setDemoConfirmationOpen] = useState(false);
-  const demoDialogRef = useDialogFocus<HTMLDivElement>({
-    isOpen: demoConfirmationOpen,
-    onEscape: () => setDemoConfirmationOpen(false),
-    restoreFocusId: 'login-demo-button',
-  });
 
   const authenticate = async () => {
     const normalizedAccount = account.trim();
@@ -102,16 +93,6 @@ export function LoginScreen({
     <section className="login-screen" aria-label={copy.auth.loginTitle}>
       <LoginWaterBackground />
       <div className="login-top-controls">
-        <button
-          id="login-demo-button"
-          type="button"
-          className="login-demo-icon"
-          aria-label={copy.demo.open}
-          onClick={() => setDemoConfirmationOpen(true)}
-          disabled={busy || !ready}
-        >
-          <MapPinned size={21} strokeWidth={2.15} aria-hidden="true" />
-        </button>
         <div className="login-language-switch" aria-label={copy.settings.language}>
           {LANGUAGE_OPTIONS.map((option) => (
             <button
@@ -240,40 +221,6 @@ export function LoginScreen({
         </form>
       )}
 
-      {demoConfirmationOpen ? (
-        <div className="login-demo-confirmation-backdrop">
-          <div
-            ref={demoDialogRef}
-            className="login-demo-confirmation"
-            role="dialog"
-            aria-modal="true"
-            aria-label={copy.demo.confirmTitle}
-            tabIndex={-1}
-          >
-            <MapPinned size={24} strokeWidth={2.15} aria-hidden="true" />
-            <h2>{copy.demo.confirmTitle}</h2>
-            <p>{copy.demo.confirmBody}</p>
-            <div>
-              <button
-                type="button"
-                onClick={() => setDemoConfirmationOpen(false)}
-              >
-                {copy.common.cancel}
-              </button>
-              <button
-                type="button"
-                className="is-primary"
-                onClick={() => {
-                  setDemoConfirmationOpen(false);
-                  onOpenDemo();
-                }}
-              >
-                {copy.demo.enter}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
