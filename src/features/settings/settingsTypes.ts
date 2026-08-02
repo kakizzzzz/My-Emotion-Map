@@ -9,6 +9,7 @@ import type {
   ShortcutTestResult,
 } from '../../domain/shortcutConnection';
 import type { MyLifeMemoryConnectionStatus } from '../../services/myLifeMemoryConnection';
+import type { McpOutputStatus } from '../../services/externalAccess';
 
 export type SettingsPanel =
   | 'profile'
@@ -55,6 +56,7 @@ export type SettingsScreenProps = {
   onOverwriteRemote: () => void;
   onTestShortcutPairing: (token: string) => Promise<ShortcutTestResult>;
   onIssueMcpToken: () => Promise<{ token: string; expiresAt: string } | null>;
+  onGetMcpOutputStatus: () => Promise<McpOutputStatus | null>;
   onRevokeAllMcpTokens: () => Promise<boolean>;
   onConnectMyLifeMemory: (token: string) => Promise<MyLifeMemoryConnectionStatus | null>;
   onTestMyLifeMemory: () => Promise<MyLifeMemoryConnectionStatus | null>;

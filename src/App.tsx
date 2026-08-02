@@ -796,6 +796,7 @@ export function App() {
                 onOverwriteRemote={cloudSync.overwriteRemoteWithLocal}
                 onTestShortcutPairing={externalAccess.testShortcutPairing}
                 onIssueMcpToken={externalAccess.issueMcpToken}
+                onGetMcpOutputStatus={externalAccess.getMcpOutputStatus}
                 onRevokeAllMcpTokens={externalAccess.revokeAllMcpTokens}
                 onConnectMyLifeMemory={externalAccess.connect}
                 onTestMyLifeMemory={externalAccess.test}

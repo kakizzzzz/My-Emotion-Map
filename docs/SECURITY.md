@@ -81,8 +81,10 @@ per authenticated user per hour. Direct table access is revoked.
 
 MCP and Shortcut use different random personal tokens. Only SHA-256 hashes are
 stored. Tokens expire, can be revoked, and never appear in browser persistence,
-README examples, fixtures, function logs or error responses. MCP read and
-proposal scopes are separate; proposals require in-app confirmation. Shortcut
+README examples, fixtures, function logs or error responses. The default
+Emotion Map MCP is read-only and has no proposal or deep-link tool. Proposal
+tools require a separate `action` token and endpoint plus in-app confirmation.
+The current read manifest exposes no coordinate, health or image tool. Shortcut
 observations are owner-scoped pending inputs, not formal records or AI evidence.
 Proposal confirmation is recoverable and idempotent: the server claims an
 operation as `accepting`, the client journals the exact transition, and the
@@ -100,5 +102,7 @@ synced. Revision or target-fingerprint drift stops the operation.
 - scan source and built assets for credential patterns before GitHub upload;
 - test real JPEG/HEIC photos and Shortcut transport on an iPhone.
 - verify MCP cross-user denial, token expiry/revocation and proposal-only writes.
+- verify MCP protocol negotiation, notifications, bounded batch handling,
+  output-schema validation and `last_used_at` updates.
 - verify My Life Memory connect/test/disconnect, full manifest pinning, local-only
   routing and external-output injection rejection.

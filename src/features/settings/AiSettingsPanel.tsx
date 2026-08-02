@@ -9,6 +9,7 @@ import type {
   ShortcutTestResult,
 } from '../../domain/shortcutConnection';
 import type { MyLifeMemoryConnectionStatus } from '../../services/myLifeMemoryConnection';
+import type { McpOutputStatus } from '../../services/externalAccess';
 
 const STYLES = ['concise', 'direct', 'gentle'] as const;
 
@@ -17,6 +18,7 @@ export function AiSettingsPanel({
   onStyles,
   onTestShortcutPairing,
   onIssueToken,
+  onGetMcpOutputStatus,
   onRevokeTokens,
   onConnectMyLifeMemory,
   onTestMyLifeMemory,
@@ -34,6 +36,7 @@ export function AiSettingsPanel({
   onStyles: (styles: string[]) => void;
   onTestShortcutPairing: (token: string) => Promise<ShortcutTestResult>;
   onIssueToken: () => Promise<{ token: string; expiresAt: string } | null>;
+  onGetMcpOutputStatus: () => Promise<McpOutputStatus | null>;
   onRevokeTokens: () => Promise<boolean>;
   onConnectMyLifeMemory: (token: string) => Promise<MyLifeMemoryConnectionStatus | null>;
   onTestMyLifeMemory: () => Promise<MyLifeMemoryConnectionStatus | null>;
@@ -54,6 +57,7 @@ export function AiSettingsPanel({
   const [outputToken, setOutputToken] = useState<{
     token: string; expiresAt: string;
   } | null>(null);
+  const [outputStatus, setOutputStatus] = useState<McpOutputStatus | null>(null);
   const [myLifeMemoryToken, setMyLifeMemoryToken] = useState('');
   const [myLifeMemoryStatus, setMyLifeMemoryStatus] =
     useState<MyLifeMemoryConnectionStatus | null>(null);
@@ -77,6 +81,14 @@ export function AiSettingsPanel({
   const shortcutInstallUrl = /^https:\/\/www\.icloud\.com\/shortcuts\//.test(
     configuredShortcutUrl,
   ) ? configuredShortcutUrl : '';
+
+  useEffect(() => {
+    let active = true;
+    void onGetMcpOutputStatus().then((status) => {
+      if (active) setOutputStatus(status);
+    });
+    return () => { active = false; };
+  }, [onGetMcpOutputStatus]);
 
   useEffect(() => {
     let active = true;
@@ -106,7 +118,14 @@ export function AiSettingsPanel({
     if (busy) return;
     setBusy(true);
     const issued = await onIssueToken();
-    if (issued) setOutputToken(issued);
+    if (issued) {
+      setOutputToken(issued);
+      setOutputStatus({
+        scope: 'records:read',
+        expiresAt: issued.expiresAt,
+        lastUsedAt: null,
+      });
+    }
     setBusy(false);
   };
   return (
@@ -240,6 +259,7 @@ export function AiSettingsPanel({
           </span>
           <span className="connection-card__title">
             <strong>{copy.settings.externalAccess}</strong>
+            {outputStatus ? <small>{copy.settings.readOnlyAccess}</small> : null}
           </span>
         </div>
         <div className="connection-card__body">
@@ -262,10 +282,27 @@ export function AiSettingsPanel({
               </button>
             </div>
           ) : null}
+          {outputStatus ? (
+            <div className="connection-status-meta" role="status">
+              <small>
+                {copy.settings.accessExpires}{' '}
+                {new Date(outputStatus.expiresAt).toLocaleString()}
+              </small>
+              {outputStatus.lastUsedAt ? (
+                <small>
+                  {copy.settings.accessLastUsed}{' '}
+                  {new Date(outputStatus.lastUsedAt).toLocaleString()}
+                </small>
+              ) : null}
+            </div>
+          ) : null}
           <button
             className="connection-check-button"
             onClick={async () => {
-              if (await onRevokeTokens()) setOutputToken(null);
+              if (await onRevokeTokens()) {
+                setOutputToken(null);
+                setOutputStatus(null);
+              }
             }}
           >
             {copy.settings.revokeAccess}

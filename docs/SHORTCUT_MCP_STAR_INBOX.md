@@ -73,39 +73,14 @@ offer exactly: lighter, stronger, different, same, or skip.
 
 ## MCP
 
-### My Life Memory input
-
-Built-in chat can connect to the fixed official My Life Memory read-only MCP.
-The browser accepts a user-generated token once; the connection Edge Function
-verifies the server identity and complete tool-manifest fingerprint before
-encrypting the credential in the owner row. The browser never supplies an
-endpoint. Normal Emotion Map questions stay local, while explicit cross-memory
-questions may return separately labelled external evidence. External data is
-untrusted input and cannot create, edit or delete either product's records.
-
-### Emotion Map external access
-
-`/functions/v1/emotion-map-mcp` implements JSON-RPC initialize, tools/list and
-tools/call over Streamable HTTP-compatible POST requests. Personal tokens are
-short-lived, hashed, revocable and split into read and proposal scopes.
-
-Read tools query only the token owner's saved real records and omit exact
-coordinates by default. Output tools can only create an idempotent queued
-proposal; they cannot delete, overwrite or save a formal record. Every call is
-scope checked, owner checked, payload bounded and rate limited. Record bodies
-and raw tokens are not logged.
-
-Accepting a proposal uses an owner-scoped server claim. The browser stages the
-exact before/after snapshot in a per-user recovery journal before applying it,
-and repeated confirmation reuses the same operation ID. Append and follow-up
-proposals stop when their target fingerprint or creation revision is stale.
-The server records `applied` only after the matching local snapshot has
-successfully synced; local failures become `failed`, never `accepted`.
+My Life Memory input and Emotion Map output are separate connections. Their
+current contracts are documented in `MY_LIFE_MEMORY_CONNECTION.md` and
+`EMOTION_MAP_MCP.md`. Neither shares state or revocation with Shortcut pairing.
 
 ## Deployment status
 
-The v3 application code and migration
-`202608020003_phase3_heart_shortcut.sql` are implemented and locally tested in
-this repository. This document does not claim that the migration, Edge Function
-or an iCloud share link has been production-verified. Production Supabase A/B
-and real-iPhone Shortcut smoke tests remain release gates.
+The Shortcut application code and migrations are implemented and locally
+tested in this repository. This document does not claim that the migrations,
+Edge Functions or an iCloud share link have been production-verified.
+Production Supabase A/B and real-iPhone Shortcut smoke tests remain release
+gates.

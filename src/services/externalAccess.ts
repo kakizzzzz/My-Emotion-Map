@@ -26,6 +26,11 @@ const EMOTIONS = new Set<EmotionKey>([
   'calm', 'joy', 'tender', 'curious', 'energized', 'connected',
   'heavy', 'restless', 'focused', 'overwhelmed', 'numb', 'mixed',
 ]);
+export type McpOutputStatus = {
+  scope: 'records:read';
+  expiresAt: string;
+  lastUsedAt: string | null;
+};
 const text = (value: unknown, max: number) =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
 
@@ -94,8 +99,32 @@ export const createExternalAccessHandlers = ({
 
   const revokeAllMcpTokens = async () => {
     if (!client || !userId) return false;
-    const { error } = await client.rpc('revoke_all_mcp_tokens');
+    const { error } = await client.rpc('revoke_mcp_tokens', {
+      p_kind: 'output',
+    });
     return !error;
+  };
+
+  const getMcpOutputStatus = async (): Promise<McpOutputStatus | null> => {
+    if (!client || !userId || !available) return null;
+    const { data, error } = await client
+      .from('mcp_tokens')
+      .select('kind,scopes,expires_at,last_used_at,revoked_at')
+      .eq('kind', 'output')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const row = !error && Array.isArray(data) ? data[0] : null;
+    return row?.kind === 'output' && row.revoked_at === null &&
+      Array.isArray(row.scopes) && row.scopes.includes('records:read') &&
+      typeof row.expires_at === 'string'
+      ? {
+          scope: 'records:read',
+          expiresAt: row.expires_at,
+          lastUsedAt: typeof row.last_used_at === 'string'
+            ? row.last_used_at
+            : null,
+        }
+      : null;
   };
 
   const listMcpProposals = async (): Promise<McpProposal[]> => {
@@ -311,6 +340,7 @@ export const createExternalAccessHandlers = ({
   return {
     issueMcpToken,
     revokeAllMcpTokens,
+    getMcpOutputStatus,
     ...myLifeMemoryConnection,
     ...shortcutAccess,
     listMcpProposals,

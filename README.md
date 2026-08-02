@@ -45,5 +45,7 @@ References:
 
 - `docs/ARCHITECTURE.md` — state and module ownership.
 - `docs/MAP_DATA_LICENSES.md` — map sources and attribution.
-- `docs/SHORTCUT_MCP_STAR_INBOX.md` — Shortcut v2, MCP and inbox boundaries.
+- `docs/SHORTCUT_MCP_STAR_INBOX.md` — Shortcut and inbox boundaries.
+- `docs/MY_LIFE_MEMORY_CONNECTION.md` — fixed read-only input connection.
+- `docs/EMOTION_MAP_MCP.md` — read-only external output and separate actions.
 - `docs/SECURITY.md` — secrets, RLS, sync and AI grounding.

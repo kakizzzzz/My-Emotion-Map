@@ -49,6 +49,7 @@ export function SettingsScreen({
   onOverwriteRemote,
   onTestShortcutPairing,
   onIssueMcpToken,
+  onGetMcpOutputStatus,
   onRevokeAllMcpTokens,
   onConnectMyLifeMemory,
   onTestMyLifeMemory,
@@ -271,6 +272,7 @@ export function SettingsScreen({
                   onStyles={setAiStyles}
                   onTestShortcutPairing={onTestShortcutPairing}
                   onIssueToken={onIssueMcpToken}
+                  onGetMcpOutputStatus={onGetMcpOutputStatus}
                   onRevokeTokens={onRevokeAllMcpTokens}
                   onConnectMyLifeMemory={onConnectMyLifeMemory}
                   onTestMyLifeMemory={onTestMyLifeMemory}

@@ -412,6 +412,7 @@ describe('core component flows', () => {
         onOverwriteRemote={() => undefined}
         onTestShortcutPairing={async () => 'unavailable'}
         onIssueMcpToken={async () => null}
+        onGetMcpOutputStatus={async () => null}
         onRevokeAllMcpTokens={async () => true}
         onConnectMyLifeMemory={async () => null}
         onTestMyLifeMemory={async () => null}
@@ -484,6 +485,11 @@ describe('core component flows', () => {
         onStyles={() => undefined}
         onTestShortcutPairing={onTestShortcutPairing}
         onIssueToken={onIssueToken}
+        onGetMcpOutputStatus={async () => ({
+          scope: 'records:read',
+          expiresAt: '2026-08-03T00:00:00.000Z',
+          lastUsedAt: '2026-08-02T12:00:00.000Z',
+        })}
         onRevokeTokens={async () => true}
         onConnectMyLifeMemory={onConnectMyLifeMemory}
         onTestMyLifeMemory={async () => null}
@@ -529,6 +535,8 @@ describe('core component flows', () => {
 
     expect(screen.getByRole('button', { name: '断开', exact: true }))
       .toBeDisabled();
+    expect(await screen.findByText('只读')).toBeInTheDocument();
+    expect(screen.getByText(/最近使用/)).toBeInTheDocument();
     await user.type(
       screen.getByLabelText('粘贴 My Life Memory 访问码'),
       `mlm_${'s'.repeat(64)}`,

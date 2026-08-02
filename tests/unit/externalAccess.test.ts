@@ -13,12 +13,13 @@ const proposal: McpProposal = {
   targetNoteFingerprint: null,
 };
 
-const makeHandlers = ({ rpc, applySnapshot = vi.fn() }: {
+const makeHandlers = ({ rpc, from, applySnapshot = vi.fn() }: {
   rpc: ReturnType<typeof vi.fn>;
+  from?: ReturnType<typeof vi.fn>;
   applySnapshot?: ReturnType<typeof vi.fn>;
 }) => ({
   handlers: createExternalAccessHandlers({
-    client: { rpc } as never,
+    client: { rpc, ...(from ? { from } : {}) } as never,
     userId: 'user-a',
     dataMode: 'real',
     healthPreferences: {
@@ -164,5 +165,38 @@ describe('external proposal application', () => {
       p_unknown_policy: 'suppress',
       p_cooldown_minutes: 30,
     });
+  });
+
+  it('revokes only the read-only output connection', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: 1, error: null });
+    const { handlers } = makeHandlers({ rpc });
+
+    expect(await handlers.revokeAllMcpTokens()).toBe(true);
+    expect(rpc).toHaveBeenCalledWith('revoke_mcp_tokens', {
+      p_kind: 'output',
+    });
+  });
+
+  it('reads output scope, expiry and last-used metadata without the raw token', async () => {
+    const limit = vi.fn().mockResolvedValue({
+      data: [{
+        kind: 'output', scopes: ['records:read'],
+        expires_at: '2026-08-03T00:00:00.000Z',
+        last_used_at: '2026-08-02T12:00:00.000Z', revoked_at: null,
+      }],
+      error: null,
+    });
+    const order = vi.fn(() => ({ limit }));
+    const eq = vi.fn(() => ({ order }));
+    const select = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ select }));
+    const { handlers } = makeHandlers({ rpc: vi.fn(), from });
+
+    await expect(handlers.getMcpOutputStatus()).resolves.toEqual({
+      scope: 'records:read',
+      expiresAt: '2026-08-03T00:00:00.000Z',
+      lastUsedAt: '2026-08-02T12:00:00.000Z',
+    });
+    expect(from).toHaveBeenCalledWith('mcp_tokens');
   });
 });

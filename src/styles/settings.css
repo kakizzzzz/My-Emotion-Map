@@ -612,11 +612,17 @@
 }
 
 .connection-token-once small,
+.connection-status-meta small,
 .shortcut-connection-status small,
 .automation-settings > small {
   color: var(--em-text-muted);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.connection-status-meta {
+  display: grid;
+  gap: 3px;
 }
 
 .connection-token-once code {

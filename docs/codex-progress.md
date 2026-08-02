@@ -196,3 +196,39 @@ Phase 4 evidence:
   smoke are deferred to the Phase 7 release gate because the fixed endpoint,
   full manifest fingerprint, encryption key and real owner token are not stored
   in this repository and must not be invented.
+
+## Phase 5 — Rebuild Emotion Map Output MCP
+
+Status: implementation complete and checkpoint-ready. No migration or Edge
+Function has been deployed; production MCP clients remain a Phase 7 smoke gate.
+
+| Finding | Status | Verification |
+| --- | --- | --- |
+| P1-MCP-OUT-033 mixed read/action manifest | fixed in code | default `output` token and endpoint contain seven read-only tools; three proposal tools require the separate action endpoint and explicit `action` token |
+| P1-MCP-OUT-034 weak schemas and validation | fixed | manifest, public schema and strict validator are separate; unknown fields, impossible dates and limits fail before owner-state loading; structured output is schema checked |
+| P1-MCP-OUT-035 CRUD-only retrieval | fixed | `research_emotion_context` reuses grounded retrieval, returns ambiguity options, signed continuation, complete authorized counts and explicit zero results |
+| P1-MCP-OUT-036 incomplete transport | fixed in code | stateless modern/legacy version negotiation, headers, ping, bounded batch, notification no-body behavior, legal IDs, Origin policy and `last_used_at` touch |
+| P1-MCP-OUT-037 broken deep link | fixed by removal | `open_record` is absent from the read manifest and server; no unusable link is advertised |
+| Future-schema output safety | fixed | read and action tools reject an app snapshot newer than schema v6 instead of parsing it |
+
+Phase 5 evidence:
+
+- `npm run check` passes: TypeScript for the app and Edge Functions, ESLint,
+  42 Vitest files / 189 tests, import and source-size architecture gates, and
+  the production Vite build.
+- The new tests cover exact read/action manifests, strict input and output
+  schemas, ambiguity and signed continuation behavior, complete-set aggregate
+  counts, future-schema fail-closed behavior, owner-row denial, notification
+  and bounded batch transport, protocol versions, token kind migration and
+  output-only revocation/status UI.
+- Playwright passes 9/9 Chromium Mobile and 9/9 WebKit iPhone tests, including
+  320px, reduced-motion, keyboard, accessibility, landscape, tablet, desktop
+  and 200% zoom paths.
+- Secret scans found no API-key/JWT-shaped value, credential logging or browser
+  token persistence. Raw MCP tokens remain one-time UI values only.
+- The linked project reference was read back as `uifgpmmlvmfrauzbbrem` before a
+  read-only `supabase db push --dry-run`. It listed migrations
+  `202608020001`–`202608020005` and explicitly performed no push.
+- Production protocol handshakes, token expiry/revocation, two-account denial,
+  `last_used_at`, research continuation and action-confirmation smoke remain
+  blocked until Phase 7 deploys the local migrations and both Edge endpoints.
