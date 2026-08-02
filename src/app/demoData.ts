@@ -1,9 +1,11 @@
 import type {
   AppDataSnapshot,
   Conversation,
+  EmotionKey,
   EmotionMoment,
   EmotionNote,
   FollowUpRecord,
+  PlaceRating,
 } from '../types';
 import { DEFAULT_THEME } from './themePreferences';
 
@@ -26,21 +28,33 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
   });
   const definitions = [
     {
-      title: '走过一段安静的路', place: '示范地图 · 步行记录', time: '10:20',
-      longitude: 121.4739, latitude: 31.2308,
-      excerpt: 'Today was simple and quiet. I walked for a while.',
+      title: '图书馆靠窗复习', place: '东国大学中央图书馆', time: '10:20',
+      longitude: 126.9994, latitude: 37.5582,
+      emotion: 'focused', placeRating: 'safe',
+      excerpt: '上午的靠窗位置很安静，我把下午课程的阅读材料整理完了。',
     },
     {
-      title: '留下一张照片', place: '示范地图 · 照片记录', time: '15:10',
-      longitude: 121.4744, latitude: 31.2312,
-      excerpt: 'I took one photo during the walk.',
+      title: '万海广场的午休', place: '万海广场', time: '12:35',
+      longitude: 127.0003, latitude: 37.5579,
+      emotion: 'connected', placeRating: 'comfortable',
+      excerpt: '和同学吃完午饭，在广场坐了一会儿。',
     },
     {
-      title: '保存这一小段记录', place: '示范地图 · 文字记录', time: '18:05',
-      longitude: 121.475, latitude: 31.2315,
-      excerpt: 'I saved this small note.',
+      title: '惠化馆课后整理', place: '惠化馆走廊', time: '15:10',
+      longitude: 127.0008, latitude: 37.5591,
+      emotion: 'calm', placeRating: 'safe',
+      excerpt: '下课后留在走廊，把小组任务和明天要带的材料记了下来。',
     },
-  ];
+  ] satisfies Array<{
+    title: string;
+    place: string;
+    time: string;
+    longitude: number;
+    latitude: number;
+    emotion: EmotionKey;
+    placeRating: PlaceRating;
+    excerpt: string;
+  }>;
   const notes: EmotionNote[] = definitions.map((definition, index) => ({
     id: `demo:mlm:${sourceRecordId}:note:${index + 1}`,
     title: definition.title,
@@ -55,8 +69,8 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
     utcOffsetMinutes: null,
     timePrecision: 'minute',
     eventTimeSource: 'legacy',
-    emotion: null,
-    placeRating: null,
+    emotion: definition.emotion,
+    placeRating: definition.placeRating,
     excerpt: definition.excerpt,
     answers: [{
       id: 'purpose', role: 'purpose', question: '你去这做什么？',
@@ -67,8 +81,8 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
   const moments: EmotionMoment[] = definitions.map((definition, index) => ({
     id: `demo:mlm:${sourceRecordId}:moment:${index + 1}`,
     noteId: notes[index].id,
-    emotion: null,
-    intensity: 0,
+    emotion: definition.emotion,
+    intensity: 4,
     place: definition.place,
     date: days[index],
     time: definition.time,
@@ -81,7 +95,7 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
     eventTimeSource: 'legacy',
     longitude: definition.longitude,
     latitude: definition.latitude,
-    placeRating: null,
+    placeRating: definition.placeRating,
   }));
   const followUpId = `demo:mlm:${sourceRecordId}:followup:1`;
   const now = new Date().toISOString();
@@ -124,7 +138,7 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
         },
         {
           id: `demo:mlm:${sourceRecordId}:message:answer`, role: 'assistant',
-          body: '它们来自 My Life Memory 的公开示范星星与示范文字，不含真实账号数据。',
+          body: '它们是东国大学本校的公开演示记录，不含真实账号数据。',
           noteIds: notes.map((note) => note.id), createdAt: now,
         },
       ],
