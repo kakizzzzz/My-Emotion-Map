@@ -36,7 +36,7 @@ export const useShortcutHeartRateIngress = ({
     const refresh = async () => {
       const { data, error } = await client
         .from('shortcut_observations')
-        .select('id,event_id,sampled_at,context,samples,median_bpm,is_test,low_signal,created_at')
+        .select('id,event_id,sampled_at,context,samples,median_bpm,is_test,low_signal,decision_reason,threshold_snapshot,algorithm_version,signal_level,created_at')
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
         .limit(20);
@@ -71,6 +71,26 @@ export const useShortcutHeartRateIngress = ({
               : 'unknown',
             samples,
             lowSignalConfidence: row.low_signal === true,
+            decisionReason:
+              row.decision_reason === 'outside_resting_range' ||
+              row.decision_reason === 'low_signal_review' ||
+              row.decision_reason === 'non_resting_review' ||
+              row.decision_reason === 'test_event'
+                ? row.decision_reason
+                : 'legacy_review',
+            thresholdSnapshot: (() => {
+              const value = row.threshold_snapshot;
+              if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+              const snapshot = value as { restingMin?: unknown; restingMax?: unknown };
+              return typeof snapshot.restingMin === 'number' &&
+                typeof snapshot.restingMax === 'number'
+                ? { restingMin: snapshot.restingMin, restingMax: snapshot.restingMax }
+                : undefined;
+            })(),
+            algorithmVersion: typeof row.algorithm_version === 'string'
+              ? row.algorithm_version.slice(0, 100)
+              : 'legacy',
+            signalLevel: row.signal_level === 'standard' ? 'standard' : 'low',
             status: 'pending',
           }];
         });

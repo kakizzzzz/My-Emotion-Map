@@ -22,7 +22,7 @@ import {
   createEmptyAppData,
   getWorkspaceStorageKey,
   loadAppData,
-  appendRevisitRecord,
+  setRevisitCurrentEmotion,
   dismissInboxItem,
 } from './app/appDataRepository';
 import {
@@ -43,7 +43,6 @@ import {
 } from './domain/followUps';
 import {
   loadHealthPreferences,
-  isOutsideRestingHeartRateRange,
   saveHealthPreferences,
 } from './features/inbox/healthPreferences';
 import { GlobalInboxButton, GlobalMenuButton, SideDrawer } from './app/AppChrome';
@@ -68,6 +67,7 @@ import {
 import { useNoteEditorHandlers } from './app/noteEditorHandlers';
 import { useFirstRunOnboarding } from './app/firstRunOnboarding';
 import { FirstRunOnboarding } from './features/onboarding/FirstRunOnboarding';
+import { useChatDeliveryHandlers } from './app/useChatDeliveryHandlers';
 
 const CalendarScreen = lazy(() =>
   import('./features/calendar/CalendarScreen').then((module) => ({
@@ -177,6 +177,7 @@ export function App() {
     followUps,
     setFollowUps,
     setConversations,
+    setRevisits,
     notes,
     activeView,
     activeConversationId,
@@ -187,8 +188,7 @@ export function App() {
     starInboxItems.filter(
       (item) =>
         item.status === 'pending' &&
-        !item.seenAt &&
-        isOutsideRestingHeartRateRange(item.heartRate, healthPreferences),
+        !item.seenAt,
     ).length;
   const themeStyle = getThemeStyle(themePalette);
   const chatWorkspace = chatWorkspaceKey(
@@ -408,49 +408,10 @@ export function App() {
     return true;
   };
 
-  const appendGroundedChat = (
-    conversationId: string,
-    userBody: string,
-    assistantBody: string,
-    noteIds: string[],
-  ) => {
-    const createdAt = new Date().toISOString();
-    const messages = [
-      { id: createRecordId('message'), role: 'user' as const, body: userBody, createdAt },
-      { id: createRecordId('message'), role: 'assistant' as const, body: assistantBody, noteIds, createdAt },
-    ];
-    setConversations((current) => {
-      if (current.some((conversation) => conversation.id === conversationId)) {
-        return current.map((conversation) =>
-          conversation.id === conversationId
-            ? {
-                ...conversation,
-                preview: assistantBody.slice(0, 120),
-                messages: [...conversation.messages, ...messages],
-              }
-            : conversation,
-        );
-      }
-      const firstLine = userBody.split(/\r?\n/, 1)[0]?.trim() ?? '';
-      const createdConversation: Conversation = {
-        id: conversationId,
-        title: firstLine.slice(0, 42) || copy.chat.newConversation,
-        preview: assistantBody.slice(0, 120),
-        kind: 'regular',
-        messages,
-      };
-      const companion = current.find(
-        (conversation) => conversation.id === FOLLOW_UP_CONVERSATION_ID,
-      );
-      return companion
-        ? [
-            companion,
-            createdConversation,
-            ...current.filter((conversation) => conversation !== companion),
-          ]
-        : [createdConversation, ...current];
-    });
-  };
+  const chatDelivery = useChatDeliveryHandlers({
+    setConversations,
+    fallbackTitle: copy.chat.newConversation,
+  });
 
   useEffect(() => {
     document.documentElement.lang = LANGUAGE_HTML_LANGS[language];
@@ -517,22 +478,19 @@ export function App() {
 
   const exitConversationToMap = () => {
     setActiveView('map');
-    setSideOpen(false);
+    setSideOpen(true);
   };
 
   const openStarInbox = () => {
-    const seenAt = new Date().toISOString();
-    setStarInboxItems((current) =>
-      current.map((item) =>
-        item.status === 'pending' &&
-        !item.seenAt &&
-        isOutsideRestingHeartRateRange(item.heartRate, healthPreferences)
-          ? { ...item, seenAt }
-          : item,
-      ),
-    );
     setActiveView('inbox');
     setSideOpen(false);
+  };
+
+  const markStarInboxItemSeen = (itemId: string) => {
+    const seenAt = new Date().toISOString();
+    setStarInboxItems((current) => current.map((item) =>
+      item.id === itemId && !item.seenAt ? { ...item, seenAt } : item,
+    ));
   };
 
   const reviewStarInboxItem = async (item: StarInboxItem) => {
@@ -640,10 +598,17 @@ export function App() {
         (record) =>
           record.noteId === noteId &&
           (record.status === 'answered' || record.status === 'skipped'),
-      );
-    setRevisits((current) =>
-      appendRevisitRecord(current, note, emotion, relatedFollowUp?.id),
     );
+    if (relatedFollowUp && relatedFollowUp.responseOptionId !== 'skip') {
+      const changeDirection = relatedFollowUp.responseOptionId ?? 'different';
+      setRevisits((current) => setRevisitCurrentEmotion(
+        current,
+        note,
+        relatedFollowUp.id,
+        emotion,
+        changeDirection,
+      ));
+    }
     setRevisitNoteId(null);
     showToast(copy.feedback.feelingSaved);
   };
@@ -758,7 +723,9 @@ export function App() {
                 cloudRevision={cloudSync.revision}
                 cloudStatus={cloudSync.status}
                 dataMode={dataMode}
-                onGroundedChat={appendGroundedChat}
+                onBeginChat={chatDelivery.beginChat}
+                onCompleteChat={chatDelivery.completeChat}
+                onFailChat={chatDelivery.failChat}
                 onNewConversation={startNewConversation}
                 onExitToMap={exitConversationToMap}
                 onToast={showToast}
@@ -776,9 +743,9 @@ export function App() {
             >
               <StarInboxScreen
                 items={starInboxItems}
-                healthPreferences={healthPreferences}
                 onReviewItem={reviewStarInboxItem}
                 onDismissItem={dismissStarInboxItem}
+                onMarkSeen={markStarInboxItemSeen}
                 onClose={() => navigate('map')}
               />
             </motion.div>
@@ -864,6 +831,13 @@ export function App() {
                       context: 'unknown',
                       samples: [{ bpm: 108, at: now }],
                       lowSignalConfidence: true,
+                      decisionReason: 'test_event',
+                      thresholdSnapshot: {
+                        restingMin: healthPreferences.restingHeartRateMin,
+                        restingMax: healthPreferences.restingHeartRateMax,
+                      },
+                      algorithmVersion: 'settings-test-v1',
+                      signalLevel: 'low',
                       status: 'pending',
                     },
                   ]);

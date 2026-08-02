@@ -100,6 +100,21 @@ export const consumeShortcutHeartFragment = ({
       samples: sampleValues.map((bpm) => ({ bpm: Math.round(bpm), at: rawAt })),
       lowSignalConfidence:
         version === '1' || sampleValues.length < 3 || context !== 'resting',
+      decisionReason:
+        version === '1' || sampleValues.length < 3
+            ? 'low_signal_review'
+          : context !== 'resting'
+            ? 'non_resting_review'
+            : 'outside_resting_range',
+      thresholdSnapshot: {
+        restingMin: preferences.restingHeartRateMin,
+        restingMax: preferences.restingHeartRateMax,
+      },
+      algorithmVersion: `shortcut-fragment-v${version}`,
+      signalLevel:
+        version === '1' || sampleValues.length < 3 || context !== 'resting'
+          ? 'low'
+          : 'standard',
       status: 'pending',
     },
   };

@@ -26,6 +26,10 @@ describe('Shortcut heart-rate bridge rules', () => {
       heartRate: 126,
       status: 'pending',
       sourceEventId: 'sample-1',
+      decisionReason: 'low_signal_review',
+      thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+      algorithmVersion: 'shortcut-fragment-v1',
+      signalLevel: 'low',
     });
     expect(result.item.latitude).toBeUndefined();
     expect(result.item.longitude).toBeUndefined();
@@ -80,6 +84,7 @@ describe('Shortcut heart-rate bridge rules', () => {
     if (result.kind === 'pending') {
       expect(result.item.lowSignalConfidence).toBe(true);
       expect(result.item.context).toBe('workout');
+      expect(result.item.decisionReason).toBe('non_resting_review');
     }
   });
 });

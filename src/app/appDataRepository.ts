@@ -13,7 +13,6 @@ import type {
   EmotionNote,
   FollowUpRecord,
   PlaceRating,
-  RevisitRecord,
   StarInboxItem,
 } from '../types';
 import { createDemoAppData } from './demoData';
@@ -32,15 +31,18 @@ import {
   isWorkspaceWithinBudget,
   stableSerialize,
   workspaceStorageKey,
+  legacyUserWorkspaceStorageKey,
 } from './workspace/workspaceStorage';
 import {
   chatWorkspaceKey,
   clearChatDraftsForWorkspace,
   clearLegacyChatDrafts,
 } from './workspace/chatDraftStorage';
+import { clearInboxLocation } from './recordAssociations';
+import { sanitizeRevisits } from './appDataRevisits';
 
 export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 export type AppDataLoadIssue =
   | 'storage-unavailable'
@@ -384,6 +386,7 @@ const sanitizeMessage = (
     role: source.role,
     body: asString(source.body, 20_000),
     kind:
+      source.kind === 'clarification' ||
       source.kind === 'followup_prompt' ||
       source.kind === 'followup_answer' ||
       source.kind === 'followup_reply'
@@ -425,6 +428,37 @@ const sanitizeMessage = (
           })
           .filter((option): option is ChatOption => Boolean(option))
       : undefined,
+    clarificationOptions: Array.isArray(source.clarificationOptions)
+      ? source.clarificationOptions
+          .map(asObject)
+          .filter((item): item is Record<string, unknown> => Boolean(item))
+          .flatMap((item) => {
+            const optionId = asString(item.optionId, 200);
+            const label = asString(item.label, 300);
+            const continuationToken = asString(item.continuationToken, 4_000);
+            return optionId && label && continuationToken
+              ? [{ optionId, label, continuationToken }]
+              : [];
+          })
+          .slice(0, 3)
+      : undefined,
+    requestId: asString(source.requestId, 200) || undefined,
+    replyToRequestId: asString(source.replyToRequestId, 200) || undefined,
+    deliveryState:
+      source.deliveryState === 'pending' ||
+      source.deliveryState === 'delivered' ||
+      source.deliveryState === 'failed' ||
+      source.deliveryState === 'stopped'
+        ? source.deliveryState
+        : undefined,
+    referenceConfirmation: (() => {
+      const reference = asObject(source.referenceConfirmation);
+      const optionId = asString(reference?.optionId, 200);
+      const continuationToken = asString(reference?.continuationToken, 4_000);
+      return optionId && continuationToken
+        ? { optionId, continuationToken }
+        : undefined;
+    })(),
     followUpId:
       typeof source.followUpId === 'string'
         ? source.followUpId.slice(0, 200)
@@ -538,37 +572,6 @@ const sanitizeFollowUp = (
   };
 };
 
-const sanitizeRevisit = (
-  value: unknown,
-  issues: string[],
-): RevisitRecord | null => {
-  const source = asObject(value);
-  if (
-    !source ||
-    !asString(source.id, 200) ||
-    !asString(source.noteId, 200) ||
-    !(source.originalEmotion === null || isEmotion(source.originalEmotion)) ||
-    !isEmotion(source.revisitedEmotion) ||
-    !isValidTimestamp(source.originalOccurredAt) ||
-    !isValidTimestamp(source.revisitedAt)
-  ) {
-    issues.push('revisit-dropped');
-    return null;
-  }
-  return {
-    id: asString(source.id, 200),
-    noteId: asString(source.noteId, 200),
-    originalEmotion: source.originalEmotion as EmotionKey | null,
-    revisitedEmotion: source.revisitedEmotion,
-    originalOccurredAt: source.originalOccurredAt,
-    revisitedAt: source.revisitedAt,
-    sourceFollowUpId:
-      typeof source.sourceFollowUpId === 'string'
-        ? source.sourceFollowUpId.slice(0, 200)
-        : undefined,
-  };
-};
-
 export const createEmptyAppData = (): AppDataSnapshot => ({
   schemaVersion: CURRENT_SCHEMA_VERSION,
   dataMode: 'real',
@@ -586,6 +589,8 @@ export {
   appendRevisitRecord,
   dismissInboxItem,
   removeMomentAssociations,
+  setRevisitCurrentEmotion,
+  upsertFollowUpRevisit,
 } from './recordAssociations';
 
 const inferLegacyDataMode = (
@@ -712,14 +717,12 @@ export const migrateAppData = (
   );
   const followUpIds = new Set(followUps.map((record) => record.id));
   const followUpById = new Map(followUps.map((record) => [record.id, record]));
-  const revisits = Array.isArray(source.revisits)
-    ? source.revisits
-        .map((item) => sanitizeRevisit(item, issues))
-        .filter(
-          (item): item is RevisitRecord =>
-            Boolean(item && noteIds.has(item.noteId)),
-        )
-    : [];
+  const revisits = sanitizeRevisits(
+    source.revisits,
+    issues,
+    noteIds,
+    followUpById,
+  );
   const momentIds = new Set(moments.map((moment) => moment.id));
   const starInboxItems = Array.isArray(source.starInboxItems)
     ? source.starInboxItems
@@ -727,14 +730,7 @@ export const migrateAppData = (
         .filter((item): item is StarInboxItem => Boolean(item))
         .map((item) =>
           item.linkedMomentId && !momentIds.has(item.linkedMomentId)
-            ? {
-                ...item,
-                linkedMomentId: undefined,
-                status:
-                  item.status === 'completed' || item.status === 'draft_created'
-                    ? ('pending' as const)
-                    : item.status,
-              }
+            ? clearInboxLocation(item)
             : item,
         )
     : [];
@@ -815,7 +811,11 @@ export const loadAppData = (
   try {
     const key = workspaceStorageKey(mode, userId);
     if (!key) return createEmptyAppData();
-    const stored = window.localStorage.getItem(key);
+    const stored = window.localStorage.getItem(key) ?? (
+      mode === 'real' && userId
+        ? window.localStorage.getItem(legacyUserWorkspaceStorageKey(userId))
+        : null
+    );
     if (!stored) return mode === 'demo' ? createDemoAppData() : createEmptyAppData();
     try {
       const migrated = migrateAppData(JSON.parse(stored));
@@ -908,6 +908,7 @@ export const clearAllLocalData = (userId: string | null, mode: DataMode) => {
   const activeKey = workspaceStorageKey(mode, userId);
   const keys = [
     activeKey,
+    userId ? legacyUserWorkspaceStorageKey(userId) : null,
     userId ? `my-emotion-map.user-preferences.${userId}.v2` : null,
     userId ? `my-emotion-map.health-preferences.${userId}.v2` : null,
     userId ? `my-emotion-map.shortcut-heart-dedupe.${userId}.v2` : null,

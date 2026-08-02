@@ -148,7 +148,7 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
     },
   ];
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     dataMode: 'demo',
     moments,
     notes,

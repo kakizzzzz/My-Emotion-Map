@@ -260,6 +260,7 @@ export const retrieveAuthorizedEvidence = (
   payload: unknown,
   query: string,
   selectedNoteIds: string[],
+  restrictToSelected = false,
 ) => {
   const intent = routeIntent(query);
   if (intent === 'unsupported') {
@@ -268,28 +269,22 @@ export const retrieveAuthorizedEvidence = (
       retrievalStatus: 'evidence_insufficient' as const,
       evidence: [] as AuthorizedEvidence[],
       allowedFacts: computeAllowedFacts([]),
-      clarificationOptions: [] as string[],
     };
   }
-  const ranked = rankAuthorizedEvidence(payload, query, selectedNoteIds);
+  const selected = new Set(selectedNoteIds);
+  const ranked = rankAuthorizedEvidence(payload, query, selectedNoteIds)
+    .filter((item) => !restrictToSelected || selected.has(item.evidence.noteId));
   const evidence = ranked.map((item) => item.evidence);
   const retrievalStatus = resolveRetrievalStatus(
     intent,
     evidence,
     ranked.map((item) => item.score),
   );
-  const clarificationOptions =
-    retrievalStatus === 'ambiguous'
-      ? evidence.slice(0, 3).map((item) =>
-          [item.title, item.place, item.date].filter(Boolean).join(' · ').slice(0, 100),
-        )
-      : [];
   return {
     intent,
     retrievalStatus,
     evidence,
     allowedFacts: computeAllowedFacts(evidence),
-    clarificationOptions,
   };
 };
 

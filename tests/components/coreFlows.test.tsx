@@ -17,6 +17,8 @@ import { createGuidedAnswers } from '../../src/domain/notePrompts';
 import type { PhotoAssistDelivery } from '../../src/app/appTypes';
 import { FirstRunOnboarding } from '../../src/features/onboarding/FirstRunOnboarding';
 import { createDemoAppData } from '../../src/app/appDataRepository';
+import { SideDrawer } from '../../src/app/AppChrome';
+import { StarInboxScreen } from '../../src/features/inbox/StarInboxScreen';
 
 const draftNote: EmotionNote = {
   id: 'note-new',
@@ -459,7 +461,9 @@ describe('core component flows', () => {
         cloudRevision={null}
         cloudStatus="signed_out"
         dataMode="real"
-        onGroundedChat={vi.fn()}
+        onBeginChat={vi.fn()}
+        onCompleteChat={vi.fn()}
+        onFailChat={vi.fn()}
         onNewConversation={vi.fn()}
         onExitToMap={vi.fn()}
         onToast={vi.fn()}
@@ -478,7 +482,8 @@ describe('core component flows', () => {
 
   it('answers Demo prompts deterministically without calling the Edge Function', async () => {
     const user = userEvent.setup();
-    const onGroundedChat = vi.fn();
+    const onBeginChat = vi.fn();
+    const onCompleteChat = vi.fn();
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const demo = createDemoAppData(new Date('2026-08-02T12:00:00'));
     renderWithLanguage(
@@ -494,7 +499,9 @@ describe('core component flows', () => {
         cloudRevision={null}
         cloudStatus="signed_out"
         dataMode="demo"
-        onGroundedChat={onGroundedChat}
+        onBeginChat={onBeginChat}
+        onCompleteChat={onCompleteChat}
+        onFailChat={vi.fn()}
         onNewConversation={vi.fn()}
         onExitToMap={vi.fn()}
         onToast={vi.fn()}
@@ -502,13 +509,95 @@ describe('core component flows', () => {
     );
 
     await user.click(screen.getByRole('button', { name: '图书馆的记录是什么？' }));
-    await waitFor(() => expect(onGroundedChat).toHaveBeenCalledTimes(1));
-    expect(onGroundedChat.mock.calls[0][2]).toContain('演示回答');
-    expect(onGroundedChat.mock.calls[0][3].every((id: string) =>
+    await waitFor(() => expect(onCompleteChat).toHaveBeenCalledTimes(1));
+    expect(onBeginChat).toHaveBeenCalledTimes(1);
+    expect(onCompleteChat.mock.calls[0][0].assistantBody).toContain('演示回答');
+    expect(onCompleteChat.mock.calls[0][0].noteIds.every((id: string) =>
       id.startsWith('demo:synthetic:campus-day:')
     )).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+  it('opens Chat from its primary row while disclosure only expands history', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    renderWithLanguage(
+      <SideDrawer activeView="map" conversations={[]} onNavigate={onNavigate}
+        onOpenConversation={vi.fn()} onNewConversation={vi.fn()} onClose={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: '交流回访' }));
+    expect(onNavigate).toHaveBeenCalledWith('chat');
+    cleanup();
+    renderWithLanguage(
+      <SideDrawer activeView="map" conversations={[]} onNavigate={onNavigate}
+        onOpenConversation={vi.fn()} onNewConversation={vi.fn()} onClose={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: '展开交流回访历史' }));
+    await waitFor(() => expect(
+      screen.getByRole('button', { name: '新建对话' }),
+    ).toBeVisible());
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows every pending inbox item and marks only the expanded item seen', async () => {
+    const user = userEvent.setup();
+    const onMarkSeen = vi.fn();
+    renderWithLanguage(
+      <StarInboxScreen
+        items={[
+          { id: 'inbox-1', source: 'heart-rate', sourceEventId: 'event-1',
+            eventAt: '2026-08-02T10:00:00.000Z', receivedAt: '2026-08-02T10:01:00.000Z',
+            heartRate: 75, status: 'pending', decisionReason: 'low_signal_review',
+            thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+            algorithmVersion: 'shortcut-heart-v2', signalLevel: 'low' },
+          { id: 'inbox-2', source: 'heart-rate', sourceEventId: 'event-2',
+            eventAt: '2026-08-02T11:00:00.000Z', receivedAt: '2026-08-02T11:01:00.000Z',
+            heartRate: 76, status: 'pending', decisionReason: 'test_event',
+            thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+            algorithmVersion: 'shortcut-heart-v2', signalLevel: 'standard' },
+        ]}
+        onReviewItem={vi.fn()} onDismissItem={vi.fn()}
+        onMarkSeen={onMarkSeen} onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText('新发现一颗星')).toHaveLength(2);
+    await user.click(document.querySelectorAll('.star-inbox-card')[0] as HTMLElement);
+    expect(onMarkSeen).toHaveBeenCalledWith('inbox-1');
+    expect(onMarkSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it('scrolls a long existing conversation exactly once on entry', async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true, value: scrollIntoView,
+    });
+    try {
+      renderWithLanguage(
+        <ChatScreen
+          notes={[]} followUps={[]}
+          conversations={[{ id: 'long-thread', title: '长线程', preview: '', kind: 'regular',
+            messages: Array.from({ length: 100 }, (_, index) => ({
+              id: `message-${index}`,
+              role: index % 2 ? 'assistant' as const : 'user' as const,
+              body: `message ${index}`,
+            })) }]}
+          activeConversationId="long-thread" workspaceKey="real:user-a"
+          onAnswerFollowUp={vi.fn()} onRevisitEmotion={vi.fn()}
+          cloudAuth={null} cloudRevision={null} cloudStatus="signed_out"
+          dataMode="real" onBeginChat={vi.fn()} onCompleteChat={vi.fn()}
+          onFailChat={vi.fn()} onNewConversation={vi.fn()}
+          onExitToMap={vi.fn()} onToast={vi.fn()}
+        />,
+      );
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    }
   });
 
   it('does not expose account A chat drafts to account B', async () => {
@@ -530,7 +619,9 @@ describe('core component flows', () => {
       cloudRevision: 7,
       cloudStatus: 'synced' as const,
       dataMode: 'real' as const,
-      onGroundedChat: vi.fn(),
+      onBeginChat: vi.fn(),
+      onCompleteChat: vi.fn(),
+      onFailChat: vi.fn(),
       onNewConversation: vi.fn(),
       onExitToMap: vi.fn(),
       onToast: vi.fn(),

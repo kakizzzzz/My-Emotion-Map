@@ -59,3 +59,36 @@ Phase 1 evidence:
 - Demo chat component verification confirms no network `fetch`; real workspace
   storage and camera remain separate from the disposable Demo workspace.
 - `schemaVersion` remains 4 and no MCP surface was added or expanded.
+
+## Phase 2 — Chat, follow-up, inbox and editor polish
+
+Status: complete; this section and its changes form the dedicated Phase 2
+checkpoint.
+
+| Finding | Status | Verification |
+| --- | --- | --- |
+| P1-CHAT-014 320px composer | fixed | 320px E2E checks textarea width >=220px and 44px send control in Chromium and WebKit |
+| P1-CHAT-015 chat delivery state | fixed | canonical requestId-backed pending/failed/stopped messages, same-request retry, one assistant response and Edge idempotency migration |
+| P1-CHAT-016 long-thread scroll | fixed | 100-message component test checks one initial scroll; ResizeObserver follows late layout changes only near the bottom |
+| P1-CHAT-017 clarification choices | fixed | maximum three structured choices, HMAC-bound expiring continuation tokens and server-only confirmed-candidate restriction |
+| P1-CHAT-018 directional feedback | fixed | lighter/stronger/different/same/skip use the same short neutral saved feedback; confetti removed |
+| P1-FOLLOWUP-019 revisit direction | fixed | schema v5 migration, one revisit per non-skip followUpId, stable id when currentEmotion is added |
+| P1-CHAT-020 Chat navigation | fixed | primary row directly opens Chat; separate 44px disclosure only expands history; false Today grouping removed |
+| P1-INBOX-021 per-item seen | fixed | opening the inbox is read-only; expand/review/dismiss marks only the acted-on item |
+| P1-INBOX-022 server pending decisions | fixed | every pending server item remains visible with saved decision reason, threshold snapshot, algorithm version and signal level |
+| P1-INBOX-023 stale location links | fixed | deletion removes every linked location and confirmation field before another review |
+
+Phase 2 evidence:
+
+- `npm run check`: 25 test files / 128 tests passed; typecheck, lint,
+  architecture, production build and the source-size hard gate passed.
+- Playwright: 11/11 Chromium Mobile and 11/11 WebKit iPhone tests passed,
+  including the 320px composer, neutral revisit feedback, editor draft exit,
+  direct Chat navigation and drawer-return behavior.
+- Chat request validation rejects client-supplied evidence, model, token-budget
+  and system-prompt controls. Continuation tokens do not contain raw note IDs.
+- `schemaVersion` is now 5. The v4 per-user local key is read as a recovery
+  source and is not deleted during migration; future-schema hard stops remain.
+- Migration `202608020002_phase2_chat_inbox.sql` is local-only until the linked
+  project receives an explicit, successful migration apply. No MCP surface was
+  added or expanded in this phase.

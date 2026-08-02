@@ -121,6 +121,18 @@ export type ChatOption = {
   responseKind: FollowUpOptionId;
 };
 
+export type ChatDeliveryState =
+  | 'pending'
+  | 'delivered'
+  | 'failed'
+  | 'stopped';
+
+export type ClarificationOption = {
+  optionId: string;
+  label: string;
+  continuationToken: string;
+};
+
 export type FollowUpStatus = 'queued' | 'active' | 'answered' | 'skipped';
 
 export type FollowUpRecord = {
@@ -148,9 +160,22 @@ export type ChatMessage = {
   id: string;
   role: ChatRole;
   body: string;
-  kind?: 'message' | 'followup_prompt' | 'followup_answer' | 'followup_reply';
+  kind?:
+    | 'message'
+    | 'clarification'
+    | 'followup_prompt'
+    | 'followup_answer'
+    | 'followup_reply';
   noteIds?: string[];
   options?: ChatOption[];
+  clarificationOptions?: ClarificationOption[];
+  requestId?: string;
+  replyToRequestId?: string;
+  deliveryState?: ChatDeliveryState;
+  referenceConfirmation?: {
+    optionId: string;
+    continuationToken: string;
+  };
   followUpId?: string;
   createdAt?: string;
 };
@@ -170,7 +195,8 @@ export type RevisitRecord = {
   id: string;
   noteId: string;
   originalEmotion: EmotionKey | null;
-  revisitedEmotion: EmotionKey;
+  changeDirection: Exclude<FollowUpOptionId, 'skip'>;
+  currentEmotion?: EmotionKey;
   originalOccurredAt: string;
   revisitedAt: string;
   sourceFollowUpId?: string;
@@ -198,6 +224,18 @@ export type StarInboxItem = {
   context?: 'resting' | 'workout' | 'unknown';
   samples?: Array<{ bpm: number; at: string }>;
   lowSignalConfidence?: boolean;
+  decisionReason?:
+    | 'outside_resting_range'
+    | 'low_signal_review'
+    | 'non_resting_review'
+    | 'test_event'
+    | 'legacy_review';
+  thresholdSnapshot?: {
+    restingMin: number;
+    restingMax: number;
+  };
+  algorithmVersion?: string;
+  signalLevel?: 'standard' | 'low';
   linkedMomentId?: string;
   status: StarInboxStatus;
   seenAt?: string;

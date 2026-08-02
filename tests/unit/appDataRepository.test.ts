@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   APP_DATA_STORAGE_KEY,
   CURRENT_SCHEMA_VERSION,
-  appendRevisitRecord,
   createDemoAppData,
   createEmptyAppData,
   dismissInboxItem,
@@ -15,7 +14,10 @@ import {
   saveAppData,
 } from '../../src/app/appDataRepository';
 import { DEMO_DATA_MANIFEST } from '../../src/app/demoData';
-import { userWorkspaceStorageKey } from '../../src/app/workspace/workspaceStorage';
+import {
+  legacyUserWorkspaceStorageKey,
+  userWorkspaceStorageKey,
+} from '../../src/app/workspace/workspaceStorage';
 import type {
   AppDataSnapshot,
   EmotionMoment,
@@ -87,7 +89,8 @@ function populatedSnapshot(): AppDataSnapshot {
         id: 'revisit-1',
         noteId: note.id,
         originalEmotion: 'calm',
-        revisitedEmotion: 'joy',
+        changeDirection: 'different',
+        currentEmotion: 'joy',
         originalOccurredAt: '2026-07-28T14:20:00.000Z',
         revisitedAt: '2026-07-29T14:20:00.000Z',
       },
@@ -146,6 +149,18 @@ describe('app data repository', () => {
     expect(loaded.moments).toHaveLength(1);
     expect(loaded.notes[0].title).toBe(note.title);
     expect(loaded.moments[0].occurredAtUtc).toBeNull();
+  });
+
+  it('loads the legacy v4 user key without deleting the recovery source', () => {
+    const legacyKey = legacyUserWorkspaceStorageKey('user-a');
+    const raw = JSON.stringify({ ...populatedSnapshot(), schemaVersion: 4 });
+    window.localStorage.setItem(legacyKey, raw);
+
+    const loaded = loadAppData('user-a');
+
+    expect(loaded.schemaVersion).toBe(5);
+    expect(loaded.notes[0].id).toBe(note.id);
+    expect(window.localStorage.getItem(legacyKey)).toBe(raw);
   });
 
   it('clears hidden legacy defaults without rewriting formal choices', () => {
@@ -222,6 +237,27 @@ describe('app data repository', () => {
     });
     expect(migrated).not.toHaveProperty('snapshot');
     expect(JSON.stringify(future)).toBe(original);
+  });
+
+  it('migrates a v4 revisit into schema v5 direction without losing its emotion', () => {
+    const migrated = migrateAppData({
+      ...populatedSnapshot(),
+      schemaVersion: 4,
+      revisits: [{
+        id: 'revisit-old', noteId: note.id, originalEmotion: 'calm',
+        revisitedEmotion: 'joy',
+        originalOccurredAt: '2026-07-28T14:20:00.000Z',
+        revisitedAt: '2026-07-29T14:20:00.000Z',
+        sourceFollowUpId: 'followup-1',
+      }],
+    });
+    expect(migrated.status).toBe('ok');
+    if (migrated.status !== 'ok') return;
+    expect(migrated.snapshot.schemaVersion).toBe(5);
+    expect(migrated.snapshot.revisits[0]).toMatchObject({
+      changeDirection: 'different', currentEmotion: 'joy',
+    });
+    expect(migrated.snapshot.revisits[0]).not.toHaveProperty('revisitedEmotion');
   });
 
   it('rejects a future-schema import instead of returning a downgraded snapshot', () => {
@@ -313,24 +349,6 @@ describe('app data repository', () => {
     expect(demo.starInboxItems).toEqual([]);
   });
 
-  it('appends a revisit without mutating the original note emotion', () => {
-    const revisits = appendRevisitRecord(
-      [],
-      note,
-      'joy',
-      undefined,
-      '2026-07-29T14:20:00.000Z',
-    );
-
-    expect(note.emotion).toBe('calm');
-    expect(revisits).toHaveLength(1);
-    expect(revisits[0]).toMatchObject({
-      originalEmotion: 'calm',
-      revisitedEmotion: 'joy',
-      revisitedAt: '2026-07-29T14:20:00.000Z',
-    });
-  });
-
   it('persists inbox dismissal as data state', () => {
     const items = [{
       id: 'inbox-1', source: 'heart-rate' as const, sourceEventId: 'event-1',
@@ -349,13 +367,31 @@ describe('app data repository', () => {
   });
 
   it('deletes note, revisit, follow-up and conversation references together', () => {
-    const next = removeMomentAssociations(populatedSnapshot(), moment.id);
+    const next = removeMomentAssociations({
+      ...populatedSnapshot(),
+      starInboxItems: [{
+        id: 'inbox-linked', source: 'heart-rate', sourceEventId: 'event-linked',
+        eventAt: '2026-07-28T14:00:00.000Z', receivedAt: '2026-07-28T14:01:00.000Z',
+        heartRate: 120, status: 'completed', linkedMomentId: moment.id,
+        latitude: 37.55, longitude: 126.95,
+        locationCapturedAt: '2026-07-28T14:02:00.000Z',
+        locationAccuracyMeters: 12, locationTimeRelation: 'confirmation',
+        confirmedAt: '2026-07-28T14:03:00.000Z',
+      }],
+    }, moment.id);
 
     expect(next.moments).toEqual([]);
     expect(next.notes).toEqual([]);
     expect(next.revisits).toEqual([]);
     expect(next.followUps).toEqual([]);
     expect(next.conversations[0].messages).toEqual([]);
+    expect(next.starInboxItems[0]).toMatchObject({ status: 'pending' });
+    for (const key of [
+      'linkedMomentId', 'confirmedAt', 'latitude', 'longitude',
+      'locationCapturedAt', 'locationAccuracyMeters', 'locationTimeRelation',
+    ]) {
+      expect(next.starInboxItems[0]).not.toHaveProperty(key);
+    }
   });
 
   it('isolates account A and B storage keys', () => {

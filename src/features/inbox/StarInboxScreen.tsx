@@ -5,35 +5,26 @@ import { MOTION } from "../../motion";
 import { StarMarkerGlyph } from "../../StarMarkerGlyph";
 import { useAppLanguage } from "../../i18n";
 import { formatFollowUpTimestamp } from '../../domain/followUps';
-import {
-  isOutsideRestingHeartRateRange,
-  describeHeartRateObservation,
-} from './healthPreferences';
 import type {
   StarInboxItem,
-  HealthPreferences,
 } from '../../types';
 import { useDialogFocus } from '../../app/useDialogFocus';
 
 export function StarInboxScreen({
   items,
-  healthPreferences,
   onReviewItem,
   onDismissItem,
+  onMarkSeen,
   onClose,
 }: {
   items: StarInboxItem[];
-  healthPreferences: HealthPreferences;
   onReviewItem: (item: StarInboxItem) => void;
   onDismissItem: (itemId: string) => void;
+  onMarkSeen: (itemId: string) => void;
   onClose: () => void;
 }) {
   const { copy, locale } = useAppLanguage();
-  const pendingItems = items.filter(
-    (item) =>
-      item.status === 'pending' &&
-      isOutsideRestingHeartRateRange(item.heartRate, healthPreferences),
-  );
+  const pendingItems = items.filter((item) => item.status === 'pending');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const isEmpty = pendingItems.length === 0;
   const dialogRef = useDialogFocus<HTMLDivElement>({ onEscape: onClose });
@@ -99,11 +90,12 @@ export function StarInboxScreen({
                         >
                           <button
                             className="star-inbox-card"
-                            onClick={() =>
+                            onClick={() => {
+                              if (!expanded) onMarkSeen(item.id);
                               setSelectedItemId((current) =>
                                 current === selectedKey ? null : selectedKey,
-                              )
-                            }
+                              );
+                            }}
                             aria-expanded={expanded}
                             aria-controls={`star-inbox-decision-${item.id}`}
                           >
@@ -117,11 +109,15 @@ export function StarInboxScreen({
                             <span className="star-inbox-card__copy">
                               <strong>{copy.inbox.discoveredStar}</strong>
                               <small className="star-inbox-card__status">
-                                {describeHeartRateObservation(
-                                  item.heartRate,
-                                  healthPreferences,
-                                  copy,
-                                )}
+                                {item.decisionReason === 'outside_resting_range'
+                                  ? copy.inbox.decisionOutside(item.heartRate)
+                                  : item.decisionReason === 'low_signal_review'
+                                    ? copy.inbox.decisionLowSignal(item.heartRate)
+                                    : item.decisionReason === 'non_resting_review'
+                                      ? copy.inbox.decisionNonResting(item.heartRate)
+                                      : item.decisionReason === 'test_event'
+                                        ? copy.inbox.decisionTest(item.heartRate)
+                                        : copy.inbox.decisionLegacy(item.heartRate)}
                               </small>
                               <small>
                                 {formatFollowUpTimestamp(item.eventAt, locale)}

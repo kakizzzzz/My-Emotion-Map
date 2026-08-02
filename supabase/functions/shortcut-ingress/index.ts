@@ -119,6 +119,14 @@ runtime.serve(async (request) => {
   }
   const sortedBpms = samples.map((sample) => sample.bpm).sort((a, b) => a - b);
   const median = sortedBpms[Math.floor(sortedBpms.length / 2)];
+  const lowSignal = recent.length < 3 || context !== 'resting';
+  const decisionReason = payload.test === true
+    ? 'test_event'
+    : context !== 'resting'
+      ? 'non_resting_review'
+      : lowSignal
+        ? 'low_signal_review'
+        : 'outside_resting_range';
   const response = await fetch(`${env('SUPABASE_URL')}/rest/v1/shortcut_observations`, {
     method: 'POST',
     headers: {
@@ -137,7 +145,14 @@ runtime.serve(async (request) => {
       samples,
       median_bpm: median,
       is_test: payload.test === true,
-      low_signal: recent.length < 3 || context !== 'resting',
+      low_signal: lowSignal,
+      decision_reason: decisionReason,
+      threshold_snapshot: {
+        restingMin: token.resting_min,
+        restingMax: token.resting_max,
+      },
+      algorithm_version: 'shortcut-heart-v2',
+      signal_level: lowSignal ? 'low' : 'standard',
     }),
     signal: AbortSignal.timeout(8_000),
   });

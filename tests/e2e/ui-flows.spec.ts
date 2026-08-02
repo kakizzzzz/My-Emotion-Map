@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 const TEST_USER_ID = '00000000-0000-4000-8000-000000000001';
-const STORAGE_KEY = `my-emotion-map.workspace.user.${TEST_USER_ID}.v4`;
+const STORAGE_KEY = `my-emotion-map.workspace.user.${TEST_USER_ID}.v5`;
 const SUPABASE_AUTH_STORAGE_KEY = 'sb-uifgpmmlvmfrauzbbrem-auth-token';
 
 async function seedAuthenticatedSession(
@@ -85,10 +85,11 @@ async function enterDemo(page: Page) {
 
 async function expandMapTools(page: Page) {
   const toggle = page.getByRole('button', { name: '展开工具' });
-  if (await toggle.isVisible()) {
-    await toggle.click();
-    await page.waitForTimeout(350);
-  }
+  const collapse = page.getByRole('button', { name: '收起工具' });
+  if (await collapse.isVisible()) return;
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(collapse).toBeVisible();
 }
 
 async function dragNewStarToMap(page: Page) {
@@ -98,10 +99,26 @@ async function dragNewStarToMap(page: Page) {
   });
   const box = await star.boundingBox();
   if (!box) throw new Error('Star tool is not visible');
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(180, 360, { steps: 10 });
-  await page.mouse.up();
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await star.dispatchEvent('pointerdown', {
+    pointerId: 1,
+    pointerType: 'mouse',
+    isPrimary: true,
+    button: 0,
+    buttons: 1,
+    clientX: start.x,
+    clientY: start.y,
+  });
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      pointerId: 1, pointerType: 'mouse', isPrimary: true,
+      buttons: 1, clientX: x, clientY: y,
+    }));
+    window.dispatchEvent(new PointerEvent('pointerup', {
+      pointerId: 1, pointerType: 'mouse', isPrimary: true,
+      button: 0, clientX: x, clientY: y,
+    }));
+  }, { x: 180, y: 360 });
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toBeVisible();
 }
 
@@ -263,11 +280,13 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
 
   await menu.click();
   const navigation = page.getByRole('dialog', { name: '页面导航' });
-  const chatDisclosure = navigation
-    .locator('.side-nav__item')
-    .filter({ hasText: '交流回访' });
+  const chatDisclosure = navigation.getByRole('button', {
+    name: '展开交流回访历史',
+  });
   await chatDisclosure.click();
-  await expect(chatDisclosure).toHaveAttribute('aria-expanded', 'true');
+  await expect(navigation.getByRole('button', {
+    name: '收起交流回访历史',
+  })).toHaveAttribute('aria-expanded', 'true');
   await expect(navigation.locator('#side-chat-history')).toBeVisible();
   await navigation.getByRole('button', { name: '新建对话' }).click();
   await expect(page.locator('.chat-screen')).toBeVisible();
@@ -275,7 +294,8 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   await expect(page.locator('.composer-row > *')).toHaveCount(2);
   await page.getByRole('button', { name: '返回地图并打开导航' }).click();
   await expect(page.locator('.map-screen')).toBeVisible();
-  await expect(page.getByRole('dialog', { name: '页面导航' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await openCalendar(page);
   await page.waitForTimeout(350);
@@ -424,9 +444,9 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
 
   await page.getByRole('button', { name: '打开页面导航' }).click();
   const navigation = page.getByRole('dialog', { name: '页面导航' });
-  const chatDisclosure = navigation
-    .locator('.side-nav__item')
-    .filter({ hasText: '交流回访' });
+  const chatDisclosure = navigation.getByRole('button', {
+    name: '展开交流回访历史',
+  });
   await chatDisclosure.click();
   await expect(navigation.locator('#side-chat-history')).toBeVisible();
   await navigation
@@ -438,7 +458,8 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
   await expect(followUpOptions).toHaveCount(5);
   await expect(followUpOptions).toHaveText(['轻了', '更强', '变了', '一样', '跳过']);
   await page.getByRole('button', { name: '轻了' }).click();
-  await expect(page.locator('.positive-confetti > i')).toHaveCount(20);
+  await expect(page.locator('.positive-confetti')).toHaveCount(0);
+  await expect(page.getByText('已保存这次回访')).toBeVisible();
   await expect(page.locator('.message-options')).toHaveCount(0);
   await page.getByRole('button', { name: '记录现在的感受' }).click();
   await expect(
@@ -477,6 +498,17 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await startBlank(page);
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  await page.getByRole('button', { name: '交流回访', exact: true }).click();
+  const composer = page.locator('.chat-composer');
+  const textareaBox = await composer.getByRole('textbox').boundingBox();
+  const sendBox = await composer.getByRole('button', { name: '发送' }).boundingBox();
+  expect(textareaBox?.width).toBeGreaterThanOrEqual(220);
+  expect(sendBox).toMatchObject({ width: 44, height: 44 });
+  await page.getByRole('button', { name: '返回地图并打开导航' }).click();
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toHaveCount(0);
   await dragNewStarToMap(page);
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toBeVisible();
   await page

@@ -7,6 +7,9 @@ export const DEVICE_PREFERENCES_STORAGE_KEY =
 export const MAX_SERIALIZED_WORKSPACE_BYTES = 3_500_000;
 
 export const userWorkspaceStorageKey = (userId: string) =>
+  `my-emotion-map.workspace.user.${userId}.v5`;
+
+export const legacyUserWorkspaceStorageKey = (userId: string) =>
   `my-emotion-map.workspace.user.${userId}.v4`;
 
 export const userPreferencesStorageKey = (userId: string) =>

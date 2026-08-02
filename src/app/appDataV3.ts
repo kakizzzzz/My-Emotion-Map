@@ -44,6 +44,9 @@ export const sanitizeStarInboxItem = (
     return null;
   }
   const hasLocation = isCoordinate(source.latitude, source.longitude);
+  const threshold = asObject(source.thresholdSnapshot);
+  const restingMin = Number(threshold?.restingMin);
+  const restingMax = Number(threshold?.restingMax);
   return {
     id: asString(source.id, 200),
     source: 'heart-rate',
@@ -74,6 +77,23 @@ export const sanitizeStarInboxItem = (
           .map((sample) => ({ bpm: Math.round(sample.bpm as number), at: sample.at as string }))
       : undefined,
     lowSignalConfidence: source.lowSignalConfidence === true ? true : undefined,
+    decisionReason:
+      source.decisionReason === 'outside_resting_range' ||
+      source.decisionReason === 'low_signal_review' ||
+      source.decisionReason === 'non_resting_review' ||
+      source.decisionReason === 'test_event'
+        ? source.decisionReason
+        : 'legacy_review',
+    thresholdSnapshot:
+      Number.isFinite(restingMin) && Number.isFinite(restingMax) &&
+      restingMin >= 35 && restingMax <= 220 && restingMax > restingMin
+        ? { restingMin: Math.round(restingMin), restingMax: Math.round(restingMax) }
+        : undefined,
+    algorithmVersion: asString(source.algorithmVersion, 80) || 'legacy-v4',
+    signalLevel:
+      source.signalLevel === 'low' || source.lowSignalConfidence === true
+        ? 'low'
+        : 'standard',
     latitude: hasLocation ? source.latitude as number : undefined,
     longitude: hasLocation ? source.longitude as number : undefined,
     locationCapturedAt: isTimestamp(source.locationCapturedAt)
@@ -82,6 +102,12 @@ export const sanitizeStarInboxItem = (
       typeof source.locationAccuracyMeters === 'number' &&
       Number.isFinite(source.locationAccuracyMeters) && source.locationAccuracyMeters >= 0
         ? source.locationAccuracyMeters : undefined,
+    locationTimeRelation:
+      source.locationTimeRelation === 'event' ||
+      source.locationTimeRelation === 'confirmation' ||
+      source.locationTimeRelation === 'manual'
+        ? source.locationTimeRelation
+        : undefined,
     linkedMomentId: asString(source.linkedMomentId, 200) || undefined,
     status: status as StarInboxItem['status'],
     seenAt: isTimestamp(source.seenAt) ? source.seenAt : undefined,
@@ -139,18 +165,24 @@ export const DEMO_INBOX_ITEMS: StarInboxItem[] = [
     id: 'inbox-library', sourceEventId: 'demo-library',
     eventAt: '2026-08-01T18:42:00+09:00', receivedAt: '2026-08-01T18:43:00+09:00',
     heartRate: 126, latitude: 37.5591, longitude: 127.0008,
-    status: 'pending', source: 'heart-rate',
+    status: 'pending', source: 'heart-rate', decisionReason: 'legacy_review',
+    thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+    algorithmVersion: 'demo-v1', signalLevel: 'standard',
   },
   {
     id: 'inbox-cafeteria', sourceEventId: 'demo-cafeteria',
     eventAt: '2026-08-01T14:16:00+09:00', receivedAt: '2026-08-01T14:17:00+09:00',
     heartRate: 121, latitude: 37.5587, longitude: 127.0012,
-    status: 'pending', source: 'heart-rate',
+    status: 'pending', source: 'heart-rate', decisionReason: 'legacy_review',
+    thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+    algorithmVersion: 'demo-v1', signalLevel: 'standard',
   },
   {
     id: 'inbox-studio', sourceEventId: 'demo-studio',
     eventAt: '2026-07-31T21:08:00+09:00', receivedAt: '2026-07-31T21:09:00+09:00',
     heartRate: 52, latitude: 37.5582, longitude: 126.9994,
-    status: 'pending', source: 'heart-rate',
+    status: 'pending', source: 'heart-rate', decisionReason: 'legacy_review',
+    thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+    algorithmVersion: 'demo-v1', signalLevel: 'standard',
   },
 ];

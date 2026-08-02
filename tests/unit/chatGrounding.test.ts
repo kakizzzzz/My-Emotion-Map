@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseGeneratedDraft,
+  retrieveAuthorizedEvidence,
   selectAuthorizedEvidence,
   validateGeneratedDraft,
 } from '../../supabase/functions/_shared/chatGrounding';
@@ -25,6 +26,28 @@ describe('grounded chat boundary', () => {
     const evidence = selectAuthorizedEvidence(snapshot, '图书馆', []);
     expect(evidence).toHaveLength(1);
     expect(evidence[0]).toMatchObject({ key: 'E1', noteId: 'n1', emotion: null });
+  });
+
+  it('restricts a confirmed clarification to the selected server-owned record', () => {
+    const multiSnapshot = {
+      ...snapshot,
+      moments: [
+        ...snapshot.moments,
+        { id: 'm4', noteId: 'n4', isNew: false, isInboxDraft: false },
+      ],
+      notes: [
+        ...snapshot.notes,
+        { id: 'n4', title: '图书馆入口', place: '图书馆', date: '2026-08-02',
+          time: '14:00', emotion: null, excerpt: '经过入口', answers: [], isDraft: false },
+      ],
+    };
+    const retrieval = retrieveAuthorizedEvidence(
+      multiSnapshot,
+      '图书馆',
+      ['n4'],
+      true,
+    );
+    expect(retrieval.evidence.map((item) => item.noteId)).toEqual(['n4']);
   });
 
   it('rejects unknown-to-emotion inference and causal language', () => {

@@ -13,36 +13,127 @@ import {
 import { claimAiQuota } from '../_shared/rateLimit.ts';
 import { SiliconFlowFailure, requestSiliconFlowJson } from '../_shared/siliconflow.ts';
 import { corsHeaders, authenticate, preflight, requireAllowedOrigin } from '../_shared/security.ts';
-import { jsonResponse, readJsonBody, runtime } from '../_shared/runtime.ts';
+import { env, jsonResponse, readJsonBody, runtime } from '../_shared/runtime.ts';
+import {
+  digestContinuationCandidate,
+  issueContinuationToken,
+  verifyContinuationToken,
+} from '../_shared/continuationToken.ts';
+import { validateEmotionChatRequest } from '../_shared/emotionChatRequest.ts';
 
 const asObject = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
 
-const validateRequest = (value: unknown) => {
-  const body = asObject(value);
-  if (!body) return null;
-  const allowed = new Set(['message', 'language', 'conversationId', 'selectedNoteIds', 'clientRevision', 'responseStyle']);
-  if (Object.keys(body).some((key) => !allowed.has(key))) return null;
-  const message = typeof body.message === 'string' ? body.message.trim() : '';
-  if (body.language !== 'zh' && body.language !== 'en' && body.language !== 'ko') return null;
-  const language: ChatLanguage = body.language;
-  const conversationId = typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
-  if (body.selectedNoteIds !== undefined && (!Array.isArray(body.selectedNoteIds) || body.selectedNoteIds.length > 6 ||
-    body.selectedNoteIds.some((item) => typeof item !== 'string' || !item || item.length > 200))) return null;
-  const selectedNoteIds = Array.isArray(body.selectedNoteIds) ? [...new Set(body.selectedNoteIds)] : [];
-  const responseStyle = Array.isArray(body.responseStyle)
-    ? [...new Set(body.responseStyle.filter((item): item is string =>
-        item === 'concise' || item === 'direct' || item === 'gentle',
-      ))].slice(0, 3)
-    : [];
-  if (body.responseStyle !== undefined && !Array.isArray(body.responseStyle)) return null;
-  const clientRevision = typeof body.clientRevision === 'number' && Number.isSafeInteger(body.clientRevision) && body.clientRevision >= 0
-    ? body.clientRevision
-    : null;
-  if (!message || message.length > 1_200 || !conversationId || conversationId.length > 200 || clientRevision === null) return null;
-  return { message, language, conversationId, selectedNoteIds, clientRevision, responseStyle };
+type RequestClaim =
+  | { status: 'claimed' }
+  | { status: 'in_progress' }
+  | { status: 'completed'; response: unknown }
+  | { status: 'unavailable' };
+
+const callRequestRpc = async (
+  session: NonNullable<Awaited<ReturnType<typeof authenticate>>>,
+  name: string,
+  body: Record<string, unknown>,
+) => fetch(`${session.supabaseUrl}/rest/v1/rpc/${name}`, {
+  method: 'POST',
+  headers: {
+    authorization: session.authorization,
+    apikey: session.anonKey,
+    'content-type': 'application/json',
+  },
+  body: JSON.stringify(body),
+  signal: AbortSignal.timeout(8_000),
+});
+
+const claimChatRequest = async (
+  session: NonNullable<Awaited<ReturnType<typeof authenticate>>>,
+  requestId: string,
+): Promise<RequestClaim> => {
+  try {
+    const response = await callRequestRpc(
+      session,
+      'claim_emotion_chat_request',
+      { p_request_id: requestId },
+    );
+    if (!response.ok) return { status: 'unavailable' };
+    const payload = asObject(await response.json());
+    if (payload?.status === 'completed') {
+      return { status: 'completed', response: payload.response };
+    }
+    if (payload?.status === 'claimed' || payload?.status === 'in_progress') {
+      return { status: payload.status };
+    }
+    return { status: 'unavailable' };
+  } catch {
+    return { status: 'unavailable' };
+  }
+};
+
+const completeChatRequest = async (
+  session: NonNullable<Awaited<ReturnType<typeof authenticate>>>,
+  requestId: string,
+  response: Record<string, unknown>,
+) => {
+  try {
+    const result = await callRequestRpc(
+      session,
+      'complete_emotion_chat_request',
+      { p_request_id: requestId, p_response: response },
+    );
+    return result.ok && await result.json() === true;
+  } catch {
+    return false;
+  }
+};
+
+const releaseChatRequest = async (
+  session: NonNullable<Awaited<ReturnType<typeof authenticate>>>,
+  requestId: string,
+) => {
+  try {
+    await callRequestRpc(session, 'release_emotion_chat_request', {
+      p_request_id: requestId,
+    });
+  } catch {
+    // A short expiry lets the same request recover even if release is unavailable.
+  }
+};
+
+const createClarificationOptions = async ({
+  evidence,
+  userId,
+  revision,
+  query,
+}: {
+  evidence: AuthorizedEvidence[];
+  userId: string;
+  revision: number;
+  query: string;
+}) => {
+  const candidates = evidence.slice(0, 3);
+  const candidateDigests = await Promise.all(
+    candidates.map((item) => digestContinuationCandidate(item.noteId)),
+  );
+  return Promise.all(candidates.map(async (item, index) => {
+    const optionId = `candidate-${index + 1}`;
+    return {
+      optionId,
+      label: [item.title, item.place, item.date]
+        .filter(Boolean).join(' · ').slice(0, 100),
+      continuationToken: await issueContinuationToken({
+        version: 1,
+        userId,
+        revision,
+        query,
+        optionId,
+        candidateDigests,
+        selectedDigest: candidateDigests[index],
+        expiresAt: Date.now() + 10 * 60_000,
+      }, env('SUPABASE_SERVICE_ROLE_KEY')),
+    };
+  }));
 };
 
 const modelEvidence = (evidence: AuthorizedEvidence[]) => evidence.map((item) => ({
@@ -108,9 +199,24 @@ runtime.serve(async (request) => {
   if (request.method !== 'POST') return jsonResponse({ status: 'unavailable', code: 'method_not_allowed' }, 405, headers);
   const session = await authenticate(request);
   if (!session) return jsonResponse({ status: 'unavailable', code: 'unauthorized' }, 401, headers);
+  let claimedRequestId: string | null = null;
   try {
-    const body = validateRequest(await readJsonBody(request, 12_000));
+    const body = validateEmotionChatRequest(await readJsonBody(request, 12_000));
     if (!body) return jsonResponse({ status: 'unavailable', code: 'invalid_request' }, 400, headers);
+    const claim = await claimChatRequest(session, body.requestId);
+    if (claim.status === 'completed') {
+      const cached = asObject(claim.response);
+      return cached
+        ? jsonResponse(cached, 200, headers)
+        : jsonResponse({ status: 'unavailable', code: 'idempotency_invalid' }, 503, headers);
+    }
+    if (claim.status === 'in_progress') {
+      return jsonResponse({ status: 'retryable', code: 'request_in_progress' }, 409, headers);
+    }
+    if (claim.status !== 'claimed') {
+      return jsonResponse({ status: 'unavailable', code: 'idempotency_unavailable' }, 503, headers);
+    }
+    claimedRequestId = body.requestId;
     const stateResponse = await fetch(
       `${session.supabaseUrl}/rest/v1/app_states?select=payload,revision&user_id=eq.${encodeURIComponent(session.userId)}&limit=1`,
       {
@@ -118,15 +224,55 @@ runtime.serve(async (request) => {
         signal: AbortSignal.timeout(8_000),
       },
     );
-    if (!stateResponse.ok) return jsonResponse({ status: 'unavailable', code: 'state_unavailable' }, 503, headers);
+    if (!stateResponse.ok) {
+      await releaseChatRequest(session, body.requestId);
+      return jsonResponse({ status: 'unavailable', code: 'state_unavailable' }, 503, headers);
+    }
     const rows = await stateResponse.json() as Array<{ payload?: unknown; revision?: unknown }>;
     const row = rows[0];
-    if (!row || typeof row.revision !== 'number') return jsonResponse({ status: 'sync_required', answer: '', evidence: [], confidence: 'low', limitations: ['sync_required'] }, 409, headers);
-    if (row.revision !== body.clientRevision) return jsonResponse({ status: 'sync_required', answer: '', evidence: [], confidence: 'low', limitations: ['sync_required'] }, 409, headers);
+    if (!row || typeof row.revision !== 'number' || row.revision !== body.clientRevision) {
+      await releaseChatRequest(session, body.requestId);
+      return jsonResponse({ status: 'sync_required', answer: '', evidence: [], confidence: 'low', limitations: ['sync_required'] }, 409, headers);
+    }
+    let retrievalMessage = body.message;
+    let retrievalSelectedNoteIds = body.selectedNoteIds;
+    if (body.referenceConfirmation) {
+      const continuation = await verifyContinuationToken(
+        body.referenceConfirmation.continuationToken,
+        env('SUPABASE_SERVICE_ROLE_KEY'),
+        {
+          userId: session.userId,
+          revision: row.revision,
+          optionId: body.referenceConfirmation.optionId,
+        },
+      );
+      if (!continuation) {
+        await releaseChatRequest(session, body.requestId);
+        return jsonResponse({ status: 'unavailable', code: 'invalid_reference_confirmation' }, 400, headers);
+      }
+      const candidates = retrieveAuthorizedEvidence(
+        row.payload,
+        continuation.query,
+        [],
+      ).evidence.slice(0, 3);
+      const currentDigests = await Promise.all(
+        candidates.map((item) => digestContinuationCandidate(item.noteId)),
+      );
+      const candidatesUnchanged = currentDigests.length === continuation.candidateDigests.length &&
+        currentDigests.every((digest, index) => digest === continuation.candidateDigests[index]);
+      const selectedIndex = currentDigests.indexOf(continuation.selectedDigest);
+      if (!candidatesUnchanged || selectedIndex < 0 || !candidates[selectedIndex]) {
+        await releaseChatRequest(session, body.requestId);
+        return jsonResponse({ status: 'unavailable', code: 'stale_reference_confirmation' }, 409, headers);
+      }
+      retrievalMessage = continuation.query;
+      retrievalSelectedNoteIds = [candidates[selectedIndex].noteId];
+    }
     const retrieval = retrieveAuthorizedEvidence(
       row.payload,
-      body.message,
-      body.selectedNoteIds,
+      retrievalMessage,
+      retrievalSelectedNoteIds,
+      Boolean(body.referenceConfirmation),
     );
     if (retrieval.retrievalStatus !== 'supported') {
       const answer = retrieval.retrievalStatus === 'ambiguous'
@@ -134,7 +280,9 @@ runtime.serve(async (request) => {
         : retrieval.retrievalStatus === 'not_found'
           ? notFoundAnswer(body.language)
           : insufficientAnswer(body.language);
-      return jsonResponse({
+      const responsePayload = {
+        requestId: body.requestId,
+        serverRevision: row.revision,
         intent: retrieval.intent,
         retrievalStatus: retrieval.retrievalStatus,
         status: retrieval.retrievalStatus,
@@ -142,12 +290,25 @@ runtime.serve(async (request) => {
         evidence: [],
         confidence: 'none',
         limitations: [retrieval.retrievalStatus],
-        clarificationOptions: retrieval.clarificationOptions,
-      }, 200, headers);
+        clarificationOptions: retrieval.retrievalStatus === 'ambiguous'
+          ? await createClarificationOptions({
+              evidence: retrieval.evidence,
+              userId: session.userId,
+              revision: row.revision,
+              query: retrievalMessage,
+            })
+          : [],
+      };
+      if (!await completeChatRequest(session, body.requestId, responsePayload)) {
+        await releaseChatRequest(session, body.requestId);
+        return jsonResponse({ status: 'retryable', code: 'idempotency_completion_failed' }, 503, headers);
+      }
+      return jsonResponse(responsePayload, 200, headers);
     }
     const evidence = retrieval.evidence;
     const quota = await claimAiQuota(session, 'emotion-chat');
     if (quota !== 'allowed') {
+      await releaseChatRequest(session, body.requestId);
       return jsonResponse({ status: quota === 'limited' ? 'retryable' : 'unavailable', code: quota === 'limited' ? 'rate_limited' : 'quota_unavailable' }, quota === 'limited' ? 429 : 503, headers);
     }
 
@@ -160,7 +321,7 @@ runtime.serve(async (request) => {
       let raw: unknown;
       try {
         raw = await generate({
-          message: body.message,
+          message: retrievalMessage,
           language: body.language,
           evidence,
           intent: retrieval.intent,
@@ -189,7 +350,9 @@ runtime.serve(async (request) => {
     }
 
     if (!validation || !validation.validClaims.length) {
-      return jsonResponse({
+      const responsePayload = {
+        requestId: body.requestId,
+        serverRevision: row.revision,
         intent: retrieval.intent,
         retrievalStatus: 'supported',
         status: 'supported',
@@ -197,7 +360,13 @@ runtime.serve(async (request) => {
         evidence: evidence.map(({ noteId, title, date, place, matchReason }) => ({ noteId, title, date, place, matchReason })),
         confidence: 'none',
         limitations: ['generation_rejected'],
-      }, 200, headers);
+        clarificationOptions: [],
+      };
+      if (!await completeChatRequest(session, body.requestId, responsePayload)) {
+        await releaseChatRequest(session, body.requestId);
+        return jsonResponse({ status: 'retryable', code: 'idempotency_completion_failed' }, 503, headers);
+      }
+      return jsonResponse(responsePayload, 200, headers);
     }
     const usedKeys = new Set(validation.validClaims.flatMap((claim) => claim.evidenceKeys));
     const publicEvidence = evidence
@@ -212,7 +381,9 @@ runtime.serve(async (request) => {
       ? (retrieval.allowedFacts.stableRepeatedEligible ? 'high' : 'medium')
       : exactSingle || allExplicitlySelected ? 'high'
           : publicEvidence.length === 1 ? 'low' : 'medium';
-    return jsonResponse({
+    const responsePayload = {
+      requestId: body.requestId,
+      serverRevision: row.revision,
       intent: retrieval.intent,
       retrievalStatus: 'supported',
       status: 'supported',
@@ -220,8 +391,15 @@ runtime.serve(async (request) => {
       evidence: publicEvidence,
       confidence,
       limitations: validation.validLimitations,
-    }, 200, headers);
+      clarificationOptions: [],
+    };
+    if (!await completeChatRequest(session, body.requestId, responsePayload)) {
+      await releaseChatRequest(session, body.requestId);
+      return jsonResponse({ status: 'retryable', code: 'idempotency_completion_failed' }, 503, headers);
+    }
+    return jsonResponse(responsePayload, 200, headers);
   } catch (error) {
+    if (claimedRequestId) await releaseChatRequest(session, claimedRequestId);
     const code = error instanceof SiliconFlowFailure ? error.code
       : error instanceof Error && error.message === 'request_too_large' ? 'request_too_large'
         : 'request_failed';

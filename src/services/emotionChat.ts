@@ -1,4 +1,5 @@
 import type { AppLanguage } from '../i18n';
+import type { ClarificationOption } from '../types';
 import type { CloudAuth } from './supabaseClient';
 
 export type PublicEvidence = {
@@ -10,6 +11,8 @@ export type PublicEvidence = {
 };
 
 export type EmotionChatResult = {
+  requestId?: string;
+  serverRevision?: number;
   intent: 'lookup' | 'comparison' | 'pattern' | 'reflection' | 'unsupported';
   retrievalStatus: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'unavailable';
   status: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'unavailable';
@@ -17,14 +20,20 @@ export type EmotionChatResult = {
   evidence: PublicEvidence[];
   confidence: 'none' | 'low' | 'medium' | 'high';
   limitations: string[];
-  clarificationOptions?: string[];
+  clarificationOptions?: ClarificationOption[];
 };
 
-const validateResult = (value: unknown): EmotionChatResult | null => {
+const validateResult = (
+  value: unknown,
+  expectedRequestId?: string,
+  expectedRevision?: number,
+): EmotionChatResult | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
   const statuses = new Set(['supported', 'ambiguous', 'not_found', 'evidence_insufficient', 'unavailable']);
   const intents = new Set(['lookup', 'comparison', 'pattern', 'reflection', 'unsupported']);
+  if (expectedRequestId && source.requestId !== expectedRequestId) return null;
+  if (expectedRevision !== undefined && source.serverRevision !== expectedRevision) return null;
   if (!statuses.has(String(source.status)) || !statuses.has(String(source.retrievalStatus)) || !intents.has(String(source.intent))) return null;
   if (typeof source.answer !== 'string' || source.answer.length > 4_000 || !Array.isArray(source.evidence) || !Array.isArray(source.limitations)) return null;
   const evidence: PublicEvidence[] = [];
@@ -42,6 +51,10 @@ const validateResult = (value: unknown): EmotionChatResult | null => {
   }
   const confidence = source.confidence === 'high' || source.confidence === 'medium' || source.confidence === 'low' ? source.confidence : 'none';
   return {
+    requestId: typeof source.requestId === 'string' ? source.requestId : undefined,
+    serverRevision: typeof source.serverRevision === 'number'
+      ? source.serverRevision
+      : undefined,
     intent: source.intent as EmotionChatResult['intent'],
     retrievalStatus: source.retrievalStatus as EmotionChatResult['retrievalStatus'],
     status: source.status as EmotionChatResult['status'],
@@ -50,31 +63,48 @@ const validateResult = (value: unknown): EmotionChatResult | null => {
     confidence,
     limitations: source.limitations.filter((item): item is string => typeof item === 'string').map((item) => item.slice(0, 300)).slice(0, 5),
     clarificationOptions: Array.isArray(source.clarificationOptions)
-      ? source.clarificationOptions
-          .filter((item): item is string => typeof item === 'string')
-          .map((item) => item.slice(0, 100))
-          .slice(0, 3)
+      ? source.clarificationOptions.flatMap((raw) => {
+          if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+          const item = raw as Record<string, unknown>;
+          if (
+            typeof item.optionId !== 'string' ||
+            typeof item.label !== 'string' ||
+            typeof item.continuationToken !== 'string'
+          ) return [];
+          return [{
+            optionId: item.optionId.slice(0, 200),
+            label: item.label.slice(0, 100),
+            continuationToken: item.continuationToken.slice(0, 2_000),
+          }];
+        }).slice(0, 3)
       : undefined,
   };
 };
 
 export const requestEmotionChat = async ({
   auth,
+  requestId,
   message,
   language,
   conversationId,
   selectedNoteIds,
   responseStyle = [],
   clientRevision,
+  referenceConfirmation,
   signal,
 }: {
   auth: CloudAuth;
+  requestId: string;
   message: string;
   language: AppLanguage;
   conversationId: string;
   selectedNoteIds: string[];
   responseStyle?: Array<'concise' | 'direct' | 'gentle'>;
   clientRevision: number;
+  referenceConfirmation?: {
+    optionId: string;
+    continuationToken: string;
+  };
   signal: AbortSignal;
 }) => {
   const response = await fetch(`${auth.supabaseUrl}/functions/v1/emotion-chat`, {
@@ -85,16 +115,18 @@ export const requestEmotionChat = async ({
       'content-type': 'application/json',
     },
     body: JSON.stringify({
+      requestId,
       message,
       language,
       conversationId,
       selectedNoteIds: selectedNoteIds.slice(0, 6),
       responseStyle: responseStyle.slice(0, 3),
       clientRevision,
+      referenceConfirmation,
     }),
     signal,
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) return null;
-  return validateResult(payload);
+  return validateResult(payload, requestId, clientRevision);
 };
