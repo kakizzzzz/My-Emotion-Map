@@ -108,7 +108,7 @@ describe('core component flows', () => {
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
-    await user.click(screen.getByRole('button', { name: '点击保存' }));
+    await user.click(await screen.findByRole('button', { name: '点击保存' }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave.mock.calls[0][1]).toMatchObject({
