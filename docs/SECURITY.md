@@ -60,6 +60,10 @@ stored. Tokens expire, can be revoked, and never appear in browser persistence,
 README examples, fixtures, function logs or error responses. MCP read and
 proposal scopes are separate; proposals require in-app confirmation. Shortcut
 observations are owner-scoped pending inputs, not formal records or AI evidence.
+Proposal confirmation is recoverable and idempotent: the server claims an
+operation as `accepting`, the client journals the exact transition, and the
+server moves it to `applied` only after the resulting workspace revision is
+synced. Revision or target-fingerprint drift stops the operation.
 
 ## Required deployment verification
 

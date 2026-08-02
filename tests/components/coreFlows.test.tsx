@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_THEME } from '../../src/app/themePreferences';
@@ -65,6 +65,9 @@ const PhotoAssistHarness = () => {
         moment={{ ...draftMoment, source: 'photo' }}
         note={draftNote}
         onSave={() => undefined}
+        onSaveDraft={() => undefined}
+        onDeleteDraft={() => undefined}
+        onClose={() => undefined}
         onToast={() => undefined}
         photoAssistDelivery={delivery}
       />
@@ -85,6 +88,9 @@ describe('core component flows', () => {
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
+        onSaveDraft={() => undefined}
+        onDeleteDraft={() => undefined}
+        onClose={() => undefined}
         onToast={() => undefined}
       />,
     );
@@ -116,14 +122,18 @@ describe('core component flows', () => {
     expect(onSave.mock.calls[0][3]).toBe('safe');
   });
 
-  it('saves partial changes when an existing record is closed', async () => {
+  it('discards dirty edits to an existing record without saving', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
+    const onClose = vi.fn();
     renderWithLanguage(
       <NoteEditorSheet
         moment={{ ...draftMoment, isNew: false, emotion: 'mixed', placeRating: 'neutral' }}
         note={{ ...draftNote, isDraft: false, emotion: 'mixed', placeRating: 'neutral' }}
         onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={vi.fn()}
+        onClose={onClose}
         onToast={() => undefined}
       />,
     );
@@ -133,40 +143,122 @@ describe('core component flows', () => {
       '未保存',
     );
     await user.click(
-      screen.getByRole('button', { name: '关闭并保存为正式记录' }),
+      screen.getByRole('button', { name: '关闭' }),
     );
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave.mock.calls[0][1]).toMatchObject({
-      title: '未保存',
-      emotion: 'mixed',
-      placeRating: 'neutral',
-    });
+    await user.click(screen.getByRole('button', { name: '放弃修改' }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('finalizes a new record with unknown values when it is closed', async () => {
+  it('deletes an untouched new draft instead of finalizing it', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
+    const onDeleteDraft = vi.fn();
     renderWithLanguage(
       <NoteEditorSheet
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={onDeleteDraft}
+        onClose={vi.fn()}
         onToast={() => undefined}
       />,
     );
 
     await user.click(
-      screen.getByRole('button', { name: '关闭并保存为正式记录' }),
+      screen.getByRole('button', { name: '关闭' }),
+    );
+    await user.click(screen.getByRole('button', { name: '删除草稿' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onDeleteDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a new record as a draft only when explicitly selected', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const onSaveDraft = vi.fn();
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={draftMoment}
+        note={draftNote}
+        onSave={onSave}
+        onSaveDraft={onSaveDraft}
+        onDeleteDraft={vi.fn()}
+        onClose={vi.fn()}
+        onToast={() => undefined}
+      />,
     );
 
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave.mock.calls[0][1]).toMatchObject({
-      emotion: null,
-      placeRating: null,
-      isDraft: false,
+    await user.type(
+      screen.getByRole('textbox', { name: '给这一刻起个名字' }),
+      '还没写完',
+    );
+    await user.click(screen.getByRole('button', { name: '关闭' }));
+    await user.click(screen.getByRole('button', { name: '保留草稿' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onSaveDraft).toHaveBeenCalledTimes(1);
+    expect(onSaveDraft.mock.calls[0][1]).toMatchObject({
+      title: '还没写完',
+      isDraft: true,
     });
-    expect(onSave.mock.calls[0][2]).toBeNull();
-    expect(onSave.mock.calls[0][3]).toBeNull();
+  });
+
+  it('saves dirty existing edits exactly once when explicitly selected', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={{ ...draftMoment, isNew: false }}
+        note={{ ...draftNote, isDraft: false }}
+        onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={vi.fn()}
+        onClose={vi.fn()}
+        onToast={() => undefined}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole('textbox', { name: '给这一刻起个名字' }),
+      '保存这次',
+    );
+    await user.click(screen.getByRole('button', { name: '关闭' }));
+    await user.click(screen.getByRole('button', { name: '保存修改' }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes Escape and the editor backdrop through the same exit choices', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={{ ...draftMoment, isNew: false }}
+        note={{ ...draftNote, isDraft: false }}
+        onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={vi.fn()}
+        onClose={vi.fn()}
+        onToast={() => undefined}
+      />,
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: '给这一刻起个名字' }),
+      '暂存中的修改',
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '继续编辑' }));
+
+    const backdrop = document.querySelector('.note-editor-overlay');
+    expect(backdrop).not.toBeNull();
+    fireEvent.mouseDown(backdrop as Element);
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('does not let a late photo-assist result overwrite a user-edited title', async () => {
@@ -301,6 +393,7 @@ describe('core component flows', () => {
         notes={[]}
         conversations={[]}
         activeConversationId="thread-revisit"
+        workspaceKey="real:user-a"
         onAnswerFollowUp={onAnswer}
         cloudAuth={null}
         cloudRevision={null}
@@ -321,5 +414,49 @@ describe('core component flows', () => {
     expect(screen.getByRole('button', { name: '新的对话' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '返回地图并打开导航' })).toBeEnabled();
     expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('does not expose account A chat drafts to account B', async () => {
+    sessionStorage.clear();
+    const user = userEvent.setup();
+    const sharedProps = {
+      notes: [],
+      followUps: [],
+      conversations: [],
+      activeConversationId: 'thread-revisit',
+      onAnswerFollowUp: vi.fn(),
+      onRevisitEmotion: vi.fn(),
+      cloudAuth: {
+        supabaseUrl: 'https://example.supabase.co',
+        publishableKey: 'public-key',
+        accessToken: 'access-token',
+        userId: 'user-a',
+      },
+      cloudRevision: 7,
+      cloudStatus: 'synced' as const,
+      dataMode: 'real' as const,
+      onGroundedChat: vi.fn(),
+      onNewConversation: vi.fn(),
+      onExitToMap: vi.fn(),
+      onToast: vi.fn(),
+    };
+    renderWithLanguage(<ChatScreen {...sharedProps} workspaceKey="real:user-a" />);
+    await user.type(
+      screen.getByRole('textbox', { name: '输入消息…' }),
+      '只属于账号 A',
+    );
+    expect(sessionStorage.getItem(
+      'my-emotion-map.chat-draft.v2.real%3Auser-a.thread-revisit',
+    )).toBe('只属于账号 A');
+
+    cleanup();
+    renderWithLanguage(
+      <ChatScreen
+        {...sharedProps}
+        cloudAuth={{ ...sharedProps.cloudAuth, userId: 'user-b' }}
+        workspaceKey="real:user-b"
+      />,
+    );
+    expect(screen.getByRole('textbox', { name: '输入消息…' })).toHaveValue('');
   });
 });

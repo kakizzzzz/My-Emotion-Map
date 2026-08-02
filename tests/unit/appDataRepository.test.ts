@@ -10,6 +10,7 @@ import {
   isValidDate,
   loadAppData,
   migrateAppData,
+  parseImportedAppData,
   removeMomentAssociations,
   saveAppData,
 } from '../../src/app/appDataRepository';
@@ -93,6 +94,14 @@ function populatedSnapshot(): AppDataSnapshot {
   };
 }
 
+const migrateOk = (value: unknown) => {
+  const result = migrateAppData(value);
+  if (result.status !== 'ok') {
+    throw new Error(`Expected an upgradable snapshot, received ${result.status}`);
+  }
+  return result;
+};
+
 describe('app data repository', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -157,7 +166,7 @@ describe('app data repository', () => {
     const formalNote = { ...note, emotion: 'mixed', placeRating: 'neutral' };
     const formalMoment = { ...moment, emotion: 'mixed', placeRating: 'neutral' };
 
-    const migrated = migrateAppData({
+    const migrated = migrateOk({
       schemaVersion: 2,
       dataMode: 'real',
       moments: [hiddenMoment, formalMoment],
@@ -178,7 +187,7 @@ describe('app data repository', () => {
       placeRating: 'neutral',
     });
     expect(
-      migrateAppData(migrated.snapshot).snapshot,
+      migrateOk(migrated.snapshot).snapshot,
     ).toEqual(migrated.snapshot);
   });
 
@@ -192,6 +201,59 @@ describe('app data repository', () => {
     expect(loaded.moments).toEqual([]);
   });
 
+  it('hard-stops snapshots from a future schema without downgrading them', () => {
+    const future = {
+      ...populatedSnapshot(),
+      schemaVersion: CURRENT_SCHEMA_VERSION + 1,
+      futureOnlyField: { mustSurvive: true },
+    };
+    const original = JSON.stringify(future);
+
+    const migrated = migrateAppData(future) as unknown as {
+      status?: string;
+      sourceVersion?: number;
+      snapshot?: AppDataSnapshot;
+    };
+
+    expect(migrated).toMatchObject({
+      status: 'upgrade_required',
+      sourceVersion: CURRENT_SCHEMA_VERSION + 1,
+    });
+    expect(migrated).not.toHaveProperty('snapshot');
+    expect(JSON.stringify(future)).toBe(original);
+  });
+
+  it('rejects a future-schema import instead of returning a downgraded snapshot', () => {
+    const text = JSON.stringify({
+      ...populatedSnapshot(),
+      schemaVersion: CURRENT_SCHEMA_VERSION + 1,
+      futureOnlyField: 'preserve-in-original-file',
+    });
+
+    expect(parseImportedAppData(text)).toEqual({
+      ok: false,
+      issue: 'upgrade-required',
+      sourceVersion: CURRENT_SCHEMA_VERSION + 1,
+    });
+  });
+
+  it('keeps a future-schema local workspace untouched and blocks loading it', () => {
+    const key = userWorkspaceStorageKey('user-a');
+    const raw = JSON.stringify({
+      ...populatedSnapshot(),
+      schemaVersion: CURRENT_SCHEMA_VERSION + 1,
+      futureOnlyField: ['keep', 'every', 'value'],
+    });
+    window.localStorage.setItem(key, raw);
+
+    const loaded = loadAppData('user-a');
+
+    expect(loaded.loadIssue).toBe('upgrade-required');
+    expect(loaded.moments).toEqual([]);
+    expect(loaded.notes).toEqual([]);
+    expect(window.localStorage.getItem(key)).toBe(raw);
+  });
+
   it('validates calendar dates and coordinate bounds', () => {
     expect(isValidDate('2024-02-29')).toBe(true);
     expect(isValidDate('2025-02-29')).toBe(false);
@@ -203,7 +265,7 @@ describe('app data repository', () => {
 
   it('drops only invalid records instead of rejecting the whole import', () => {
     const invalidMoment = { ...moment, id: 'invalid', latitude: 120 };
-    const migrated = migrateAppData({
+    const migrated = migrateOk({
       ...populatedSnapshot(),
       moments: [moment, invalidMoment],
     });

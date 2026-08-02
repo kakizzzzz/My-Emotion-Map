@@ -264,10 +264,15 @@ export function useLocalDataController({
     async (file: File) => {
       const parsed = parseImportedAppData(await file.text());
       if (!parsed.ok) {
-        showToast(copy.feedback.dataImportFailed, {
-          placement: 'top',
-          durationMs: 4_000,
-        });
+        showToast(
+          parsed.issue === 'upgrade-required'
+            ? copy.feedback.dataUpgradeRequired
+            : copy.feedback.dataImportFailed,
+          {
+            placement: 'top',
+            durationMs: 4_000,
+          },
+        );
         return;
       }
       if (dataMode === 'real' && parsed.snapshot.dataMode === 'demo') {
@@ -299,7 +304,15 @@ export function useLocalDataController({
 
   const loadDemoMode = useCallback(() => {
     if (snapshot.dataMode === 'real') saveAppData(snapshot, userId);
-    applySnapshot(loadAppData(userId, 'demo'));
+    const demo = loadAppData(userId, 'demo');
+    if (demo.loadIssue === 'upgrade-required') {
+      showToast(copy.feedback.dataUpgradeRequired, {
+        placement: 'top',
+        durationMs: 8_000,
+      });
+      return false;
+    }
+    applySnapshot(demo);
     showToast(copy.feedback.demoLoaded);
     return true;
   }, [applySnapshot, copy.feedback, showToast, snapshot, userId]);

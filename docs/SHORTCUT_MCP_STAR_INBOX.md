@@ -62,3 +62,10 @@ coordinates by default. Output tools can only create an idempotent queued
 proposal; they cannot delete, overwrite or save a formal record. Every call is
 scope checked, owner checked, payload bounded and rate limited. Record bodies
 and raw tokens are not logged.
+
+Accepting a proposal uses an owner-scoped server claim. The browser stages the
+exact before/after snapshot in a per-user recovery journal before applying it,
+and repeated confirmation reuses the same operation ID. Append and follow-up
+proposals stop when their target fingerprint or creation revision is stale.
+The server records `applied` only after the matching local snapshot has
+successfully synced; local failures become `failed`, never `accepted`.

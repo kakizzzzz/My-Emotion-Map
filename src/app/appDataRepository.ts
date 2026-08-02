@@ -33,6 +33,11 @@ import {
   stableSerialize,
   workspaceStorageKey,
 } from './workspace/workspaceStorage';
+import {
+  chatWorkspaceKey,
+  clearChatDraftsForWorkspace,
+  clearLegacyChatDrafts,
+} from './workspace/chatDraftStorage';
 
 export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
 export const CURRENT_SCHEMA_VERSION = 4;
@@ -40,12 +45,19 @@ export const CURRENT_SCHEMA_VERSION = 4;
 export type AppDataLoadIssue =
   | 'storage-unavailable'
   | 'corrupt-json'
-  | 'invalid-import';
+  | 'invalid-import'
+  | 'upgrade-required';
 
 export type LoadedAppData = AppDataSnapshot & {
   loadIssue?: AppDataLoadIssue;
   migrationIssues?: string[];
+  upgradeRequiredVersion?: number;
 };
+
+export type AppDataMigrationResult =
+  | { status: 'ok'; snapshot: AppDataSnapshot; issues: string[] }
+  | { status: 'upgrade_required'; sourceVersion: number }
+  | { status: 'invalid'; issues: string[] };
 
 const EMOTIONS: ReadonlySet<EmotionKey> = new Set([
   'calm',
@@ -592,16 +604,16 @@ const inferLegacyDataMode = (
 
 export const migrateAppData = (
   value: unknown,
-): { snapshot: AppDataSnapshot; issues: string[] } => {
+): AppDataMigrationResult => {
   const issues: string[] = [];
   const source = asObject(value);
   if (!source) {
-    return { snapshot: createEmptyAppData(), issues: ['root-invalid'] };
+    return { status: 'invalid', issues: ['root-invalid'] };
   }
   const sourceVersion =
     typeof source.schemaVersion === 'number' ? source.schemaVersion : 1;
   if (sourceVersion > CURRENT_SCHEMA_VERSION) {
-    issues.push('schema-newer-than-client');
+    return { status: 'upgrade_required', sourceVersion };
   }
   const rawMoments = Array.isArray(source.moments)
     ? source.moments
@@ -741,6 +753,7 @@ export const migrateAppData = (
     ? source.themePalette
     : DEFAULT_THEME;
   return {
+    status: 'ok',
     snapshot: {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       dataMode,
@@ -805,7 +818,21 @@ export const loadAppData = (
     const stored = window.localStorage.getItem(key);
     if (!stored) return mode === 'demo' ? createDemoAppData() : createEmptyAppData();
     try {
-      const { snapshot, issues } = migrateAppData(JSON.parse(stored));
+      const migrated = migrateAppData(JSON.parse(stored));
+      if (migrated.status === 'upgrade_required') {
+        return {
+          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          loadIssue: 'upgrade-required',
+          upgradeRequiredVersion: migrated.sourceVersion,
+        };
+      }
+      if (migrated.status === 'invalid') {
+        return {
+          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          loadIssue: 'corrupt-json',
+        };
+      }
+      const { snapshot, issues } = migrated;
       if (snapshot.dataMode !== mode) {
         return {
           ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
@@ -845,12 +872,26 @@ export const parseImportedAppData = (
   text: string,
 ):
   | { ok: true; snapshot: AppDataSnapshot; issues: string[] }
-  | { ok: false; issue: AppDataLoadIssue } => {
+  | {
+      ok: false;
+      issue: AppDataLoadIssue;
+      sourceVersion?: number;
+    } => {
   try {
     const parsed = JSON.parse(text);
     if (!asObject(parsed)) return { ok: false, issue: 'invalid-import' };
     const migrated = migrateAppData(parsed);
-    return { ok: true, ...migrated };
+    if (migrated.status === 'upgrade_required') {
+      return {
+        ok: false,
+        issue: 'upgrade-required',
+        sourceVersion: migrated.sourceVersion,
+      };
+    }
+    if (migrated.status === 'invalid') {
+      return { ok: false, issue: 'invalid-import' };
+    }
+    return { ok: true, snapshot: migrated.snapshot, issues: migrated.issues };
   } catch {
     return { ok: false, issue: 'corrupt-json' };
   }
@@ -875,7 +916,9 @@ export const clearAllLocalData = (userId: string | null, mode: DataMode) => {
     keys.forEach((key) => {
       if (key) window.localStorage.removeItem(key);
     });
-    return true;
+    return clearLegacyChatDrafts() && clearChatDraftsForWorkspace(
+      chatWorkspaceKey(userId, mode),
+    );
   } catch {
     return false;
   }

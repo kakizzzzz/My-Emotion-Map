@@ -43,6 +43,19 @@ const asObject = (value: unknown): Record<string, unknown> | null =>
 const text = (value: unknown, max: number) =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
 
+const stableSerialize = (value: unknown) => {
+  const normalize = (input: unknown): unknown => {
+    if (!input || typeof input !== 'object') return input;
+    if (Array.isArray(input)) return input.map(normalize);
+    return Object.fromEntries(
+      Object.entries(input as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, normalize(item)]),
+    );
+  };
+  return JSON.stringify(normalize(value));
+};
+
 const sha256 = async (value: string) => {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(digest)]
@@ -164,6 +177,35 @@ const queueProposal = async (
 ) => {
   const clientRequestId = text(input.clientRequestId, 120);
   if (!clientRequestId) return { error: 'invalid_request' };
+  const stateResponse = await fetch(
+    `${env('SUPABASE_URL')}/rest/v1/app_states?user_id=eq.${token.user_id}` +
+      '&select=revision,payload&limit=1',
+    { headers: serviceHeaders(), signal: AbortSignal.timeout(8_000) },
+  );
+  if (!stateResponse.ok) return { error: 'unavailable' };
+  const stateRows = await stateResponse.json() as Array<{
+    revision?: unknown;
+    payload?: unknown;
+  }>;
+  const createdAgainstRevision = stateRows.length
+    ? Number(stateRows[0]?.revision)
+    : 0;
+  if (!Number.isSafeInteger(createdAgainstRevision) || createdAgainstRevision < 0) {
+    return { error: 'unavailable' };
+  }
+  const targetNoteId = name === 'emotion_map.propose_create_draft'
+    ? ''
+    : text(input.noteId, 200);
+  let targetNoteFingerprint: string | null = null;
+  if (targetNoteId) {
+    const snapshot = asObject(stateRows[0]?.payload);
+    const notes = snapshot && Array.isArray(snapshot.notes) ? snapshot.notes : [];
+    const target = notes
+      .map(asObject)
+      .find((note) => note && note.isDraft !== true && text(note.id, 200) === targetNoteId);
+    if (!target) return { error: 'not_found' };
+    targetNoteFingerprint = await sha256(stableSerialize(target));
+  }
   const response = await fetch(`${env('SUPABASE_URL')}/rest/v1/mcp_proposals`, {
     method: 'POST',
     headers: { ...serviceHeaders(), prefer: 'return=representation,resolution=ignore-duplicates' },
@@ -173,6 +215,8 @@ const queueProposal = async (
       client_request_id: clientRequestId,
       tool_name: name,
       payload: input,
+      created_against_revision: createdAgainstRevision,
+      target_note_fingerprint: targetNoteFingerprint,
     }),
     signal: AbortSignal.timeout(8_000),
   });

@@ -403,12 +403,16 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await page
     .getByRole('textbox', { name: '给这一刻起个名字' })
     .fill('中途退出也保留');
-  await expect(
-    page.getByRole('button', { name: '关闭并保存为正式记录' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: '关闭并保存为正式记录' }).click();
+  await page.getByRole('button', { name: '关闭' }).click();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
+  await page.getByRole('button', { name: '保留草稿' }).click();
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(1);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const raw = window.localStorage.getItem(storageKey);
+    const data = raw ? JSON.parse(raw) : null;
+    return data?.notes?.[0]?.title ?? null;
+  }, STORAGE_KEY)).toBe('中途退出也保留');
   const stored = await page.evaluate((storageKey) => {
     const raw = window.localStorage.getItem(storageKey);
     return raw ? JSON.parse(raw) : null;
@@ -417,8 +421,9 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
     title: '中途退出也保留',
     emotion: null,
     placeRating: null,
-    isDraft: false,
+    isDraft: true,
   });
+  expect(stored.moments[0]).toMatchObject({ isNew: true });
 
   const animationDuration = await page.locator('.map-screen').evaluate(
     (element) => getComputedStyle(element).animationDuration,

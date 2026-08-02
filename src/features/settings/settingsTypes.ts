@@ -20,6 +20,9 @@ export type McpProposal = {
   toolName: string;
   payload: Record<string, unknown>;
   createdAt: string;
+  status: 'queued' | 'accepting';
+  createdAgainstRevision: number | null;
+  targetNoteFingerprint: string | null;
 };
 
 export type SettingsScreenProps = {

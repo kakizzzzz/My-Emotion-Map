@@ -40,6 +40,7 @@ import { requestEmotionChat } from '../../services/emotionChat';
 import type { ToastHandler } from '../../app/appTypes';
 import { loadLocalSettings } from '../../app/profilePreferences';
 import { STAR_COLORS } from '../../domain/notePrompts';
+import { chatDraftKey } from '../../app/workspace/chatDraftStorage';
 
 const POSITIVE_CONFETTI = Array.from({ length: 20 }, (_, index) => ({
   color: STAR_COLORS[index % 9],
@@ -60,14 +61,12 @@ function AiAvatar() {
   );
 }
 
-const draftKey = (conversationId: string) =>
-  `my-emotion-map.chat-draft.${conversationId}`;
-
 export function ChatScreen({
   notes,
   followUps,
   conversations,
   activeConversationId,
+  workspaceKey,
   onAnswerFollowUp,
   onRevisitEmotion,
   cloudAuth,
@@ -83,6 +82,7 @@ export function ChatScreen({
   followUps: FollowUpRecord[];
   conversations: Conversation[];
   activeConversationId: string;
+  workspaceKey: string;
   onAnswerFollowUp: (
     followUpId: string,
     label: string,
@@ -105,13 +105,22 @@ export function ChatScreen({
 }) {
   const { copy, language } = useAppLanguage();
   const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
-  const [draft, setDraft] = useState(() => {
+  const activeDraftKey = chatDraftKey(workspaceKey, activeConversationId);
+  const readDraft = (key: string) => {
     try {
-      return sessionStorage.getItem(draftKey(activeConversationId)) ?? '';
+      return sessionStorage.getItem(key) ?? '';
     } catch {
       return '';
     }
-  });
+  };
+  const [draftState, setDraftState] = useState(() => ({
+    key: activeDraftKey,
+    value: readDraft(activeDraftKey),
+  }));
+  const draft = draftState.key === activeDraftKey ? draftState.value : '';
+  const setDraft = (value: string) => {
+    setDraftState({ key: activeDraftKey, value });
+  };
   const [sending, setSending] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [failedMessage, setFailedMessage] = useState<string | null>(null);
@@ -199,6 +208,12 @@ export function ChatScreen({
   }, []);
 
   useLayoutEffect(() => {
+    if (draftState.key !== activeDraftKey) {
+      setDraftState({ key: activeDraftKey, value: readDraft(activeDraftKey) });
+    }
+  }, [activeDraftKey, draftState.key]);
+
+  useLayoutEffect(() => {
     scrollToEnd('instant');
     previousMessageCountRef.current = 0;
   }, [activeConversationId, scrollToEnd]);
@@ -222,13 +237,14 @@ export function ChatScreen({
   }, [conversation.messages, scrollToEnd]);
 
   useEffect(() => {
+    if (draftState.key !== activeDraftKey) return;
     try {
-      if (draft) sessionStorage.setItem(draftKey(activeConversationId), draft);
-      else sessionStorage.removeItem(draftKey(activeConversationId));
+      if (draft) sessionStorage.setItem(activeDraftKey, draft);
+      else sessionStorage.removeItem(activeDraftKey);
     } catch {
       // Session-only drafts can remain in React state when storage is blocked.
     }
-  }, [activeConversationId, draft]);
+  }, [activeDraftKey, draft, draftState.key]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
