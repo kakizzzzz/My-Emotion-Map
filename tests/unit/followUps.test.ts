@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { promoteNextDueFollowUp } from '../../src/domain/followUps';
+import {
+  getFollowUpOptions,
+  promoteNextDueFollowUp,
+} from '../../src/domain/followUps';
 import type { FollowUpRecord } from '../../src/types';
 
 const records: FollowUpRecord[] = [
@@ -30,6 +33,19 @@ const records: FollowUpRecord[] = [
 ];
 
 describe('follow-up promotion', () => {
+  it.each(['zh', 'en', 'ko'] as const)(
+    'returns exactly the five canonical options in %s',
+    (language) => {
+      const options = getFollowUpOptions(language);
+      expect(options.map((option) => option.id)).toEqual([
+        'lighter', 'stronger', 'different', 'same', 'skip',
+      ]);
+      expect(options.map((option) => option.responseKind)).toEqual(
+        options.map((option) => option.id),
+      );
+    },
+  );
+
   it('activates only records whose dueAt is not in the future', () => {
     const next = promoteNextDueFollowUp(
       records,

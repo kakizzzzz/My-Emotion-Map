@@ -1,16 +1,15 @@
-export type ProfileIdentity = {
-  id: string;
-  displayName: string;
-};
+export type ProfileIdentity =
+  | { kind: 'user'; userId: string; displayName: string }
+  | {
+      kind: 'demo';
+      localId: string;
+      sourceRef: string;
+      displayName: string;
+    };
 
 export type SupabaseProfileRow = {
   id: string;
   display_name: string;
-};
-
-export const DEMO_PROFILE_IDENTITY: ProfileIdentity = {
-  id: '7c5e2f8a-4c6f-4c1d-9b2f-2a6f5e8d2026',
-  displayName: 'Mina Park',
 };
 
 const UUID_PATTERN =
@@ -21,10 +20,13 @@ export const isSupabaseProfileId = (value: unknown): value is string =>
 
 export const toSupabaseProfileRow = (
   identity: ProfileIdentity,
-): SupabaseProfileRow => ({
-  id: identity.id,
-  display_name: identity.displayName,
-});
+): SupabaseProfileRow | null =>
+  identity.kind === 'user' && isSupabaseProfileId(identity.userId)
+    ? {
+        id: identity.userId,
+        display_name: identity.displayName,
+      }
+    : null;
 
 export const fromSupabaseProfileRow = (
   row: unknown,
@@ -39,7 +41,8 @@ export const fromSupabaseProfileRow = (
     return null;
   }
   return {
-    id: source.id,
+    kind: 'user',
+    userId: source.id,
     displayName: source.display_name.trim().slice(0, 80),
   };
 };

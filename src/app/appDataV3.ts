@@ -51,6 +51,29 @@ export const sanitizeStarInboxItem = (
     eventAt,
     receivedAt,
     heartRate: Math.round(source.heartRate),
+    verification:
+      source.verification === 'verified' ||
+      source.verification === 'unverified' ||
+      source.verification === 'test'
+        ? source.verification
+        : undefined,
+    context:
+      source.context === 'resting' || source.context === 'workout'
+        ? source.context
+        : 'unknown',
+    samples: Array.isArray(source.samples)
+      ? source.samples
+          .map(asObject)
+          .filter((sample): sample is Record<string, unknown> => Boolean(sample))
+          .filter(
+            (sample) =>
+              typeof sample.bpm === 'number' && sample.bpm >= 20 &&
+              sample.bpm <= 260 && isTimestamp(sample.at),
+          )
+          .slice(0, 12)
+          .map((sample) => ({ bpm: Math.round(sample.bpm as number), at: sample.at as string }))
+      : undefined,
+    lowSignalConfidence: source.lowSignalConfidence === true ? true : undefined,
     latitude: hasLocation ? source.latitude as number : undefined,
     longitude: hasLocation ? source.longitude as number : undefined,
     locationCapturedAt: isTimestamp(source.locationCapturedAt)
@@ -114,20 +137,20 @@ export const relinkLegacyInboxDrafts = (
 export const DEMO_INBOX_ITEMS: StarInboxItem[] = [
   {
     id: 'inbox-library', sourceEventId: 'demo-library',
-    eventAt: '2026-07-27T18:42:00+09:00', receivedAt: '2026-07-27T18:43:00+09:00',
-    heartRate: 126, latitude: 37.5578, longitude: 126.9527,
+    eventAt: '2026-08-01T18:42:00+09:00', receivedAt: '2026-08-01T18:43:00+09:00',
+    heartRate: 126, latitude: 37.5591, longitude: 127.0008,
     status: 'pending', source: 'heart-rate',
   },
   {
     id: 'inbox-cafeteria', sourceEventId: 'demo-cafeteria',
-    eventAt: '2026-07-27T14:16:00+09:00', receivedAt: '2026-07-27T14:17:00+09:00',
-    heartRate: 121, latitude: 37.5562, longitude: 126.9553,
+    eventAt: '2026-08-01T14:16:00+09:00', receivedAt: '2026-08-01T14:17:00+09:00',
+    heartRate: 121, latitude: 37.5587, longitude: 127.0012,
     status: 'pending', source: 'heart-rate',
   },
   {
     id: 'inbox-studio', sourceEventId: 'demo-studio',
-    eventAt: '2026-07-26T21:08:00+09:00', receivedAt: '2026-07-26T21:09:00+09:00',
-    heartRate: 52, latitude: 37.5547, longitude: 126.9581,
+    eventAt: '2026-07-31T21:08:00+09:00', receivedAt: '2026-07-31T21:09:00+09:00',
+    heartRate: 52, latitude: 37.5582, longitude: 126.9994,
     status: 'pending', source: 'heart-rate',
   },
 ];

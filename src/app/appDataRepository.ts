@@ -1,6 +1,4 @@
 import {
-  INITIAL_CONVERSATIONS,
-  INITIAL_FOLLOW_UPS,
   INITIAL_MOMENTS,
   INITIAL_NOTES,
 } from '../data';
@@ -18,21 +16,26 @@ import type {
   RevisitRecord,
   StarInboxItem,
 } from '../types';
-import { createRecordId } from './createRecordId';
+import { createDemoAppData } from './demoData';
 import {
   DEFAULT_THEME,
   isThemePalette,
-  protectThemePaletteContrast,
 } from './themePreferences';
 import {
-  DEMO_INBOX_ITEMS,
   migrateLegacyHiddenDefaults,
   relinkLegacyInboxDrafts,
   sanitizeStarInboxItem,
 } from './appDataV3';
+import { migrateLegacyTemporalFields } from '../domain/time/temporal';
+import {
+  LEGACY_APP_DATA_STORAGE_KEY,
+  isWorkspaceWithinBudget,
+  stableSerialize,
+  workspaceStorageKey,
+} from './workspace/workspaceStorage';
 
-export const APP_DATA_STORAGE_KEY = 'my-emotion-map.app-data.v1';
-export const CURRENT_SCHEMA_VERSION = 3;
+export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export type AppDataLoadIssue =
   | 'storage-unavailable'
@@ -200,14 +203,6 @@ const sanitizeMoment = (
       source.source === 'inbox'
         ? source.source
         : undefined,
-    eventTimeSource:
-      source.eventTimeSource === 'user' ||
-      source.eventTimeSource === 'device-created' ||
-      source.eventTimeSource === 'photo-exif' ||
-      source.eventTimeSource === 'health-sample' ||
-      source.eventTimeSource === 'legacy'
-        ? source.eventTimeSource
-        : undefined,
     photoTakenAt: isValidTimestamp(source.photoTakenAt)
       ? source.photoTakenAt
       : undefined,
@@ -223,6 +218,43 @@ const sanitizeMoment = (
     importedAt: isValidTimestamp(source.importedAt)
       ? source.importedAt
       : undefined,
+    locationCapturedAt: isValidTimestamp(source.locationCapturedAt)
+      ? source.locationCapturedAt
+      : undefined,
+    locationTimeRelation:
+      source.locationTimeRelation === 'event' ||
+      source.locationTimeRelation === 'confirmation' ||
+      source.locationTimeRelation === 'manual'
+        ? source.locationTimeRelation
+        : undefined,
+    ...migrateLegacyTemporalFields({
+      date: source.date,
+      time: source.time,
+      occurredAtUtc: isValidTimestamp(source.occurredAtUtc)
+        ? source.occurredAtUtc
+        : null,
+      localDate: isValidDate(source.localDate) ? source.localDate : source.date,
+      localTime: isValidTime(source.localTime) ? source.localTime : source.time,
+      timeZone:
+        typeof source.timeZone === 'string'
+          ? source.timeZone.slice(0, 100)
+          : null,
+      utcOffsetMinutes:
+        typeof source.utcOffsetMinutes === 'number'
+          ? source.utcOffsetMinutes
+          : null,
+      timePrecision:
+        source.timePrecision === 'date' || source.timePrecision === 'unknown'
+          ? source.timePrecision
+          : 'minute',
+      eventTimeSource:
+        source.eventTimeSource === 'user' ||
+        source.eventTimeSource === 'device-created' ||
+        source.eventTimeSource === 'photo-exif' ||
+        source.eventTimeSource === 'health-sample'
+          ? source.eventTimeSource
+          : 'legacy',
+    }),
   };
 };
 
@@ -290,6 +322,34 @@ const sanitizeNote = (
       typeof source.followUpEnabled === 'boolean'
         ? source.followUpEnabled
         : undefined,
+    ...migrateLegacyTemporalFields({
+      date: source.date,
+      time: source.time,
+      occurredAtUtc: isValidTimestamp(source.occurredAtUtc)
+        ? source.occurredAtUtc
+        : null,
+      localDate: isValidDate(source.localDate) ? source.localDate : source.date,
+      localTime: isValidTime(source.localTime) ? source.localTime : source.time,
+      timeZone:
+        typeof source.timeZone === 'string'
+          ? source.timeZone.slice(0, 100)
+          : null,
+      utcOffsetMinutes:
+        typeof source.utcOffsetMinutes === 'number'
+          ? source.utcOffsetMinutes
+          : null,
+      timePrecision:
+        source.timePrecision === 'date' || source.timePrecision === 'unknown'
+          ? source.timePrecision
+          : 'minute',
+      eventTimeSource:
+        source.eventTimeSource === 'user' ||
+        source.eventTimeSource === 'device-created' ||
+        source.eventTimeSource === 'photo-exif' ||
+        source.eventTimeSource === 'health-sample'
+          ? source.eventTimeSource
+          : 'legacy',
+    }),
   };
 };
 
@@ -311,6 +371,12 @@ const sanitizeMessage = (
     id: asString(source.id, 200),
     role: source.role,
     body: asString(source.body, 20_000),
+    kind:
+      source.kind === 'followup_prompt' ||
+      source.kind === 'followup_answer' ||
+      source.kind === 'followup_reply'
+        ? source.kind
+        : 'message',
     noteIds: Array.isArray(source.noteIds)
       ? source.noteIds
           .filter((item): item is string => typeof item === 'string')
@@ -320,16 +386,21 @@ const sanitizeMessage = (
       ? source.options
           .map((option) => {
             const item = asObject(option);
-            const responseKind = item?.responseKind;
+            const legacyKind = item?.responseKind;
+            const responseKind =
+              legacyKind === 'calm'
+                ? 'lighter'
+                : legacyKind === 'unchanged'
+                  ? 'same'
+                  : legacyKind;
             if (
               !item ||
               !asString(item.id, 200) ||
               !asString(item.label, 1_000) ||
-              (responseKind !== 'positive' &&
-                responseKind !== 'calm' &&
+              (responseKind !== 'lighter' &&
                 responseKind !== 'stronger' &&
                 responseKind !== 'different' &&
-                responseKind !== 'unchanged' &&
+                responseKind !== 'same' &&
                 responseKind !== 'skip')
             ) {
               return null;
@@ -398,17 +469,48 @@ const sanitizeFollowUp = (
     intervalDays: source.intervalDays,
     dueAt: source.dueAt,
     status: source.status as FollowUpRecord['status'],
-    prompt: asString(source.prompt, 5_000),
+    prompt: asString(source.prompt, 5_000) || undefined,
+    promptVersion:
+      typeof source.promptVersion === 'number' && source.promptVersion > 0
+        ? Math.round(source.promptVersion)
+        : 1,
+    followUpConsentedAt: isValidTimestamp(source.followUpConsentedAt)
+      ? source.followUpConsentedAt
+      : new Date(
+          new Date(source.dueAt as string).getTime() -
+            Number(source.intervalDays) * 86_400_000,
+        ).toISOString(),
+    responseOptionId:
+      source.responseOptionId === 'lighter' ||
+      source.responseOptionId === 'stronger' ||
+      source.responseOptionId === 'different' ||
+      source.responseOptionId === 'same' ||
+      source.responseOptionId === 'skip'
+        ? source.responseOptionId
+        : source.responseKind === 'calm'
+          ? 'lighter'
+          : source.responseKind === 'unchanged'
+            ? 'same'
+            : source.responseKind === 'stronger' ||
+                source.responseKind === 'different' ||
+                source.responseKind === 'skip'
+              ? source.responseKind
+              : undefined,
+    answerCommandId: asString(source.answerCommandId, 200) || undefined,
     promptedAt: isValidTimestamp(source.promptedAt)
       ? source.promptedAt
       : undefined,
     response: asString(source.response, 5_000) || undefined,
     responseKind:
-      source.responseKind === 'positive' ||
+      source.responseKind === 'positive'
+        ? 'legacyPositive'
+        : source.responseKind === 'legacyPositive' ||
       source.responseKind === 'calm' ||
+      source.responseKind === 'lighter' ||
       source.responseKind === 'stronger' ||
       source.responseKind === 'different' ||
       source.responseKind === 'unchanged' ||
+      source.responseKind === 'same' ||
       source.responseKind === 'skip'
         ? source.responseKind
         : undefined,
@@ -455,39 +557,24 @@ const sanitizeRevisit = (
   };
 };
 
-const createCompanionConversation = (): Conversation => ({
-  id: 'thread-revisit',
-  title: '交流回访',
-  preview: '',
-  kind: 'companion',
-  messages: [],
-});
-
 export const createEmptyAppData = (): AppDataSnapshot => ({
   schemaVersion: CURRENT_SCHEMA_VERSION,
   dataMode: 'real',
   moments: [],
   notes: [],
-  conversations: [createCompanionConversation()],
+  conversations: [],
   followUps: [],
   revisits: [],
   starInboxItems: [],
   themeTone: 'original',
   themePalette: DEFAULT_THEME,
 });
-
-export const createDemoAppData = (): AppDataSnapshot => ({
-  schemaVersion: CURRENT_SCHEMA_VERSION,
-  dataMode: 'demo',
-  moments: structuredClone(INITIAL_MOMENTS),
-  notes: structuredClone(INITIAL_NOTES),
-  conversations: structuredClone(INITIAL_CONVERSATIONS),
-  followUps: structuredClone(INITIAL_FOLLOW_UPS),
-  revisits: [],
-  starInboxItems: structuredClone(DEMO_INBOX_ITEMS),
-  themeTone: 'original',
-  themePalette: DEFAULT_THEME,
-});
+export { createDemoAppData } from './demoData';
+export {
+  appendRevisitRecord,
+  dismissInboxItem,
+  removeMomentAssociations,
+} from './recordAssociations';
 
 const inferLegacyDataMode = (
   moments: EmotionMoment[],
@@ -516,16 +603,34 @@ export const migrateAppData = (
   if (sourceVersion > CURRENT_SCHEMA_VERSION) {
     issues.push('schema-newer-than-client');
   }
-  const moments = Array.isArray(source.moments)
+  const rawMoments = Array.isArray(source.moments)
     ? source.moments
         .map((item) => sanitizeMoment(item, issues))
         .filter((item): item is EmotionMoment => Boolean(item))
     : [];
-  const notes = Array.isArray(source.notes)
+  const seenMomentNoteIds = new Set<string>();
+  const moments = rawMoments.filter((moment) => {
+    if (seenMomentNoteIds.has(moment.noteId)) {
+      issues.push('duplicate-moment-note-dropped');
+      return false;
+    }
+    seenMomentNoteIds.add(moment.noteId);
+    return true;
+  });
+  const rawNotes = Array.isArray(source.notes)
     ? source.notes
         .map((item) => sanitizeNote(item, issues))
         .filter((item): item is EmotionNote => Boolean(item))
     : [];
+  const seenNoteIds = new Set<string>();
+  const notes = rawNotes.filter((note) => {
+    if (seenNoteIds.has(note.id)) {
+      issues.push('duplicate-note-dropped');
+      return false;
+    }
+    seenNoteIds.add(note.id);
+    return true;
+  });
   const noteById = migrateLegacyHiddenDefaults(
     sourceVersion,
     moments,
@@ -560,9 +665,11 @@ export const migrateAppData = (
       (conversation) =>
         conversation.id === 'thread-revisit' ||
         conversation.kind === 'companion',
-    ) ?? createCompanionConversation();
+    ) ?? null;
   const normalizedConversations = [
-    { ...companion, id: 'thread-revisit', kind: 'companion' as const },
+    ...(companion
+      ? [{ ...companion, id: 'thread-revisit', kind: 'companion' as const }]
+      : []),
     ...conversations
       .filter((conversation) => conversation !== companion)
       .map((conversation) => ({
@@ -574,7 +681,7 @@ export const migrateAppData = (
         })),
       })),
   ];
-  const followUps = Array.isArray(source.followUps)
+  const sanitizedFollowUps = Array.isArray(source.followUps)
     ? source.followUps
         .map((item) => sanitizeFollowUp(item, issues))
         .filter(
@@ -582,6 +689,17 @@ export const migrateAppData = (
             Boolean(item && noteIds.has(item.noteId)),
         )
     : [];
+  const activeFollowUps = sanitizedFollowUps
+    .filter((record) => record.status === 'active')
+    .sort((left, right) => left.dueAt.localeCompare(right.dueAt));
+  const activeToKeep = activeFollowUps[0]?.id;
+  const followUps = sanitizedFollowUps.map((record) =>
+    record.status === 'active' && record.id !== activeToKeep
+      ? { ...record, status: 'queued' as const, promptedAt: undefined }
+      : record,
+  );
+  const followUpIds = new Set(followUps.map((record) => record.id));
+  const followUpById = new Map(followUps.map((record) => [record.id, record]));
   const revisits = Array.isArray(source.revisits)
     ? source.revisits
         .map((item) => sanitizeRevisit(item, issues))
@@ -590,10 +708,23 @@ export const migrateAppData = (
             Boolean(item && noteIds.has(item.noteId)),
         )
     : [];
+  const momentIds = new Set(moments.map((moment) => moment.id));
   const starInboxItems = Array.isArray(source.starInboxItems)
     ? source.starInboxItems
         .map((item) => sanitizeStarInboxItem(item, issues))
         .filter((item): item is StarInboxItem => Boolean(item))
+        .map((item) =>
+          item.linkedMomentId && !momentIds.has(item.linkedMomentId)
+            ? {
+                ...item,
+                linkedMomentId: undefined,
+                status:
+                  item.status === 'completed' || item.status === 'draft_created'
+                    ? ('pending' as const)
+                    : item.status,
+              }
+            : item,
+        )
     : [];
   relinkLegacyInboxDrafts(starInboxItems, moments, noteById);
   const dataMode: DataMode =
@@ -607,7 +738,7 @@ export const migrateAppData = (
       ? source.themeTone
       : 'original';
   const themePalette = isThemePalette(source.themePalette)
-    ? protectThemePaletteContrast(source.themePalette)
+    ? source.themePalette
     : DEFAULT_THEME;
   return {
     snapshot: {
@@ -615,23 +746,72 @@ export const migrateAppData = (
       dataMode,
       moments,
       notes,
-      conversations: normalizedConversations,
+      conversations: normalizedConversations.map((conversation) => ({
+        ...conversation,
+        messages: conversation.messages
+          .filter(
+            (message) =>
+              !message.followUpId ||
+              followUpIds.has(message.followUpId) ||
+              message.kind === 'message',
+          )
+          .map((message) =>
+            message.followUpId && !followUpIds.has(message.followUpId)
+              ? { ...message, followUpId: undefined, options: undefined }
+              : message.followUpId &&
+                  (followUpById.get(message.followUpId)?.status === 'answered' ||
+                    followUpById.get(message.followUpId)?.status === 'skipped')
+                ? { ...message, options: undefined }
+                : message,
+          ),
+      })),
       followUps,
       revisits,
       starInboxItems,
       themeTone,
       themePalette,
+      demoAnchorDate: isValidDate(source.demoAnchorDate)
+        ? source.demoAnchorDate
+        : undefined,
+      lastConversationId: asString(source.lastConversationId, 200) || undefined,
+      lastViewport:
+        asObject(source.lastViewport) &&
+        isValidCoordinate(
+          asObject(source.lastViewport)?.latitude,
+          asObject(source.lastViewport)?.longitude,
+        ) &&
+        typeof asObject(source.lastViewport)?.zoom === 'number'
+          ? {
+              latitude: asObject(source.lastViewport)?.latitude as number,
+              longitude: asObject(source.lastViewport)?.longitude as number,
+              zoom: Math.min(
+                20,
+                Math.max(0, asObject(source.lastViewport)?.zoom as number),
+              ),
+            }
+          : undefined,
     },
     issues: Array.from(new Set(issues)),
   };
 };
 
-export const loadAppData = (): LoadedAppData => {
+export const loadAppData = (
+  userId: string | null,
+  mode: DataMode = 'real',
+): LoadedAppData => {
   try {
-    const stored = window.localStorage.getItem(APP_DATA_STORAGE_KEY);
-    if (!stored) return createDemoAppData();
+    const key = workspaceStorageKey(mode, userId);
+    if (!key) return createEmptyAppData();
+    const stored = window.localStorage.getItem(key);
+    if (!stored) return mode === 'demo' ? createDemoAppData() : createEmptyAppData();
     try {
       const { snapshot, issues } = migrateAppData(JSON.parse(stored));
+      if (snapshot.dataMode !== mode) {
+        return {
+          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          loadIssue: 'corrupt-json',
+        };
+      }
       return {
         ...snapshot,
         migrationIssues: issues.length ? issues : undefined,
@@ -644,10 +824,15 @@ export const loadAppData = (): LoadedAppData => {
   }
 };
 
-export const saveAppData = (snapshot: AppDataSnapshot) => {
+export const saveAppData = (
+  snapshot: AppDataSnapshot,
+  userId: string | null,
+) => {
   try {
+    const key = workspaceStorageKey(snapshot.dataMode, userId);
+    if (!key || !isWorkspaceWithinBudget(snapshot)) return false;
     window.localStorage.setItem(
-      APP_DATA_STORAGE_KEY,
+      key,
       JSON.stringify({ ...snapshot, schemaVersion: CURRENT_SCHEMA_VERSION }),
     );
     return true;
@@ -678,100 +863,80 @@ export const serializeAppData = (snapshot: AppDataSnapshot) =>
     2,
   );
 
-export const clearAllLocalData = () => {
+export const clearAllLocalData = (userId: string | null, mode: DataMode) => {
+  const activeKey = workspaceStorageKey(mode, userId);
   const keys = [
-    APP_DATA_STORAGE_KEY,
-    'my-emotion-map.local-settings.v1',
-    'my-emotion-map.map-style.v1',
-    'my-emotion-map.health-preferences.v1',
-    'my-emotion-map.connection-preferences.v1',
-    'my-emotion-map.ai-avatar.v1',
-    'my-emotion-map.shortcut-heart-dedupe.v1',
+    activeKey,
+    userId ? `my-emotion-map.user-preferences.${userId}.v2` : null,
+    userId ? `my-emotion-map.health-preferences.${userId}.v2` : null,
+    userId ? `my-emotion-map.shortcut-heart-dedupe.${userId}.v2` : null,
   ];
   try {
-    keys.forEach((key) => window.localStorage.removeItem(key));
+    keys.forEach((key) => {
+      if (key) window.localStorage.removeItem(key);
+    });
     return true;
   } catch {
     return false;
   }
 };
 
-export const appendRevisitRecord = (
-  revisits: RevisitRecord[],
-  note: EmotionNote,
-  emotion: EmotionKey,
-  sourceFollowUpId?: string,
-  revisitedAt = new Date().toISOString(),
-): RevisitRecord[] => [
-  ...revisits,
-  {
-    id: createRecordId('revisit'),
-    noteId: note.id,
-    originalEmotion: note.emotion,
-    revisitedEmotion: emotion,
-    originalOccurredAt: new Date(
-      `${note.date}T${note.time}:00`,
-    ).toISOString(),
-    revisitedAt,
-    sourceFollowUpId,
-  },
-];
+export const hasLegacyUnassignedWorkspace = () => {
+  try {
+    return window.localStorage.getItem(LEGACY_APP_DATA_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+};
 
-export const dismissInboxItem = (
-  items: StarInboxItem[],
-  itemId: string,
-  seenAt = new Date().toISOString(),
-): StarInboxItem[] =>
-  items.map((item) =>
-    item.id === itemId
-      ? {
-          ...item,
-          status: 'dismissed',
-          seenAt: item.seenAt ?? seenAt,
-        }
-      : item,
-  );
+export const getWorkspaceStorageKey = (
+  userId: string | null,
+  mode: DataMode,
+) => workspaceStorageKey(mode, userId);
 
-export const removeMomentAssociations = (
-  snapshot: AppDataSnapshot,
-  momentId: string,
-): AppDataSnapshot => {
-  const moment = snapshot.moments.find((item) => item.id === momentId);
-  if (!moment) return snapshot;
-  const remainingMoments = snapshot.moments
-    .filter((item) => item.id !== momentId)
-    .map((item) =>
-      moment.tagGroupId !== undefined &&
-      moment.tagOrder !== undefined &&
-      item.tagGroupId === moment.tagGroupId &&
-      item.tagOrder !== undefined &&
-      item.tagOrder > moment.tagOrder
-        ? { ...item, tagOrder: item.tagOrder - 1 }
-        : item,
-    );
-  return {
-    ...snapshot,
-    moments: remainingMoments,
-    notes: snapshot.notes.filter((note) => note.id !== moment.noteId),
-    followUps: snapshot.followUps.filter(
-      (record) => record.noteId !== moment.noteId,
-    ),
-    revisits: snapshot.revisits.filter(
-      (record) => record.noteId !== moment.noteId,
-    ),
-    conversations: snapshot.conversations.map((conversation) => ({
-      ...conversation,
-      messages: conversation.messages.map((message) => ({
-        ...message,
-        noteIds: message.noteIds?.filter(
-          (noteId) => noteId !== moment.noteId,
-        ),
-      })),
-    })),
-    starInboxItems: snapshot.starInboxItems.map((item) =>
-      moment.id === `health-star-${item.id}`
-        ? { ...item, status: 'dismissed' }
-        : item,
-    ),
-  };
+export const canonicalSnapshotDigest = (snapshot: AppDataSnapshot) =>
+  stableSerialize({ ...snapshot, schemaVersion: CURRENT_SCHEMA_VERSION });
+
+export const validateReferentialIntegrity = (snapshot: AppDataSnapshot) => {
+  const issues: string[] = [];
+  const noteIds = new Set(snapshot.notes.map((note) => note.id));
+  const momentIds = new Set(snapshot.moments.map((moment) => moment.id));
+  const followUpIds = new Set(snapshot.followUps.map((record) => record.id));
+  const noteOwners = new Map<string, number>();
+  snapshot.moments.forEach((moment) => {
+    noteOwners.set(moment.noteId, (noteOwners.get(moment.noteId) ?? 0) + 1);
+    if (!noteIds.has(moment.noteId)) issues.push('moment-note-missing');
+  });
+  if ([...noteOwners.values()].some((count) => count !== 1)) {
+    issues.push('moment-note-not-unique');
+  }
+  if (snapshot.followUps.some((record) => !noteIds.has(record.noteId))) {
+    issues.push('followup-note-missing');
+  }
+  if (snapshot.revisits.some((record) => !noteIds.has(record.noteId))) {
+    issues.push('revisit-note-missing');
+  }
+  if (
+    snapshot.conversations.some((conversation) =>
+      conversation.messages.some(
+        (message) =>
+          Boolean(message.followUpId) &&
+          !followUpIds.has(message.followUpId as string) &&
+          message.kind !== 'message',
+      ),
+    )
+  ) {
+    issues.push('message-followup-missing');
+  }
+  if (
+    snapshot.starInboxItems.some(
+      (item) => item.linkedMomentId && !momentIds.has(item.linkedMomentId),
+    )
+  ) {
+    issues.push('inbox-moment-missing');
+  }
+  if (snapshot.followUps.filter((record) => record.status === 'active').length > 1) {
+    issues.push('multiple-active-followups');
+  }
+  return Array.from(new Set(issues));
 };

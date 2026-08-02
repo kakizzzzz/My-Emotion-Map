@@ -1,4 +1,4 @@
-const DEDUPE_STORAGE_KEY = 'my-emotion-map.shortcut-heart-dedupe.v1';
+const DEDUPE_STORAGE_KEY = 'my-emotion-map.shortcut-heart-dedupe';
 const MAX_DEDUPE_IDS = 120;
 
 export const stripShortcutFragment = () => {
@@ -12,9 +12,11 @@ export const stripShortcutFragment = () => {
   return hash;
 };
 
-export const loadShortcutEventIds = (): Set<string> => {
+const dedupeKey = (userId: string) => `${DEDUPE_STORAGE_KEY}.${userId}.v2`;
+
+export const loadShortcutEventIds = (userId: string): Set<string> => {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(DEDUPE_STORAGE_KEY) ?? '[]');
+    const parsed = JSON.parse(window.localStorage.getItem(dedupeKey(userId)) ?? '[]');
     return new Set(
       Array.isArray(parsed)
         ? parsed.filter((value): value is string => typeof value === 'string').slice(-MAX_DEDUPE_IDS)
@@ -25,12 +27,12 @@ export const loadShortcutEventIds = (): Set<string> => {
   }
 };
 
-export const rememberShortcutEventId = (sourceEventId: string) => {
-  const ids = loadShortcutEventIds();
+export const rememberShortcutEventId = (userId: string, sourceEventId: string) => {
+  const ids = loadShortcutEventIds(userId);
   ids.add(sourceEventId);
   try {
     window.localStorage.setItem(
-      DEDUPE_STORAGE_KEY,
+      dedupeKey(userId),
       JSON.stringify(Array.from(ids).slice(-MAX_DEDUPE_IDS)),
     );
   } catch {

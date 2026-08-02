@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import type { AppDataSnapshot } from '../types';
+import {
+  canonicalSnapshotDigest,
+  migrateAppData,
+  validateReferentialIntegrity,
+} from '../app/appDataRepository';
 
 export type CloudSyncStatus =
   | 'unconfigured'
@@ -18,14 +23,10 @@ const hasUserRecords = (snapshot: AppDataSnapshot) =>
   snapshot.moments.length > 0 || snapshot.notes.length > 0;
 
 const safeSnapshot = (value: unknown): AppDataSnapshot | null => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const source = value as Partial<AppDataSnapshot>;
-  return source.schemaVersion === 3 && source.dataMode === 'real' &&
-    Array.isArray(source.moments) && Array.isArray(source.notes) &&
-    Array.isArray(source.conversations) && Array.isArray(source.followUps) &&
-    Array.isArray(source.revisits) && Array.isArray(source.starInboxItems) &&
-    typeof source.themeTone === 'string' && source.themePalette && typeof source.themePalette === 'object'
-    ? source as AppDataSnapshot
+  const migrated = migrateAppData(value).snapshot;
+  return migrated.dataMode === 'real' &&
+    validateReferentialIntegrity(migrated).length === 0
+    ? migrated
     : null;
 };
 
@@ -58,6 +59,11 @@ const saveRecoveryCopies = (
     const prefix = `my-emotion-map:recovery:${deviceId}:${timestamp}`;
     window.localStorage.setItem(`${prefix}:conflict-local-${userId}`, JSON.stringify(local));
     window.localStorage.setItem(`${prefix}:conflict-remote-${userId}`, JSON.stringify(remote));
+    const recoveryKeys = Object.keys(window.localStorage)
+      .filter((key) => key.startsWith(`my-emotion-map:recovery:${deviceId}:`))
+      .sort()
+      .reverse();
+    recoveryKeys.slice(8).forEach((key) => window.localStorage.removeItem(key));
   } catch {
     // A conflict remains paused even when recovery storage is unavailable.
   }
@@ -79,6 +85,41 @@ export function useCloudSync({
   const [uploadedSnapshot, setUploadedSnapshot] = useState('');
   const activeUserRef = useRef('');
   const conflictRemoteRef = useRef<{ snapshot: AppDataSnapshot; revision: number } | null>(null);
+  const channelRef = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    channelRef.current?.close();
+    channelRef.current = null;
+    const userId = session?.user.id;
+    if (!userId || typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel(`my-emotion-map-sync:${userId}`);
+    channelRef.current = channel;
+    channel.onmessage = (event: MessageEvent<unknown>) => {
+      if (!event.data || typeof event.data !== 'object') return;
+      const message = event.data as {
+        type?: unknown;
+        userId?: unknown;
+        revision?: unknown;
+        snapshot?: unknown;
+      };
+      if (message.type !== 'synced_snapshot' || message.userId !== userId) return;
+      const incomingRevision = Number(message.revision);
+      const incoming = safeSnapshot(message.snapshot);
+      if (!incoming || !Number.isSafeInteger(incomingRevision) || incomingRevision < 1) return;
+      if (revision !== null && incomingRevision < revision) return;
+      const digest = canonicalSnapshotDigest(incoming);
+      if (digest === canonicalSnapshotDigest(snapshot)) return;
+      setUploadedSnapshot(digest);
+      window.localStorage.setItem(`my-emotion-map.cloud-revision.${userId}`, String(incomingRevision));
+      applySnapshot(incoming);
+      setRevision(incomingRevision);
+      setStatus('synced');
+    };
+    return () => {
+      channel.close();
+      if (channelRef.current === channel) channelRef.current = null;
+    };
+  }, [applySnapshot, revision, session?.user.id, snapshot]);
 
   useEffect(() => {
     if (!client) {
@@ -120,7 +161,7 @@ export function useCloudSync({
         if (!data) {
           setRevision(0);
           const needsConfirmation = hasUserRecords(snapshot);
-          setUploadedSnapshot(needsConfirmation ? '' : JSON.stringify(snapshot));
+          setUploadedSnapshot(needsConfirmation ? '' : canonicalSnapshotDigest(snapshot));
           setStatus(needsConfirmation ? 'upload_confirmation_required' : 'synced');
           return;
         }
@@ -133,20 +174,20 @@ export function useCloudSync({
         const revisionKey = `my-emotion-map.cloud-revision.${userId}`;
         const knownRevision = Number(window.localStorage.getItem(revisionKey));
         if (knownRevision === remoteRevision) {
-          setUploadedSnapshot(JSON.stringify(remote));
+          setUploadedSnapshot(canonicalSnapshotDigest(remote));
           setRevision(remoteRevision);
           setStatus('synced');
           return;
         }
-        if (JSON.stringify(snapshot) === JSON.stringify(remote)) {
-          setUploadedSnapshot(JSON.stringify(remote));
+        if (canonicalSnapshotDigest(snapshot) === canonicalSnapshotDigest(remote)) {
+          setUploadedSnapshot(canonicalSnapshotDigest(remote));
           window.localStorage.setItem(revisionKey, String(remoteRevision));
           setRevision(remoteRevision);
           setStatus('synced');
           return;
         }
         if (!hasUserRecords(snapshot)) {
-          setUploadedSnapshot(JSON.stringify(remote));
+          setUploadedSnapshot(canonicalSnapshotDigest(remote));
           window.localStorage.setItem(revisionKey, String(remoteRevision));
           applySnapshot(remote);
           setRevision(remoteRevision);
@@ -165,7 +206,7 @@ export function useCloudSync({
 
   useEffect(() => {
     if (!client || !session || status !== 'synced' || revision === null || snapshot.dataMode !== 'real') return;
-    const serialized = JSON.stringify(snapshot);
+    const serialized = canonicalSnapshotDigest(snapshot);
     if (serialized === uploadedSnapshot) return;
     const timer = window.setTimeout(() => {
       setStatus('syncing');
@@ -178,6 +219,10 @@ export function useCloudSync({
         if (error) {
           if (!navigator.onLine) {
             setStatus('offline');
+            return;
+          }
+          if (error.code !== '40001') {
+            setStatus('error');
             return;
           }
           setStatus('conflict');
@@ -206,6 +251,12 @@ export function useCloudSync({
         window.localStorage.setItem(`my-emotion-map.cloud-revision.${session.user.id}`, String(nextRevision));
         setRevision(nextRevision);
         setStatus('synced');
+        channelRef.current?.postMessage({
+          type: 'synced_snapshot',
+          userId: session.user.id,
+          revision: nextRevision,
+          snapshot,
+        });
       });
     }, 800);
     return () => window.clearTimeout(timer);
@@ -225,22 +276,28 @@ export function useCloudSync({
   const useRemoteVersion = () => {
     const remote = conflictRemoteRef.current;
     if (!session || !remote) return;
-    setUploadedSnapshot(JSON.stringify(remote.snapshot));
+    setUploadedSnapshot(canonicalSnapshotDigest(remote.snapshot));
     window.localStorage.setItem(`my-emotion-map.cloud-revision.${session.user.id}`, String(remote.revision));
     applySnapshot(remote.snapshot);
     setRevision(remote.revision);
     setStatus('synced');
+    channelRef.current?.postMessage({
+      type: 'synced_snapshot',
+      userId: session.user.id,
+      revision: remote.revision,
+      snapshot: remote.snapshot,
+    });
   };
 
   const overwriteRemoteWithLocal = () => {
     const remote = conflictRemoteRef.current;
     if (!remote) return;
-    setUploadedSnapshot(JSON.stringify(remote.snapshot));
+    setUploadedSnapshot(canonicalSnapshotDigest(remote.snapshot));
     setRevision(remote.revision);
     setStatus('synced');
   };
 
-  const serializedSnapshot = JSON.stringify(snapshot);
+  const serializedSnapshot = canonicalSnapshotDigest(snapshot);
   const safeRevision = status === 'synced' && serializedSnapshot === uploadedSnapshot
     ? revision
     : null;

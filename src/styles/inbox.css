@@ -202,7 +202,7 @@
   display: grid;
   gap: 13px;
   overflow: hidden;
-  margin: 0 14px;
+  margin: 0 26px;
   padding: 13px 0 14px;
   border-top: 1px solid var(--em-border);
 }
@@ -241,7 +241,8 @@
 .star-inbox-follow-up-decision button {
   background: var(--em-soft-surface);
   color: var(--em-text-secondary);
-  text-align: left;
+  padding: 0 20px;
+  text-align: center;
 }
 
 .star-inbox-follow-up-decision button:last-child {

@@ -55,6 +55,12 @@ conflicts pause upload after local and remote recovery copies are stored.
 `claim_ai_quota` atomically enforces five photo requests and ten chat requests
 per authenticated user per hour. Direct table access is revoked.
 
+MCP and Shortcut use different random personal tokens. Only SHA-256 hashes are
+stored. Tokens expire, can be revoked, and never appear in browser persistence,
+README examples, fixtures, function logs or error responses. MCP read and
+proposal scopes are separate; proposals require in-app confirmation. Shortcut
+observations are owner-scoped pending inputs, not formal records or AI evidence.
+
 ## Required deployment verification
 
 - use an exact `ALLOWED_ORIGINS` list, never `*`;
@@ -65,3 +71,4 @@ per authenticated user per hour. Direct table access is revoked.
   responses without exposing provider bodies;
 - scan source and built assets for credential patterns before GitHub upload;
 - test real JPEG/HEIC photos and Shortcut transport on an iPhone.
+- verify MCP cross-user denial, token expiry/revocation and proposal-only writes.

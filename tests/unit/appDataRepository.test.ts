@@ -11,7 +11,9 @@ import {
   loadAppData,
   migrateAppData,
   removeMomentAssociations,
+  saveAppData,
 } from '../../src/app/appDataRepository';
+import { userWorkspaceStorageKey } from '../../src/app/workspace/workspaceStorage';
 import type {
   AppDataSnapshot,
   EmotionMoment,
@@ -96,15 +98,15 @@ describe('app data repository', () => {
     window.localStorage.clear();
   });
 
-  it('starts a fresh browser in clearly separated Demo data', () => {
-    const loaded = loadAppData();
+  it('starts a fresh signed-in workspace as empty real data', () => {
+    const loaded = loadAppData('user-a');
 
-    expect(loaded.dataMode).toBe('demo');
-    expect(loaded.moments.length).toBeGreaterThan(0);
-    expect(loaded.notes.length).toBeGreaterThan(0);
+    expect(loaded.dataMode).toBe('real');
+    expect(loaded.moments).toEqual([]);
+    expect(loaded.notes).toEqual([]);
   });
 
-  it('migrates a legacy snapshot without changing the storage key', () => {
+  it('does not silently assign the unowned legacy snapshot to a user', () => {
     const legacy = {
       moments: [moment],
       notes: [note],
@@ -114,13 +116,26 @@ describe('app data repository', () => {
     };
     window.localStorage.setItem(APP_DATA_STORAGE_KEY, JSON.stringify(legacy));
 
-    const loaded = loadAppData();
+    const loaded = loadAppData('user-a');
 
     expect(loaded.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(loaded.dataMode).toBe('real');
+    expect(loaded.moments).toEqual([]);
+    expect(window.localStorage.getItem(APP_DATA_STORAGE_KEY)).not.toBeNull();
+  });
+
+  it('migrates a snapshot stored in the resolved user workspace', () => {
+    window.localStorage.setItem(
+      userWorkspaceStorageKey('user-a'),
+      JSON.stringify({
+        moments: [moment], notes: [note], conversations: [], followUps: [],
+        revisits: [], starInboxItems: [], dataMode: 'real',
+      }),
+    );
+    const loaded = loadAppData('user-a');
     expect(loaded.moments).toHaveLength(1);
     expect(loaded.notes[0].title).toBe(note.title);
-    expect(window.localStorage.getItem(APP_DATA_STORAGE_KEY)).not.toBeNull();
+    expect(loaded.moments[0].occurredAtUtc).toBeNull();
   });
 
   it('clears hidden legacy defaults without rewriting formal choices', () => {
@@ -168,9 +183,9 @@ describe('app data repository', () => {
   });
 
   it('recovers from damaged JSON to a visible-safe empty state', () => {
-    window.localStorage.setItem(APP_DATA_STORAGE_KEY, '{broken');
+    window.localStorage.setItem(userWorkspaceStorageKey('user-a'), '{broken');
 
-    const loaded = loadAppData();
+    const loaded = loadAppData('user-a');
 
     expect(loaded.loadIssue).toBe('corrupt-json');
     expect(loaded.dataMode).toBe('real');
@@ -206,10 +221,11 @@ describe('app data repository', () => {
 
     expect(empty.dataMode).toBe('real');
     expect(empty.moments).toEqual([]);
+    expect(empty.conversations).toEqual([]);
     expect(empty.starInboxItems).toEqual([]);
     expect(demo.dataMode).toBe('demo');
     expect(demo.moments.length).toBeGreaterThan(0);
-    expect(demo.starInboxItems.length).toBeGreaterThan(0);
+    expect(demo.starInboxItems).toEqual([]);
   });
 
   it('appends a revisit without mutating the original note emotion', () => {
@@ -231,7 +247,11 @@ describe('app data repository', () => {
   });
 
   it('persists inbox dismissal as data state', () => {
-    const items = createDemoAppData().starInboxItems;
+    const items = [{
+      id: 'inbox-1', source: 'heart-rate' as const, sourceEventId: 'event-1',
+      eventAt: '2026-07-28T14:00:00.000Z', receivedAt: '2026-07-28T14:00:01.000Z',
+      heartRate: 120, status: 'pending' as const,
+    }];
     const next = dismissInboxItem(
       items,
       items[0].id,
@@ -250,6 +270,13 @@ describe('app data repository', () => {
     expect(next.notes).toEqual([]);
     expect(next.revisits).toEqual([]);
     expect(next.followUps).toEqual([]);
-    expect(next.conversations[0].messages[0].noteIds).toEqual([]);
+    expect(next.conversations[0].messages).toEqual([]);
+  });
+
+  it('isolates account A and B storage keys', () => {
+    const a = populatedSnapshot();
+    expect(saveAppData(a, 'user-a')).toBe(true);
+    expect(loadAppData('user-a').moments).toHaveLength(1);
+    expect(loadAppData('user-b').moments).toEqual([]);
   });
 });

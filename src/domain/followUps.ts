@@ -10,28 +10,28 @@ export const FOLLOW_UP_CONVERSATION_ID = 'thread-revisit';
 
 const FOLLOW_UP_OPTIONS: ChatOption[] = [
   {
-    id: 'better',
-    label: '现在回看，感受轻了一些。',
-    responseKind: 'calm',
+    id: 'lighter',
+    label: '轻了',
+    responseKind: 'lighter',
   },
   {
-    id: 'more-intense',
-    label: '现在回看，感受更强烈了。',
+    id: 'stronger',
+    label: '更强',
     responseKind: 'stronger',
   },
   {
     id: 'different',
-    label: '感受有变化，但我还说不清。',
+    label: '变了',
     responseKind: 'different',
   },
   {
     id: 'same',
-    label: '和当时差不多。',
-    responseKind: 'unchanged',
+    label: '一样',
+    responseKind: 'same',
   },
   {
     id: 'skip',
-    label: '我暂时不想回看。',
+    label: '跳过',
     responseKind: 'skip',
   },
 ];
@@ -42,28 +42,28 @@ export const getFollowUpOptions = (
   if (language === 'en') {
     return [
       {
-        id: 'better',
-        label: 'It feels a little lighter now.',
-        responseKind: 'calm',
+        id: 'lighter',
+        label: 'Lighter',
+        responseKind: 'lighter',
       },
       {
-        id: 'more-intense',
-        label: 'It feels more intense now.',
+        id: 'stronger',
+        label: 'Stronger',
         responseKind: 'stronger',
       },
       {
         id: 'different',
-        label: 'It has changed, but I cannot describe it yet.',
+        label: 'Changed',
         responseKind: 'different',
       },
       {
         id: 'same',
-        label: 'It feels about the same.',
-        responseKind: 'unchanged',
+        label: 'Same',
+        responseKind: 'same',
       },
       {
         id: 'skip',
-        label: 'I do not want to revisit it now.',
+        label: 'Skip',
         responseKind: 'skip',
       },
     ];
@@ -71,24 +71,24 @@ export const getFollowUpOptions = (
   if (language === 'ko') {
     return [
       {
-        id: 'better',
-        label: '지금은 조금 가볍게 느껴져요.',
-        responseKind: 'calm',
+        id: 'lighter',
+        label: '가벼워짐',
+        responseKind: 'lighter',
       },
       {
-        id: 'more-intense',
-        label: '지금은 감정이 더 강해졌어요.',
+        id: 'stronger',
+        label: '더 강함',
         responseKind: 'stronger',
       },
       {
         id: 'different',
-        label: '달라졌지만 아직 설명하기 어려워요.',
+        label: '달라짐',
         responseKind: 'different',
       },
-      { id: 'same', label: '그때와 비슷해요.', responseKind: 'unchanged' },
+      { id: 'same', label: '같음', responseKind: 'same' },
       {
         id: 'skip',
-        label: '지금은 돌아보고 싶지 않아요.',
+        label: '건너뛰기',
         responseKind: 'skip',
       },
     ];
@@ -116,6 +116,20 @@ export const getFollowUpAssistantReply = (
     return '好，这次先不回看；原始记录没有改变。';
   }
   return '这次回看已经追加保存，原始情绪没有被覆盖。';
+};
+
+export const getFollowUpPrompt = (
+  record: Pick<FollowUpRecord, 'intervalDays'>,
+  note: Pick<EmotionNote, 'title'>,
+  language: AppLanguage,
+) => {
+  if (language === 'en') {
+    return `Looking back at “${note.title}”, has the feeling changed?`;
+  }
+  if (language === 'ko') {
+    return `“${note.title}”을 다시 보면 느낌이 달라졌나요?`;
+  }
+  return `现在回看“${note.title}”，感觉有变化吗？`;
 };
 
 export const formatFollowUpTimestamp = (
@@ -185,28 +199,21 @@ export const promoteNextDueFollowUp = (
 
 export const createFollowUpForNote = (
   note: EmotionNote,
-  language: AppLanguage,
+  _language: AppLanguage,
   intervalDays: 1 | 3 | 7 = 3,
+  consentedAt = new Date(),
 ): FollowUpRecord => {
-  const occurredAt = new Date(`${note.date}T${note.time}:00`);
-  const baseTime = Number.isNaN(occurredAt.getTime())
-    ? Date.now()
-    : occurredAt.getTime();
+  const baseTime = consentedAt.getTime();
   const dueAt = new Date(
     baseTime + intervalDays * 24 * 60 * 60 * 1_000,
   ).toISOString();
-  const prompt =
-    language === 'en'
-      ? `You chose a follow-up for “${note.title}”. How does it feel now?`
-      : language === 'ko'
-        ? `“${note.title}” 기록을 다시 확인하기로 했어요. 지금은 어떻게 느껴지나요?`
-        : `你为“${note.title}”开启了回访。现在回看，这段经历给你的感觉有变化吗？`;
   return {
     id: createRecordId('follow-up'),
     noteId: note.id,
     intervalDays,
+    followUpConsentedAt: consentedAt.toISOString(),
     dueAt,
     status: 'queued',
-    prompt,
+    promptVersion: 2,
   };
 };

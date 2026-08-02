@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -11,14 +11,21 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:4175',
-    browserName: 'chromium',
-    channel: 'chrome',
-    viewport: { width: 390, height: 844 },
     locale: 'zh-CN',
     colorScheme: 'light',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
+  projects: [
+    {
+      name: 'chromium-mobile',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } },
+    },
+    {
+      name: 'webkit-iphone',
+      use: { ...devices['iPhone 13'] },
+    },
+  ],
   webServer: {
     command: 'npm run dev -- --port 4175',
     url: 'http://127.0.0.1:4175',

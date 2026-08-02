@@ -28,15 +28,15 @@
 
 .profile-card {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 96px minmax(0, 1fr);
   align-items: center;
-  justify-items: center;
-  gap: 14px;
+  justify-items: stretch;
+  gap: 28px;
   width: min(calc(100% - 80px), 350px);
   margin: 10px auto 40px;
   padding: 0;
   background: transparent;
-  text-align: center;
+  text-align: left;
 }
 
 .profile-avatar {
@@ -46,7 +46,7 @@
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
-  border-radius: 50%;
+  border-radius: 18px;
   background: var(--em-card);
 }
 
@@ -66,20 +66,8 @@
 .profile-card p {
   margin: 0;
   color: var(--em-text-primary);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.profile-card code {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  margin-top: 7px;
-  color: var(--em-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .settings-list {
@@ -127,20 +115,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: min(calc(100% - 40px), 350px);
+  width: min(calc(100% + 16px), 366px);
   margin: 0 auto;
-}
-
-.settings-back-pill {
-  display: flex;
-  height: 44px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  border-radius: 999px;
-  background: var(--em-card);
-  font-size: 18px;
-  font-weight: 500;
 }
 
 .copied-settings-card {
@@ -439,7 +415,7 @@
   place-items: center;
   overflow: hidden;
   margin: 0 auto 16px;
-  border-radius: 50%;
+  border-radius: 18px;
   background: var(--em-soft-surface);
 }
 
@@ -474,12 +450,6 @@
   outline: 0;
 }
 
-.profile-editor-fields .profile-id-field input {
-  color: var(--em-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-}
-
 .profile-editor-fields label > button {
   display: grid;
   width: 32px;
@@ -488,4 +458,277 @@
   place-items: center;
   border-radius: 50%;
   background: var(--em-card);
+}
+
+.profile-password-row {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+}
+
+.profile-password-row > span {
+  flex: 1;
+  font-size: 17px;
+  letter-spacing: 0.16em;
+}
+
+.profile-password-row button {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--em-card);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.profile-password-row button:disabled {
+  opacity: 0.45;
+}
+
+.profile-password-editor {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--em-card);
+}
+
+.profile-password-editor label {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+}
+
+.profile-password-editor input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--em-text-primary);
+  font: inherit;
+  outline: 0;
+}
+
+.profile-password-editor small {
+  color: #9c4a40;
+  font-size: 11px;
+}
+
+.profile-password-editor > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.profile-password-editor > div button {
+  min-height: 38px;
+  border-radius: 999px;
+  background: var(--em-soft-surface);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-password-editor > div button:last-child {
+  background: var(--em-dark);
+  color: var(--em-on-dark);
+}
+
+.settings-sign-out-button {
+  display: flex;
+  min-height: 48px;
+  min-width: 154px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 2px auto 36px;
+  border-radius: 999px;
+  background: #d7d7d7;
+  color: #1d1d1c;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.ai-style-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-style-options button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-style-options button.is-selected {
+  background: var(--em-dark);
+  color: white;
+}
+
+.mcp-token-card code {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+  user-select: all;
+}
+
+.mcp-proposal-list,
+.mcp-proposal-row,
+.mcp-proposal-row > p {
+  display: grid;
+  gap: 8px;
+}
+
+.mcp-proposal-row {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--em-soft-surface);
+}
+
+.mcp-proposal-row > p {
+  margin: 0;
+  color: var(--em-text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mcp-proposal-row > p span {
+  overflow-wrap: anywhere;
+  color: var(--em-text-muted);
+}
+
+.mcp-proposal-row > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.automation-settings,
+.automation-settings fieldset {
+  display: grid;
+  gap: 8px;
+}
+
+.automation-settings fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.automation-settings legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  color: var(--em-text-secondary);
+  font-size: 12px;
+}
+
+.automation-settings input {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
+}
+
+.export-data-card > p,
+.export-result {
+  margin: 0;
+  color: var(--em-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.export-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--em-soft-surface);
+}
+
+.export-mode-switch button {
+  min-height: 38px;
+  border-radius: 999px;
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.export-mode-switch button.is-selected {
+  background: var(--em-card);
+  color: var(--em-text-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.export-date-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.export-date-fields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--em-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.export-date-fields input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
+}
+
+.export-validation {
+  color: #9c4a40;
+  font-size: 11px;
+}
+
+.export-submit {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: var(--em-dark);
+  color: var(--em-on-dark);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.export-submit:disabled {
+  opacity: 0.45;
 }

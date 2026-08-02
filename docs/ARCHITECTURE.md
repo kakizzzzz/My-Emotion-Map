@@ -37,13 +37,13 @@ Rules enforced by `npm run check:imports`:
 src/
   App.tsx                         root state, effects and screen composition
   app/
-    AppChrome.tsx                 global menu, inbox button, drawer, celebration
+    AppChrome.tsx                 global menu, inbox button and drawer
     appDataRepository.ts          local data validation and persistence
     profilePreferences.ts         local profile preferences
   features/
     calendar/                     calendar and date-detail UI
     chat/                         continuous AI conversation
-    inbox/                        detected-star inbox
+    inbox/                        external observation inbox and Shortcut ingress
     location/                     location permission prompt
     map/                          map, stars and map tools
     notes/                        note reader/editor/revisit flows

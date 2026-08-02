@@ -97,27 +97,6 @@ export const isThemePalette = (value: unknown): value is ThemePalette => {
   );
 };
 
-export const protectThemePaletteContrast = (
-  palette: ThemePalette,
-): ThemePalette => ({
-  page:
-    getContrastRatio('#000000', palette.page) >= 4.5
-      ? palette.page
-      : DEFAULT_THEME.page,
-  card:
-    getContrastRatio('#000000', palette.card) >= 4.5
-      ? palette.card
-      : DEFAULT_THEME.card,
-  icon:
-    getContrastRatio('#000000', palette.icon) >= 3
-      ? palette.icon
-      : DEFAULT_THEME.icon,
-  dark:
-    getContrastRatio('#FFFFFF', palette.dark) >= 4.5
-      ? palette.dark
-      : DEFAULT_THEME.dark,
-});
-
 export const getThemeStyle = (
   palette: ThemePalette,
 ): CSSProperties => {

@@ -1,4 +1,4 @@
-export type AppView = 'map' | 'calendar' | 'chat' | 'settings';
+export type AppView = 'map' | 'calendar' | 'chat' | 'inbox' | 'settings';
 
 export type EmotionKey =
   | 'calm'
@@ -33,7 +33,19 @@ export type EventTimeSource =
   | 'health-sample'
   | 'legacy';
 
-export type EmotionMoment = {
+export type TimePrecision = 'minute' | 'date' | 'unknown';
+
+export type TemporalFields = {
+  occurredAtUtc: string | null;
+  localDate: string;
+  localTime: string;
+  timeZone: string | null;
+  utcOffsetMinutes: number | null;
+  timePrecision: TimePrecision;
+  eventTimeSource: EventTimeSource;
+};
+
+export type EmotionMoment = Partial<TemporalFields> & {
   id: string;
   emotion: EmotionKey | null;
   intensity: number;
@@ -51,11 +63,12 @@ export type EmotionMoment = {
   isInboxDraft?: boolean;
   heartRate?: number;
   source?: 'manual' | 'current-location' | 'photo' | 'inbox';
-  eventTimeSource?: EventTimeSource;
   photoTakenAt?: string;
   photoTakenAtKind?: 'local' | 'offset';
   photoTakenAtSource?: 'DateTimeOriginal' | 'CreateDate';
   importedAt?: string;
+  locationCapturedAt?: string;
+  locationTimeRelation?: 'event' | 'confirmation' | 'manual';
 };
 
 export type PlaceRating =
@@ -72,7 +85,7 @@ export type GuidedAnswer = {
   role?: PromptRole;
 };
 
-export type EmotionNote = {
+export type EmotionNote = Partial<TemporalFields> & {
   id: string;
   title: string;
   titleSource?: TitleSource;
@@ -90,16 +103,22 @@ export type EmotionNote = {
 
 export type ChatRole = 'user' | 'assistant';
 
+export type FollowUpOptionId =
+  | 'lighter'
+  | 'stronger'
+  | 'different'
+  | 'same'
+  | 'skip';
+
+export type LegacyFollowUpResponseKind =
+  | 'legacyPositive'
+  | 'calm'
+  | 'unchanged';
+
 export type ChatOption = {
   id: string;
   label: string;
-  responseKind:
-    | 'positive'
-    | 'calm'
-    | 'stronger'
-    | 'different'
-    | 'unchanged'
-    | 'skip';
+  responseKind: FollowUpOptionId;
 };
 
 export type FollowUpStatus = 'queued' | 'active' | 'answered' | 'skipped';
@@ -110,10 +129,15 @@ export type FollowUpRecord = {
   intervalDays: 1 | 3 | 7;
   dueAt: string;
   status: FollowUpStatus;
-  prompt: string;
+  followUpConsentedAt?: string;
+  promptVersion?: number;
+  responseOptionId?: FollowUpOptionId;
+  answerCommandId?: string;
+  /** Legacy v1-v3 display data, read only during migration. */
+  prompt?: string;
   promptedAt?: string;
   response?: string;
-  responseKind?: ChatOption['responseKind'];
+  responseKind?: FollowUpOptionId | LegacyFollowUpResponseKind;
   answeredVia?: 'chat' | 'inbox';
   answeredAt?: string;
   assistantReply?: string;
@@ -124,6 +148,7 @@ export type ChatMessage = {
   id: string;
   role: ChatRole;
   body: string;
+  kind?: 'message' | 'followup_prompt' | 'followup_answer' | 'followup_reply';
   noteIds?: string[];
   options?: ChatOption[];
   followUpId?: string;
@@ -168,6 +193,11 @@ export type StarInboxItem = {
   longitude?: number;
   locationCapturedAt?: string;
   locationAccuracyMeters?: number;
+  locationTimeRelation?: 'event' | 'confirmation' | 'manual';
+  verification?: 'verified' | 'unverified' | 'test';
+  context?: 'resting' | 'workout' | 'unknown';
+  samples?: Array<{ bpm: number; at: string }>;
+  lowSignalConfidence?: boolean;
   linkedMomentId?: string;
   status: StarInboxStatus;
   seenAt?: string;
@@ -177,6 +207,8 @@ export type StarInboxItem = {
 export type HealthPreferences = {
   restingHeartRateMin: number;
   restingHeartRateMax: number;
+  rangeConfirmed?: boolean;
+  singleSampleEnabled?: boolean;
 };
 
 export type ThemeTone = 'original' | 'terracotta' | 'blue' | 'mauve';
@@ -198,6 +230,12 @@ export type LocalSettings = {
   chatPreferenceTags: string[];
 };
 
+export type MapViewport = {
+  longitude: number;
+  latitude: number;
+  zoom: number;
+};
+
 export type DataMode = 'real' | 'demo';
 
 export type AppDataSnapshot = {
@@ -211,4 +249,7 @@ export type AppDataSnapshot = {
   starInboxItems: StarInboxItem[];
   themeTone: ThemeTone;
   themePalette: ThemePalette;
+  demoAnchorDate?: string;
+  lastConversationId?: string;
+  lastViewport?: MapViewport;
 };

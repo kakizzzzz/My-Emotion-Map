@@ -34,15 +34,13 @@ export const consumeShortcutHeartFragment = ({
     ? hash.slice('#shortcut-heart?'.length)
     : '';
   const parameters = new URLSearchParams(query);
-  if (parameters.get('v') !== '1') return { kind: 'invalid', reason: 'version' };
+  const version = parameters.get('v');
+  if (version !== '1' && version !== '2') return { kind: 'invalid', reason: 'version' };
   const source = parameters.get('src');
   if (source && source !== 'apple-health-shortcut') {
     return { kind: 'invalid', reason: 'source' };
   }
-  const heartRate = Number(parameters.get('hr'));
-  if (!Number.isFinite(heartRate) || heartRate < 20 || heartRate > 260) {
-    return { kind: 'invalid', reason: 'heart-rate' };
-  }
+  if (!preferences.rangeConfirmed) return { kind: 'invalid', reason: 'range-unconfirmed' };
   const rawAt = (parameters.get('at') ?? '').trim().replace(' ', '+');
   const sampledTime = new Date(rawAt).getTime();
   if (!rawAt || Number.isNaN(sampledTime)) {
@@ -53,16 +51,38 @@ export const consumeShortcutHeartFragment = ({
     return { kind: 'invalid', reason: 'freshness' };
   }
   const suppliedId = (parameters.get('eid') ?? '').trim();
+  const context = parameters.get('context') === 'resting' || parameters.get('context') === 'workout'
+    ? parameters.get('context') as 'resting' | 'workout'
+    : 'unknown';
+  const sampleValues = version === '2'
+    ? (parameters.get('samples') ?? '')
+        .split(',')
+        .map(Number)
+        .filter((value) => Number.isFinite(value) && value >= 20 && value <= 260)
+        .slice(0, 12)
+    : [Number(parameters.get('hr'))];
+  if (!sampleValues.length || sampleValues.some((value) => value < 20 || value > 260)) {
+    return { kind: 'invalid', reason: 'heart-rate' };
+  }
+  if (version === '1' && !preferences.singleSampleEnabled) {
+    return { kind: 'invalid', reason: 'single-sample-disabled' };
+  }
+  const sorted = [...sampleValues].sort((left, right) => left - right);
+  const heartRate = sorted[Math.floor(sorted.length / 2)];
   const sourceEventId = EVENT_ID.test(suppliedId)
     ? suppliedId
-    : stableEventId(`${rawAt}|${heartRate}|apple-health-shortcut`);
+    : stableEventId(`${rawAt}|${sampleValues.join(',')}|apple-health-shortcut`);
   if (knownEventIds.has(sourceEventId)) {
     return { kind: 'duplicate', sourceEventId };
   }
-  if (
-    heartRate >= preferences.restingHeartRateMin &&
-    heartRate <= preferences.restingHeartRateMax
-  ) {
+  const outsideCount = sampleValues.filter(
+    (value) =>
+      value < preferences.restingHeartRateMin ||
+      value > preferences.restingHeartRateMax,
+  ).length;
+  if ((version === '2' && context === 'resting' &&
+      sampleValues.length >= 3 && outsideCount < 2) ||
+    (version === '1' && outsideCount === 0)) {
     return { kind: 'within-range', sourceEventId };
   }
   return {
@@ -75,6 +95,11 @@ export const consumeShortcutHeartFragment = ({
       eventAt: rawAt,
       receivedAt: now.toISOString(),
       heartRate: Math.round(heartRate),
+      verification: 'unverified',
+      context,
+      samples: sampleValues.map((bpm) => ({ bpm: Math.round(bpm), at: rawAt })),
+      lowSignalConfidence:
+        version === '1' || sampleValues.length < 3 || context !== 'resting',
       status: 'pending',
     },
   };

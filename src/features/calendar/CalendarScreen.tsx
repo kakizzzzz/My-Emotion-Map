@@ -22,13 +22,14 @@ export function CalendarScreen({
   const [anchor, setAnchor] = useState(getLocalCalendarAnchor);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const dayPageRef = useRef<HTMLDivElement | null>(null);
+  const calendarScrollRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useDialogFocus<HTMLDivElement>({ onEscape: onClose });
 
   const selectedNotes = notes.filter((note) => note.date === selectedDate);
   const todayDateKey = getTodayDateKey();
   const selectCalendarDate = (dateKey: string) => {
     const date = dateFromKey(dateKey);
-    setAnchor({ year: date.getFullYear(), month: date.getMonth() });
+    setAnchor(getCalendarPairAnchor(date));
     setSelectedDate(dateKey);
   };
   const shiftMonth = (offset: number) => {
@@ -40,6 +41,19 @@ export function CalendarScreen({
     if (!selectedDate) return;
     dayPageRef.current?.scrollTo({ top: 0 });
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (selectedDate || mode !== 'month') return;
+    const scroller = calendarScrollRef.current;
+    const today = scroller?.querySelector<HTMLElement>('.calendar-day.is-today');
+    if (!scroller || !today) return;
+    const frame = window.requestAnimationFrame(() => {
+      scroller.scrollTo({
+        top: Math.max(0, today.offsetTop - scroller.clientHeight * 0.42),
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [anchor.month, anchor.year, mode, selectedDate]);
 
   return (
     <section
@@ -170,7 +184,7 @@ export function CalendarScreen({
                   <button
                     onClick={() =>
                       mode === 'month'
-                        ? shiftMonth(-1)
+                        ? shiftMonth(-2)
                         : setAnchor((current) => ({
                             ...current,
                             year: current.year - 1,
@@ -178,21 +192,17 @@ export function CalendarScreen({
                     }
                     aria-label={
                       mode === 'month'
-                        ? copy.calendar.previousMonth
+                        ? copy.calendar.previousPeriod
                         : copy.calendar.previousYear
                     }
                   >
                     <ChevronLeft size={20} strokeWidth={2.2} />
                   </button>
-                  <strong>
-                    {mode === 'month'
-                      ? `${copy.calendar.yearLabel(anchor.year)} · ${copy.calendar.monthLabel(anchor.month + 1)}`
-                      : copy.calendar.yearLabel(anchor.year)}
-                  </strong>
+                  <strong>{copy.calendar.yearLabel(anchor.year)}</strong>
                   <button
                     onClick={() =>
                       mode === 'month'
-                        ? shiftMonth(1)
+                        ? shiftMonth(2)
                         : setAnchor((current) => ({
                             ...current,
                             year: current.year + 1,
@@ -200,7 +210,7 @@ export function CalendarScreen({
                     }
                     aria-label={
                       mode === 'month'
-                        ? copy.calendar.nextMonth
+                        ? copy.calendar.nextPeriod
                         : copy.calendar.nextYear
                     }
                   >
@@ -208,7 +218,7 @@ export function CalendarScreen({
                   </button>
                 </nav>
                 {mode === 'month' ? (
-                  <div className="calendar-scroll">
+                  <div ref={calendarScrollRef} className="calendar-scroll">
                     <MonthSection
                       year={anchor.year}
                       month={anchor.month}
@@ -217,8 +227,8 @@ export function CalendarScreen({
                       onSelectDate={selectCalendarDate}
                     />
                     <MonthSection
-                      year={anchor.month === 11 ? anchor.year + 1 : anchor.year}
-                      month={(anchor.month + 1) % 12}
+                      year={anchor.year}
+                      month={anchor.month + 1}
                       notes={notes}
                       todayDateKey={todayDateKey}
                       onSelectDate={selectCalendarDate}
@@ -229,7 +239,10 @@ export function CalendarScreen({
                     year={anchor.year}
                     notes={notes}
                     onSelectMonth={(month) => {
-                      setAnchor({ year: anchor.year, month });
+                      setAnchor({
+                        year: anchor.year,
+                        month: Math.floor(month / 2) * 2,
+                      });
                       setMode('month');
                     }}
                   />
@@ -458,7 +471,14 @@ export function getTodayDateKey() {
 
 export function getLocalCalendarAnchor() {
   const today = new Date();
-  return { year: today.getFullYear(), month: today.getMonth() };
+  return getCalendarPairAnchor(today);
+}
+
+export function getCalendarPairAnchor(date: Date) {
+  return {
+    year: date.getFullYear(),
+    month: Math.floor(date.getMonth() / 2) * 2,
+  };
 }
 
 export function getWeekDateKeys(dateKey: string) {

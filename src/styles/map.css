@@ -101,6 +101,12 @@
   height: 52px;
   place-items: center;
   overflow: visible;
+  cursor: grab;
+  touch-action: none;
+}
+
+.map-star-anchor:active {
+  cursor: grabbing;
 }
 
 .current-location-marker,

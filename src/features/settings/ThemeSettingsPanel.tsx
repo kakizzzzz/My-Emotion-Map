@@ -145,9 +145,6 @@ export function ThemeSettingsPanel({
           </div>
         ))}
       </div>
-      <p className="settings-honesty-note">
-        {copy.settings.themeContrastNotice}
-      </p>
     </section>
   );
 }

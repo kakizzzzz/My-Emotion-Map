@@ -1,9 +1,10 @@
-import type { DataMode, LocalSettings } from '../types';
+import type { LocalSettings } from '../types';
 import type { AppLanguage } from '../i18n';
+import { isSupabaseProfileId } from '../domain/profileIdentity';
 import {
-  DEMO_PROFILE_IDENTITY,
-  isSupabaseProfileId,
-} from '../domain/profileIdentity';
+  DEVICE_PREFERENCES_STORAGE_KEY,
+  userPreferencesStorageKey,
+} from './workspace/workspaceStorage';
 
 export const LOCAL_SETTINGS_STORAGE_KEY =
   'my-emotion-map.local-settings.v1';
@@ -18,14 +19,8 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   chatPreferenceTags: [],
 };
 
-export const createDefaultLocalSettings = (
-  dataMode: DataMode = 'real',
-): LocalSettings => ({
+export const createDefaultLocalSettings = (): LocalSettings => ({
   ...DEFAULT_LOCAL_SETTINGS,
-  profileId:
-    dataMode === 'demo' ? DEMO_PROFILE_IDENTITY.id : '',
-  profileName:
-    dataMode === 'demo' ? DEMO_PROFILE_IDENTITY.displayName : '',
   aiToneTags: [],
   chatPreferenceTags: [],
 });
@@ -48,14 +43,19 @@ const COMMUNICATION_TAG_ALIASES: Record<string, string> = {
 const isLanguage = (value: unknown): value is AppLanguage =>
   value === 'zh' || value === 'en' || value === 'ko';
 
-export const loadLocalSettings = (
-  dataMode: DataMode = 'real',
-): LocalSettings => {
-  const defaults = createDefaultLocalSettings(dataMode);
+export const loadLocalSettings = (userId: string | null = null): LocalSettings => {
+  const defaults = createDefaultLocalSettings();
   try {
-    const stored = window.localStorage.getItem(LOCAL_SETTINGS_STORAGE_KEY);
-    if (!stored) return defaults;
-    const parsed = JSON.parse(stored) as Partial<LocalSettings>;
+    const deviceStored = window.localStorage.getItem(
+      DEVICE_PREFERENCES_STORAGE_KEY,
+    );
+    const device = deviceStored
+      ? (JSON.parse(deviceStored) as Partial<LocalSettings>)
+      : {};
+    const stored = userId
+      ? window.localStorage.getItem(userPreferencesStorageKey(userId))
+      : null;
+    const parsed = stored ? (JSON.parse(stored) as Partial<LocalSettings>) : {};
     const storedProfileName =
       typeof parsed.profileName === 'string'
         ? parsed.profileName.trim().slice(0, 80)
@@ -67,7 +67,7 @@ export const loadLocalSettings = (
         ? parsed.profileId
         : defaults.profileId,
       profileName: storedProfileName || defaults.profileName,
-      language: isLanguage(parsed.language) ? parsed.language : 'zh',
+      language: isLanguage(device.language) ? device.language : 'zh',
       aboutMe:
         typeof parsed.aboutMe === 'string' ? parsed.aboutMe.slice(0, 2_000) : '',
       aiToneTags: Array.isArray(parsed.aiToneTags)
@@ -88,12 +88,21 @@ export const loadLocalSettings = (
   }
 };
 
-export const saveLocalSettings = (settings: LocalSettings) => {
+export const saveLocalSettings = (
+  settings: LocalSettings,
+  userId: string | null = null,
+) => {
   try {
     window.localStorage.setItem(
-      LOCAL_SETTINGS_STORAGE_KEY,
-      JSON.stringify(settings),
+      DEVICE_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({ language: settings.language }),
     );
+    if (userId) {
+      window.localStorage.setItem(
+        userPreferencesStorageKey(userId),
+        JSON.stringify(settings),
+      );
+    }
     return true;
   } catch {
     return false;
@@ -111,8 +120,8 @@ export const createAvatarDataUrl = (file: File): Promise<string> =>
         const sourceX = (image.naturalWidth - cropSize) / 2;
         const sourceY = (image.naturalHeight - cropSize) / 2;
         const canvas = document.createElement('canvas');
-        canvas.width = 384;
-        canvas.height = 384;
+        canvas.width = 192;
+        canvas.height = 192;
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Canvas is unavailable');
         context.drawImage(
@@ -123,10 +132,19 @@ export const createAvatarDataUrl = (file: File): Promise<string> =>
           cropSize,
           0,
           0,
-          384,
-          384,
+          192,
+          192,
         );
-        resolve(canvas.toDataURL('image/webp', 0.84));
+        let quality = 0.82;
+        let result = canvas.toDataURL('image/webp', quality);
+        while (result.length > 160_000 && quality > 0.45) {
+          quality -= 0.08;
+          result = canvas.toDataURL('image/webp', quality);
+        }
+        if (result.length > 165_000) {
+          throw new Error('Avatar exceeds the local storage budget');
+        }
+        resolve(result);
       } catch (error) {
         reject(error);
       } finally {

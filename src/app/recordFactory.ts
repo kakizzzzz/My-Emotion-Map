@@ -2,6 +2,7 @@ import type { AppLanguage } from '../i18n';
 import { createGuidedAnswers } from '../domain/notePrompts';
 import type { EmotionMoment, EmotionNote, EventTimeSource } from '../types';
 import { createRecordId } from './createRecordId';
+import { createTemporalFields } from '../domain/time/temporal';
 
 export type RecordSource = NonNullable<EmotionMoment['source']>;
 
@@ -20,6 +21,8 @@ export type CreateRecordInput = {
   importedAt?: string;
   heartRate?: number;
   isInboxDraft?: boolean;
+  locationCapturedAt?: string;
+  locationTimeRelation?: EmotionMoment['locationTimeRelation'];
 };
 
 const localDateTime = (now = new Date()) => ({
@@ -34,20 +37,29 @@ export const createRecord = (input: CreateRecordInput): { moment: EmotionMoment;
   const momentId = createRecordId('moment');
   const noteId = createRecordId('note');
   const fallbackTitle = input.place ? `${input.place} · ${date}` : '';
+  const temporal = createTemporalFields({
+    localDate: date,
+    localTime: time,
+    source: input.eventTimeSource ?? 'device-created',
+    sourceTimestamp: input.photoTakenAt,
+  });
   const moment: EmotionMoment = {
     id: momentId, noteId, emotion: null, intensity: 0, place: input.place,
     date, time, longitude: input.longitude, latitude: input.latitude,
     placeRating: null, isNew: true, source: input.source,
-    eventTimeSource: input.eventTimeSource ?? 'device-created',
+    ...temporal,
     photoTakenAt: input.photoTakenAt, photoTakenAtKind: input.photoTakenAtKind,
     photoTakenAtSource: input.photoTakenAtSource, importedAt: input.importedAt,
     heartRate: input.heartRate, isInboxDraft: input.isInboxDraft,
+    locationCapturedAt: input.locationCapturedAt,
+    locationTimeRelation: input.locationTimeRelation,
   };
   const note: EmotionNote = {
     id: noteId, title: fallbackTitle, titleSource: 'fallback', place: input.place,
     date, time, emotion: null, placeRating: null, excerpt: '',
     answers: createGuidedAnswers(input.language), isDraft: true,
     followUpEnabled: false,
+    ...temporal,
   };
   return { moment, note };
 };

@@ -6,7 +6,7 @@ const allowedOrigins = () => new Set(
 
 export const corsHeaders = (origin: string) => ({
   'access-control-allow-origin': origin,
-  'access-control-allow-headers': 'authorization, content-type, apikey',
+  'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type',
   'access-control-allow-methods': 'POST, OPTIONS',
   'vary': 'origin',
 });

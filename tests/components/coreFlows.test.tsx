@@ -3,8 +3,12 @@ import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_THEME } from '../../src/app/themePreferences';
-import { CalendarScreen } from '../../src/features/calendar/CalendarScreen';
+import {
+  CalendarScreen,
+  getCalendarPairAnchor,
+} from '../../src/features/calendar/CalendarScreen';
 import { ChatScreen } from '../../src/features/chat/ChatScreen';
+import { LoginScreen } from '../../src/features/auth/LoginScreen';
 import { NoteEditorSheet } from '../../src/features/notes/NoteEditorSheet';
 import { SettingsScreen } from '../../src/features/settings/SettingsScreen';
 import type { EmotionMoment, EmotionNote } from '../../src/types';
@@ -101,10 +105,13 @@ describe('core component flows', () => {
     await user.click(
       screen.getByRole('button', { name: '继续到引导问题' }),
     );
+    await screen.findByRole('heading', { name: '你去这做什么？' });
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
+    await screen.findByRole('heading', { name: '这里有什么让你注意到的？' });
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
+    await screen.findByRole('heading', { name: '你想为以后留下什么？' });
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
-    await user.click(screen.getByRole('button', { name: '点击保存' }));
+    await user.click(await screen.findByRole('button', { name: '点击保存' }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave.mock.calls[0][1]).toMatchObject({
@@ -199,6 +206,55 @@ describe('core component flows', () => {
     ).toBeInTheDocument();
   });
 
+  it('anchors every calendar page to a fixed two-month pair', () => {
+    expect(getCalendarPairAnchor(new Date(2026, 0, 18, 12))).toEqual({
+      year: 2026,
+      month: 0,
+    });
+    expect(getCalendarPairAnchor(new Date(2026, 1, 18, 12))).toEqual({
+      year: 2026,
+      month: 0,
+    });
+    expect(getCalendarPairAnchor(new Date(2026, 2, 18, 12))).toEqual({
+      year: 2026,
+      month: 2,
+    });
+    expect(getCalendarPairAnchor(new Date(2026, 11, 18, 12))).toEqual({
+      year: 2026,
+      month: 10,
+    });
+  });
+
+  it('uses account and password login without exposing an email field', async () => {
+    const user = userEvent.setup();
+    const onAuthenticate = vi.fn().mockResolvedValue('signed_in');
+    renderWithLanguage(
+      <LoginScreen
+        ready
+        configured
+        onAuthenticate={onAuthenticate}
+        onOpenDemo={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText('邮箱')).not.toBeInTheDocument();
+    expect(document.querySelector('.login-map-background svg')).toBeInTheDocument();
+    expect(document.querySelector('.login-world-map-dot')).not.toBeInTheDocument();
+    expect(
+      document.querySelectorAll('.login-water-contour[data-water-group="flow"]'),
+    ).toHaveLength(5);
+    await user.type(screen.getByLabelText('账号'), 'student_01');
+    await user.type(screen.getByLabelText('密码'), 'safe-pass-123');
+    await user.click(screen.getByRole('button', { name: '登录' }));
+
+    expect(onAuthenticate).toHaveBeenCalledWith(
+      'login',
+      'student_01',
+      'safe-pass-123',
+      '',
+    );
+  });
+
   it('closes settings through a discoverable button', async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
@@ -217,6 +273,26 @@ describe('core component flows', () => {
         locationRequestState="idle"
         onRequestLocation={() => undefined}
         onToast={() => undefined}
+        cloudConfigured
+        cloudUserId="00000000-0000-4000-8000-000000000001"
+        cloudAccount="student_01"
+        cloudStatus="synced"
+        onSignOut={async () => undefined}
+        onUpdatePassword={async () => 'success'}
+        onConfirmInitialUpload={() => undefined}
+        onUseRemoteVersion={() => undefined}
+        onOverwriteRemote={() => undefined}
+        onCreateAutomationTest={() => undefined}
+        onIssueMcpToken={async () => null}
+        onRevokeAllMcpTokens={async () => true}
+        healthPreferences={{
+          restingHeartRateMin: 60,
+          restingHeartRateMax: 100,
+          rangeConfirmed: false,
+          singleSampleEnabled: false,
+        }}
+        onHealthPreferences={() => true}
+        onIssueShortcutPairing={async () => null}
         onBack={onBack}
       />,
     );
@@ -238,16 +314,19 @@ describe('core component flows', () => {
         cloudStatus="signed_out"
         dataMode="real"
         onGroundedChat={vi.fn()}
+        onNewConversation={vi.fn()}
+        onExitToMap={vi.fn()}
+        onToast={vi.fn()}
       />,
     );
 
-    expect(screen.getByText('有证据边界的 AI 对话')).toBeInTheDocument();
-    expect(screen.getByText(/请先在设置中登录/)).toBeInTheDocument();
+    expect(document.querySelector('.message-bubble')).toBeNull();
     expect(
       screen.getByRole('textbox', { name: /请先在设置中登录/ }),
     ).toBeDisabled();
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '新的对话' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '新的对话' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '返回地图并打开导航' })).toBeEnabled();
     expect(onAnswer).not.toHaveBeenCalled();
   });
 });
