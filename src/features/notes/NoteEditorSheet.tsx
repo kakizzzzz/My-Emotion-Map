@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Check, ChevronLeft, ChevronRight, Mic, Plus, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { EMOTION_ORDER } from "../../data";
@@ -29,14 +29,12 @@ import { useDialogFocus } from '../../app/useDialogFocus';
 export function NoteEditorSheet({
   moment,
   note,
-  onClose,
   onSave,
   onToast,
   photoAssistDelivery = null,
 }: {
   moment: EmotionMoment;
   note: EmotionNote;
-  onClose: () => void;
   onSave: (
     momentId: string,
     note: EmotionNote,
@@ -80,40 +78,8 @@ export function NoteEditorSheet({
   const currentPrompt = prompts[promptIndex];
   const isLastPrompt = promptIndex === prompts.length - 1;
   const isPromptComplete = questionsComplete || !currentPrompt;
-  const hasUnsavedChanges = useMemo(
-    () =>
-      title !== initialTitle ||
-      place !== (note.place || moment.place) ||
-      emotion !== note.emotion ||
-      placeRating !== note.placeRating ||
-      followUp !== (note.followUpEnabled ?? false) ||
-      JSON.stringify(answers) !==
-        JSON.stringify(normalizeGuidedAnswers(note.answers)),
-    [
-      answers,
-      emotion,
-      followUp,
-      moment.place,
-      note,
-      initialTitle,
-      place,
-      placeRating,
-      title,
-    ],
-  );
-
   const requestClose = () => {
-    if (moment.isNew) {
-      save();
-      return;
-    }
-    if (
-      hasUnsavedChanges &&
-      !window.confirm(copy.note.discardConfirm)
-    ) {
-      return;
-    }
-    onClose();
+    save();
   };
   const editorDialogRef = useDialogFocus<HTMLElement>({
     isOpen: !addQuestionOpen,
@@ -395,7 +361,7 @@ export function NoteEditorSheet({
             <button
               className="note-header-action popup-close-button"
               onClick={requestClose}
-              aria-label={moment.isNew ? copy.note.closeAndSave : copy.note.discard}
+              aria-label={copy.note.closeAndSave}
             >
               <X size={19} strokeWidth={2.2} />
             </button>
@@ -609,6 +575,16 @@ export function NoteEditorSheet({
                             );
                           }}
                         />
+                        <button
+                          type="button"
+                          className="prompt-skip-guide-button"
+                          onClick={() => {
+                            questionsTouchedRef.current = true;
+                            setQuestionsComplete(true);
+                          }}
+                        >
+                          {copy.note.skipGuidedQuestions}
+                        </button>
                         <div className="prompt-step-actions">
                           <button
                             className="prompt-arrow-button"

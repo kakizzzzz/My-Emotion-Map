@@ -64,7 +64,6 @@ const PhotoAssistHarness = () => {
       <NoteEditorSheet
         moment={{ ...draftMoment, source: 'photo' }}
         note={draftNote}
-        onClose={() => undefined}
         onSave={() => undefined}
         onToast={() => undefined}
         photoAssistDelivery={delivery}
@@ -85,7 +84,6 @@ describe('core component flows', () => {
       <NoteEditorSheet
         moment={draftMoment}
         note={draftNote}
-        onClose={() => undefined}
         onSave={onSave}
         onToast={() => undefined}
       />,
@@ -106,11 +104,7 @@ describe('core component flows', () => {
       screen.getByRole('button', { name: '继续到引导问题' }),
     );
     await screen.findByRole('heading', { name: '你去这做什么？' });
-    await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
-    await screen.findByRole('heading', { name: '这里有什么让你注意到的？' });
-    await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
-    await screen.findByRole('heading', { name: '你想为以后留下什么？' });
-    await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
+    await user.click(screen.getByRole('button', { name: '跳过引导' }));
     await user.click(await screen.findByRole('button', { name: '点击保存' }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -122,16 +116,14 @@ describe('core component flows', () => {
     expect(onSave.mock.calls[0][3]).toBe('safe');
   });
 
-  it('confirms before discarding changes to an existing record', async () => {
+  it('saves partial changes when an existing record is closed', async () => {
     const user = userEvent.setup();
-    const onClose = vi.fn();
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onSave = vi.fn();
     renderWithLanguage(
       <NoteEditorSheet
         moment={{ ...draftMoment, isNew: false, emotion: 'mixed', placeRating: 'neutral' }}
         note={{ ...draftNote, isDraft: false, emotion: 'mixed', placeRating: 'neutral' }}
-        onClose={onClose}
-        onSave={() => undefined}
+        onSave={onSave}
         onToast={() => undefined}
       />,
     );
@@ -140,13 +132,15 @@ describe('core component flows', () => {
       screen.getByRole('textbox', { name: '给这一刻起个名字' }),
       '未保存',
     );
-    await user.click(screen.getByRole('button', { name: '先不保存' }));
-    expect(confirm).toHaveBeenCalled();
-    expect(onClose).not.toHaveBeenCalled();
-
-    confirm.mockReturnValue(true);
-    await user.click(screen.getByRole('button', { name: '先不保存' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await user.click(
+      screen.getByRole('button', { name: '关闭并保存为正式记录' }),
+    );
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][1]).toMatchObject({
+      title: '未保存',
+      emotion: 'mixed',
+      placeRating: 'neutral',
+    });
   });
 
   it('finalizes a new record with unknown values when it is closed', async () => {
@@ -156,7 +150,6 @@ describe('core component flows', () => {
       <NoteEditorSheet
         moment={draftMoment}
         note={draftNote}
-        onClose={() => undefined}
         onSave={onSave}
         onToast={() => undefined}
       />,

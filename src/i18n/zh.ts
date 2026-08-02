@@ -174,6 +174,7 @@ export const zhCopy = {
     retry: '重试',
     noFollowUpTitle: '暂时没有待处理回访',
     noFollowUpBody: '到期且获得同意的回访会出现在这里。',
+    positiveCelebration: '已经记下这次轻了一些。',
   },
   note: {
     recordLabel: '星星记录',
@@ -202,6 +203,7 @@ export const zhCopy = {
     skipEmotion: '暂时不知道，稍后填写',
     skipPlaceRating: '暂不填写地点感受',
     skipQuestion: '跳过这个问题',
+    skipGuidedQuestions: '跳过引导',
     addQuestion: '新增问题',
     deleteQuestion: '删除当前问题',
     customQuestionPlaceholder: '自己写一个问题',

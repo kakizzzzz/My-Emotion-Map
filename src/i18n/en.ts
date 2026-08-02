@@ -176,6 +176,7 @@ export const enCopy: AppCopy = {
     retry: 'Retry',
     noFollowUpTitle: 'No follow-up is due',
     noFollowUpBody: 'Consented follow-ups appear here after their scheduled time.',
+    positiveCelebration: 'This lighter change has been saved.',
   },
   note: {
     recordLabel: 'Star record',
@@ -204,6 +205,7 @@ export const enCopy: AppCopy = {
     skipEmotion: 'Not sure yet — fill in later',
     skipPlaceRating: 'Fill in the place feeling later',
     skipQuestion: 'Skip this question',
+    skipGuidedQuestions: 'Skip guided questions',
     addQuestion: 'Add question',
     deleteQuestion: 'Delete current question',
     customQuestionPlaceholder: 'Write your own question',

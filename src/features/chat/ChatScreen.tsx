@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import {
@@ -38,6 +39,18 @@ import type { CloudSyncStatus } from '../../services/useCloudSync';
 import { requestEmotionChat } from '../../services/emotionChat';
 import type { ToastHandler } from '../../app/appTypes';
 import { loadLocalSettings } from '../../app/profilePreferences';
+import { STAR_COLORS } from '../../domain/notePrompts';
+
+const POSITIVE_CONFETTI = Array.from({ length: 20 }, (_, index) => ({
+  color: STAR_COLORS[index % 9],
+  left: 4 + ((index * 37) % 92),
+  drift: -46 + ((index * 29) % 92),
+  delay: (index % 5) * 0.055,
+  duration: 1.05 + (index % 4) * 0.12,
+  rotation: 180 + ((index * 73) % 360),
+  width: index % 3 === 0 ? 8 : 6,
+  height: index % 2 === 0 ? 17 : 13,
+}));
 
 function AiAvatar() {
   return (
@@ -104,7 +117,9 @@ export function ChatScreen({
   const [failedMessage, setFailedMessage] = useState<string | null>(null);
   const [showJumpToEnd, setShowJumpToEnd] = useState(false);
   const [unreadBelow, setUnreadBelow] = useState(0);
+  const [positiveCelebration, setPositiveCelebration] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  const celebrationTimerRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -155,6 +170,23 @@ export function ChatScreen({
     },
     [cloudAuth],
   );
+
+  useEffect(() => () => {
+    if (celebrationTimerRef.current !== null) {
+      window.clearTimeout(celebrationTimerRef.current);
+    }
+  }, []);
+
+  const celebratePositiveChange = () => {
+    setPositiveCelebration((current) => current + 1);
+    if (celebrationTimerRef.current !== null) {
+      window.clearTimeout(celebrationTimerRef.current);
+    }
+    celebrationTimerRef.current = window.setTimeout(() => {
+      setPositiveCelebration(0);
+      celebrationTimerRef.current = null;
+    }, 1_700);
+  };
 
   const scrollToEnd = useCallback((behavior: ScrollBehavior) => {
     const target = endRef.current;
@@ -278,6 +310,34 @@ export function ChatScreen({
 
   return (
     <section className="paper-screen chat-screen" aria-busy={sending}>
+      {positiveCelebration > 0 ? (
+        <>
+          <div
+            key={positiveCelebration}
+            className="positive-confetti"
+            aria-hidden="true"
+          >
+            {POSITIVE_CONFETTI.map((piece, index) => (
+              <i
+                key={index}
+                style={{
+                  '--confetti-left': `${piece.left}%`,
+                  '--confetti-drift': `${piece.drift}px`,
+                  '--confetti-delay': `${piece.delay}s`,
+                  '--confetti-duration': `${piece.duration}s`,
+                  '--confetti-rotation': `${piece.rotation}deg`,
+                  '--confetti-width': `${piece.width}px`,
+                  '--confetti-height': `${piece.height}px`,
+                  '--confetti-color': piece.color,
+                } as CSSProperties}
+              />
+            ))}
+          </div>
+          <span className="visually-hidden" role="status">
+            {copy.chat.positiveCelebration}
+          </span>
+        </>
+      ) : null}
       <header className="chat-header chat-header--thread">
         <div>
           <h1>{isFollowUp ? copy.navigation.chat : conversation.title}</h1>
@@ -379,13 +439,17 @@ export function ChatScreen({
                       {followUpOptions.map((option) => (
                         <button
                           key={option.id}
-                          onClick={() =>
+                          data-option={option.id}
+                          onClick={() => {
                             onAnswerFollowUp(
                               followUp.id,
                               option.label,
                               option.responseKind,
-                            )
-                          }
+                            );
+                            if (option.responseKind === 'lighter') {
+                              celebratePositiveChange();
+                            }
+                          }}
                         >
                           {option.label}
                         </button>
