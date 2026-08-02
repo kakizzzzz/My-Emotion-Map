@@ -274,3 +274,29 @@ Phase 6 evidence:
   non-writing `supabase db push --dry-run` attempts reached only the connection
   stage and then timed out/terminated; no SQL or remote change occurred. Phase
   6 adds no migration, so production deployment remains a Phase 7 decision.
+
+## Phase 7 — Release gates and production smoke
+
+Status: backend deployed; GitHub Pages release uses the Phase 7 checkpoint.
+Hardware and two-owner smoke items that require user-controlled devices or
+credentials remain explicitly blocked rather than fabricated.
+
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| Rewrite behavior-preserving tests | fixed | current tests enforce account-only entry, explicit editor exits, direct Chat navigation, grounded retrieval state, equal-width AI settings and non-fake Shortcut setup |
+| Dead/oversized settings CSS | fixed | Apple automation styles moved to a focused stylesheet; the 120-file source-size hard gate passes |
+| Local quality before deploy | passed | typecheck, ESLint, 43 Vitest files / 210 tests, import boundaries and production build; Playwright 9/9 Chromium Mobile and 9/9 WebKit iPhone |
+| Dedicated Supabase migrations | deployed | SQL Editor transaction committed versions `202608020001`–`202608020005`; a readback returned exactly those five latest rows |
+| Edge Functions and secrets | deployed | seven functions read back ACTIVE with intended JWT boundaries; required provider, MCP and encrypted My Life Memory settings exist only as Edge secrets |
+| Unauthenticated endpoint denial | passed | photo, chat, My Life Memory connection, Shortcut, read MCP and action MCP each returned HTTP 401 without credentials |
+| iPhone Shortcut | blocked | no device-verified iCloud share link exists; pairing remains disabled and no install/test success is claimed |
+| Supabase account A/B | blocked | requires two disposable real owner sessions; static RLS/RPC tests pass but no production identities were invented |
+| My Life Memory MCP owner token | blocked | fixed endpoint and full manifest fingerprint are configured, but a real owner-generated token is still required for connect/test/disconnect smoke |
+| Emotion Map MCP client | blocked | requires real output/action tokens for handshake, expiry/revocation, cross-owner denial, `last_used_at` and proposal confirmation smoke |
+
+The direct CLI Postgres channel was unavailable from this host during the write.
+The same five migrations were therefore applied as one explicit transaction in
+the authenticated Supabase SQL Editor for project `uifgpmmlvmfrauzbbrem`; any
+statement failure would have rolled back the transaction. CLI/API operations
+were still used for project/secret/function verification. No other Supabase
+project and no My Life Memory code or cloud resource was changed.

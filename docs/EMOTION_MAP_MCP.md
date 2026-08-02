@@ -62,8 +62,13 @@ logs, errors or build output.
 
 ## Deployment status
 
-The Phase 5 code and migration are locally implemented. This document does not
-claim that migration `202608020005_phase5_output_mcp.sql`, either MCP endpoint,
-or a production client handshake has been deployed or verified. Cross-account,
-expiry/revocation, modern-client and action-confirmation smoke tests remain
-release gates.
+Migration `202608020005_phase5_output_mcp.sql`, both MCP endpoints, the exact
+Origin allowlist and the continuation signing secret were deployed to the
+dedicated My Emotion Map project on 2026-08-02. Both endpoints are ACTIVE with
+gateway JWT verification disabled because they authenticate only their own
+hashed output/action bearer tokens. Unauthenticated POST requests return HTTP
+401.
+
+A production MCP client handshake, two-account denial, token expiry/revocation,
+`last_used_at` update and proposal confirmation smoke still require real
+owner-issued test tokens and remain release gates.

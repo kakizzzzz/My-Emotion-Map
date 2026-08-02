@@ -15,6 +15,22 @@ generate a 30-day pairing code and run a real connection test. The pairing
 token is shown once, stored only as a SHA-256 hash on the server and revoked
 separately from MCP access tokens.
 
+### User setup
+
+1. Open Settings → AI settings → Apple Health automation.
+2. Install the companion Shortcut on the iPhone. If the app says the install
+   link is unavailable, stop: no device-verified Shortcut has been released and
+   the app intentionally keeps pairing disabled.
+3. Confirm the resting range. Only out-of-range resting samples are eligible
+   for review by default.
+4. Generate the one-time pairing code and paste it into the installed Shortcut.
+5. Run the in-app device test. After it succeeds, optionally create a Shortcuts
+   automation using an iOS-supported time, App or Workout trigger.
+
+The web page itself never reads Apple Health in the background. Advanced review
+rules stay folded unless the user chooses to change the default resting-only
+policy.
+
 The Shortcut sends one authenticated request to
 `/functions/v1/shortcut-ingress`:
 
@@ -79,8 +95,10 @@ current contracts are documented in `MY_LIFE_MEMORY_CONNECTION.md` and
 
 ## Deployment status
 
-The Shortcut application code and migrations are implemented and locally
-tested in this repository. This document does not claim that the migrations,
-Edge Functions or an iCloud share link have been production-verified.
-Production Supabase A/B and real-iPhone Shortcut smoke tests remain release
-gates.
+Migrations through `202608020005` and the `shortcut-ingress` Edge Function were
+deployed to the dedicated My Emotion Map Supabase project on 2026-08-02. The
+deployed endpoint rejects an unauthenticated request with HTTP 401.
+
+No device-verified iCloud Shortcut share link is configured or claimed. The UI
+therefore keeps pairing and testing unavailable. A real-iPhone install,
+delivery/readback smoke and two-account isolation smoke remain release gates.

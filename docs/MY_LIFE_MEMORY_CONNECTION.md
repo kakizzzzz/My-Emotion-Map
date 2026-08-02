@@ -19,7 +19,13 @@ untrusted data: it cannot override instructions, count as an Emotion Map local
 pattern or create/edit either product's records. Disconnect deletes the owner
 connection row.
 
+The fixed endpoint, canonical nine-tool manifest SHA-256 and a new AES-GCM
+credential key were configured as Edge Function secrets in the dedicated My
+Emotion Map project on 2026-08-02. The migration and connection/chat functions
+were deployed; an unauthenticated request is rejected with HTTP 401. No My Life
+Memory code or cloud project was changed.
+
 Production connect/test/disconnect and two-account smoke are not yet claimed.
-They require the fixed endpoint, canonical manifest SHA-256, credential
-encryption key and a real owner-generated token to be configured only as Edge
-Function secrets in the dedicated My Emotion Map project.
+They require a real owner to generate a My Life Memory MCP token and connect it
+through this app; that token must never be placed in source, documentation or a
+frontend environment variable.
