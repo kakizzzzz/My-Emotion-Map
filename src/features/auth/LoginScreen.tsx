@@ -12,7 +12,6 @@ export function LoginScreen({
   ready,
   configured,
   onAuthenticate,
-  onOpenDemo,
 }: {
   ready: boolean;
   configured: boolean;
@@ -22,7 +21,6 @@ export function LoginScreen({
     password: string,
     passwordConfirmation: string,
   ) => Promise<AuthResult>;
-  onOpenDemo: () => void;
 }) {
   const { copy, language, setLanguage } = useAppLanguage();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -94,18 +92,20 @@ export function LoginScreen({
   return (
     <section className="login-screen" aria-label={copy.auth.loginTitle}>
       <LoginWaterBackground />
-      <div className="login-language-switch" aria-label={copy.settings.language}>
-        {LANGUAGE_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={language === option.value ? 'is-selected' : ''}
-            onClick={() => setLanguage(option.value)}
-            aria-pressed={language === option.value}
-          >
-            {option.value === 'zh' ? '中' : option.value === 'ko' ? '한' : 'EN'}
-          </button>
-        ))}
+      <div className="login-top-controls">
+        <div className="login-language-switch" aria-label={copy.settings.language}>
+          {LANGUAGE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={language === option.value ? 'is-selected' : ''}
+              onClick={() => setLanguage(option.value)}
+              aria-pressed={language === option.value}
+            >
+              {option.value === 'zh' ? '中' : option.value === 'ko' ? '한' : 'EN'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {!ready ? (
@@ -217,17 +217,10 @@ export function LoginScreen({
                   : copy.auth.register}
               </button>
             </div>
-            <button
-              type="button"
-              className="login-demo-action"
-              onClick={onOpenDemo}
-              disabled={busy}
-            >
-              {copy.demo.label}
-            </button>
           </div>
         </form>
       )}
+
     </section>
   );
 }

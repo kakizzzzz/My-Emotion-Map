@@ -1,4 +1,12 @@
 import { env, jsonResponse, readJsonBody, runtime } from '../_shared/runtime.ts';
+import {
+  evaluateHeartObservation,
+  HEART_ALGORITHM_VERSION,
+  SHORTCUT_VERSION,
+  type HeartContext,
+  type HeartObservationPreferences,
+  type HeartSample,
+} from '../_shared/heartObservationV3.ts';
 
 type ShortcutToken = {
   id: string;
@@ -7,11 +15,15 @@ type ShortcutToken = {
   resting_max: number;
   expires_at: string;
   revoked_at: string | null;
+  algorithm_version: string;
+  shortcut_version: string;
+  single_sample_enabled: boolean;
+  workout_policy: HeartObservationPreferences['workoutPolicy'];
+  unknown_policy: HeartObservationPreferences['unknownPolicy'];
+  cooldown_minutes: number;
 };
-type Sample = { bpm: number; at: string };
 
 const EVENT_ID = /^[A-Za-z0-9._:-]{1,180}$/;
-const OFFSET_TIME = /(Z|[+-]\d{2}:?\d{2})$/i;
 const serviceHeaders = () => ({
   apikey: env('SUPABASE_SERVICE_ROLE_KEY'),
   authorization: `Bearer ${env('SUPABASE_SERVICE_ROLE_KEY')}`,
@@ -35,13 +47,19 @@ const authenticate = async (request: Request): Promise<ShortcutToken | null> => 
   const hash = await sha256(authorization.slice(7));
   const response = await fetch(
     `${env('SUPABASE_URL')}/rest/v1/shortcut_tokens?token_hash=eq.${hash}` +
-      '&select=id,user_id,resting_min,resting_max,expires_at,revoked_at&limit=1',
+      '&select=id,user_id,resting_min,resting_max,expires_at,revoked_at,' +
+      'algorithm_version,shortcut_version,single_sample_enabled,workout_policy,' +
+      'unknown_policy,cooldown_minutes&limit=1',
     { headers: serviceHeaders(), signal: AbortSignal.timeout(8_000) },
   );
   if (!response.ok) return null;
   const rows = await response.json() as ShortcutToken[];
   const token = rows[0];
-  if (!token || token.revoked_at || Date.parse(token.expires_at) <= Date.now()) return null;
+  if (
+    !token || token.revoked_at || Date.parse(token.expires_at) <= Date.now() ||
+    token.algorithm_version !== HEART_ALGORITHM_VERSION ||
+    token.shortcut_version !== SHORTCUT_VERSION
+  ) return null;
   return token;
 };
 
@@ -65,18 +83,15 @@ const claimQuota = async (tokenId: string) => {
   }
 };
 
-const parseSamples = (value: unknown): Sample[] | null => {
+const parseSamples = (value: unknown): HeartSample[] | null => {
   if (!Array.isArray(value) || value.length < 1 || value.length > 12) return null;
-  const samples: Sample[] = [];
+  const samples: HeartSample[] = [];
   for (const raw of value) {
     const item = asObject(raw);
-    const bpm = Number(item?.bpm);
-    const at = typeof item?.at === 'string' ? item.at.trim() : '';
-    if (!Number.isFinite(bpm) || bpm < 20 || bpm > 260 ||
-      !OFFSET_TIME.test(at) || Number.isNaN(Date.parse(at))) return null;
-    samples.push({ bpm: Math.round(bpm), at });
+    if (typeof item?.bpm !== 'number' || typeof item.at !== 'string') return null;
+    samples.push({ bpm: item.bpm, at: item.at.trim() });
   }
-  return samples.sort((left, right) => Date.parse(right.at) - Date.parse(left.at));
+  return samples;
 };
 
 runtime.serve(async (request) => {
@@ -90,6 +105,7 @@ runtime.serve(async (request) => {
       quota === 'limited' ? 429 : 503,
     );
   }
+
   let value: unknown;
   try {
     value = await readJsonBody(request, 16_000);
@@ -98,53 +114,90 @@ runtime.serve(async (request) => {
   }
   const payload = asObject(value);
   const eventId = typeof payload?.eventId === 'string' ? payload.eventId.trim() : '';
-  const context = payload?.context === 'resting' || payload?.context === 'workout'
-    ? payload.context
-    : 'unknown';
+  const context: HeartContext = payload?.context === 'resting' ||
+    payload?.context === 'workout' ? payload.context : 'unknown';
   const samples = parseSamples(payload?.samples);
-  if (payload?.version !== 2 || !EVENT_ID.test(eventId) || !samples) {
+  if (payload?.version !== 3 || !EVENT_ID.test(eventId) || !samples) {
     return jsonResponse({ status: 'invalid' }, 400);
   }
-  const latestTime = Date.parse(samples[0].at);
-  const age = Date.now() - latestTime;
-  if (age < -2 * 60_000 || age > 10 * 60_000) {
-    return jsonResponse({ status: 'invalid', reason: 'freshness' }, 400);
-  }
-  const recent = samples.slice(0, 3);
-  const outside = recent.filter(
-    (sample) => sample.bpm < token.resting_min || sample.bpm > token.resting_max,
-  ).length;
-  if (context === 'resting' && recent.length >= 3 && outside < 2 && payload.test !== true) {
-    return jsonResponse({ status: 'within_range' });
-  }
-  const sortedBpms = samples.map((sample) => sample.bpm).sort((a, b) => a - b);
-  const median = sortedBpms[Math.floor(sortedBpms.length / 2)];
-  const response = await fetch(`${env('SUPABASE_URL')}/rest/v1/shortcut_observations`, {
-    method: 'POST',
-    headers: {
-      ...serviceHeaders(),
-      prefer: 'return=representation,resolution=ignore-duplicates',
-    },
-    body: JSON.stringify({
-      user_id: token.user_id,
-      token_id: token.id,
-      event_id: eventId,
-      sampled_at: samples[0].at,
-      time_zone: typeof payload.timeZone === 'string'
-        ? payload.timeZone.trim().slice(0, 100)
-        : null,
-      context,
-      samples,
-      median_bpm: median,
-      is_test: payload.test === true,
-      low_signal: recent.length < 3 || context !== 'resting',
-    }),
-    signal: AbortSignal.timeout(8_000),
+
+  const preferences: HeartObservationPreferences = {
+    min: token.resting_min,
+    max: token.resting_max,
+    singleSampleEnabled: token.single_sample_enabled,
+    workoutPolicy: token.workout_policy,
+    unknownPolicy: token.unknown_policy,
+    cooldownMinutes: token.cooldown_minutes,
+  };
+  const evaluation = evaluateHeartObservation({
+    samples,
+    context,
+    preferences,
+    now: Date.now(),
+    test: payload.test === true,
   });
+  if (evaluation.decision === 'invalid') {
+    return jsonResponse({ status: 'invalid', reason: evaluation.decisionReason }, 400);
+  }
+  if (evaluation.decision !== 'pending') {
+    return jsonResponse({
+      status: evaluation.decision === 'within_range' ? 'within_range' : 'suppressed',
+      reason: evaluation.decisionReason,
+      algorithmVersion: evaluation.algorithmVersion,
+    });
+  }
+
+  const thresholdSnapshot = {
+    restingMin: preferences.min,
+    restingMax: preferences.max,
+    singleSampleEnabled: preferences.singleSampleEnabled,
+    workoutPolicy: preferences.workoutPolicy,
+    unknownPolicy: preferences.unknownPolicy,
+    cooldownMinutes: preferences.cooldownMinutes,
+  };
+  const acceptedSamples = evaluation.acceptedSamples;
+  const response = await fetch(
+    `${env('SUPABASE_URL')}/rest/v1/rpc/record_shortcut_observation_v3`,
+    {
+      method: 'POST',
+      headers: serviceHeaders(),
+      body: JSON.stringify({
+        p_user_id: token.user_id,
+        p_token_id: token.id,
+        p_event_id: eventId,
+        p_sampled_at: acceptedSamples[0].at,
+        p_time_zone: typeof payload.timeZone === 'string'
+          ? payload.timeZone.trim().slice(0, 100)
+          : null,
+        p_context: context,
+        p_samples: acceptedSamples,
+        p_median_bpm: evaluation.medianBpm,
+        p_is_test: payload.test === true,
+        p_low_signal: evaluation.lowSignal,
+        p_decision_reason: evaluation.decisionReason,
+        p_threshold_snapshot: thresholdSnapshot,
+        p_signal_level: evaluation.lowSignal ? 'low' : 'standard',
+        p_side: evaluation.side,
+        p_cooldown_minutes: preferences.cooldownMinutes,
+      }),
+      signal: AbortSignal.timeout(8_000),
+    },
+  );
   if (!response.ok) return jsonResponse({ status: 'unavailable' }, 503);
-  const rows = await response.json() as Array<{ id?: unknown }>;
+  const rows = await response.json() as Array<{
+    result?: unknown;
+    observation_id?: unknown;
+  }>;
+  const outcome = rows[0]?.result;
+  if (outcome !== 'accepted' && outcome !== 'merged' && outcome !== 'duplicate') {
+    return jsonResponse({ status: 'unavailable' }, 503);
+  }
   return jsonResponse({
-    status: rows[0]?.id ? 'accepted' : 'duplicate',
+    status: outcome,
+    observationId: typeof rows[0]?.observation_id === 'string'
+      ? rows[0].observation_id
+      : undefined,
     requiresUserConfirmation: true,
-  }, rows[0]?.id ? 202 : 200);
+    algorithmVersion: HEART_ALGORITHM_VERSION,
+  }, outcome === 'duplicate' ? 200 : 202);
 });

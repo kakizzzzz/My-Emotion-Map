@@ -121,6 +121,18 @@ export type ChatOption = {
   responseKind: FollowUpOptionId;
 };
 
+export type ChatDeliveryState =
+  | 'pending'
+  | 'delivered'
+  | 'failed'
+  | 'stopped';
+
+export type ClarificationOption = {
+  optionId: string;
+  label: string;
+  continuationToken: string;
+};
+
 export type FollowUpStatus = 'queued' | 'active' | 'answered' | 'skipped';
 
 export type FollowUpRecord = {
@@ -148,11 +160,35 @@ export type ChatMessage = {
   id: string;
   role: ChatRole;
   body: string;
-  kind?: 'message' | 'followup_prompt' | 'followup_answer' | 'followup_reply';
+  kind?:
+    | 'message'
+    | 'clarification'
+    | 'followup_prompt'
+    | 'followup_answer'
+    | 'followup_reply';
   noteIds?: string[];
+  externalEvidence?: ExternalEvidenceReference[];
   options?: ChatOption[];
+  clarificationOptions?: ClarificationOption[];
+  requestId?: string;
+  replyToRequestId?: string;
+  deliveryState?: ChatDeliveryState;
+  retryable?: boolean;
+  referenceConfirmation?: {
+    optionId: string;
+    continuationToken: string;
+  };
   followUpId?: string;
   createdAt?: string;
+};
+
+export type ExternalEvidenceReference = {
+  referenceId: string;
+  title: string;
+  date: string;
+  place: string;
+  matchReason: string;
+  source: 'my_life_memory_external';
 };
 
 export type Conversation = {
@@ -170,7 +206,8 @@ export type RevisitRecord = {
   id: string;
   noteId: string;
   originalEmotion: EmotionKey | null;
-  revisitedEmotion: EmotionKey;
+  changeDirection: Exclude<FollowUpOptionId, 'skip'>;
+  currentEmotion?: EmotionKey;
   originalOccurredAt: string;
   revisitedAt: string;
   sourceFollowUpId?: string;
@@ -198,6 +235,28 @@ export type StarInboxItem = {
   context?: 'resting' | 'workout' | 'unknown';
   samples?: Array<{ bpm: number; at: string }>;
   lowSignalConfidence?: boolean;
+  decisionReason?:
+    | 'outside_range'
+    | 'outside_range_single_sample'
+    | 'post_workout_review'
+    | 'unknown_strict_review'
+    | 'pending_test'
+    | 'outside_resting_range'
+    | 'low_signal_review'
+    | 'non_resting_review'
+    | 'test_event'
+    | 'legacy_review';
+  thresholdSnapshot?: {
+    restingMin: number;
+    restingMax: number;
+    singleSampleEnabled?: boolean;
+    workoutPolicy?: 'suppress' | 'post_workout_review';
+    unknownPolicy?: 'suppress' | 'strict_review';
+    cooldownMinutes?: number;
+  };
+  algorithmVersion?: string;
+  signalLevel?: 'standard' | 'low';
+  repeatCount?: number;
   linkedMomentId?: string;
   status: StarInboxStatus;
   seenAt?: string;
@@ -207,8 +266,11 @@ export type StarInboxItem = {
 export type HealthPreferences = {
   restingHeartRateMin: number;
   restingHeartRateMax: number;
-  rangeConfirmed?: boolean;
-  singleSampleEnabled?: boolean;
+  rangeConfirmed: boolean;
+  singleSampleEnabled: boolean;
+  workoutPolicy: 'suppress' | 'post_workout_review';
+  unknownPolicy: 'suppress' | 'strict_review';
+  cooldownMinutes: number;
 };
 
 export type ThemeTone = 'original' | 'terracotta' | 'blue' | 'mauve';
@@ -227,6 +289,7 @@ export type LocalSettings = {
   language: import('./i18n').AppLanguage;
   aboutMe: string;
   aiToneTags: string[];
+  aiUserPrompt: string;
   chatPreferenceTags: string[];
 };
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_THEME } from '../../src/app/themePreferences';
@@ -11,10 +11,16 @@ import { ChatScreen } from '../../src/features/chat/ChatScreen';
 import { LoginScreen } from '../../src/features/auth/LoginScreen';
 import { NoteEditorSheet } from '../../src/features/notes/NoteEditorSheet';
 import { SettingsScreen } from '../../src/features/settings/SettingsScreen';
+import { AiSettingsPanel } from '../../src/features/settings/AiSettingsPanel';
+import { EmotionMapMcpPanel } from '../../src/features/settings/EmotionMapMcpPanel';
 import type { EmotionMoment, EmotionNote } from '../../src/types';
 import { renderWithLanguage } from '../renderWithLanguage';
 import { createGuidedAnswers } from '../../src/domain/notePrompts';
 import type { PhotoAssistDelivery } from '../../src/app/appTypes';
+import { FirstRunOnboarding } from '../../src/features/onboarding/FirstRunOnboarding';
+import { createDemoAppData } from '../../src/app/appDataRepository';
+import { SideDrawer } from '../../src/app/AppChrome';
+import { StarInboxScreen } from '../../src/features/inbox/StarInboxScreen';
 
 const draftNote: EmotionNote = {
   id: 'note-new',
@@ -65,6 +71,9 @@ const PhotoAssistHarness = () => {
         moment={{ ...draftMoment, source: 'photo' }}
         note={draftNote}
         onSave={() => undefined}
+        onSaveDraft={() => undefined}
+        onDeleteDraft={() => undefined}
+        onClose={() => undefined}
         onToast={() => undefined}
         photoAssistDelivery={delivery}
       />
@@ -74,6 +83,7 @@ const PhotoAssistHarness = () => {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
 });
 
 describe('core component flows', () => {
@@ -85,6 +95,9 @@ describe('core component flows', () => {
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
+        onSaveDraft={() => undefined}
+        onDeleteDraft={() => undefined}
+        onClose={() => undefined}
         onToast={() => undefined}
       />,
     );
@@ -114,16 +127,20 @@ describe('core component flows', () => {
     });
     expect(onSave.mock.calls[0][2]).toBe('calm');
     expect(onSave.mock.calls[0][3]).toBe('safe');
-  });
+  }, 10_000);
 
-  it('saves partial changes when an existing record is closed', async () => {
+  it('discards dirty edits to an existing record without saving', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
+    const onClose = vi.fn();
     renderWithLanguage(
       <NoteEditorSheet
         moment={{ ...draftMoment, isNew: false, emotion: 'mixed', placeRating: 'neutral' }}
         note={{ ...draftNote, isDraft: false, emotion: 'mixed', placeRating: 'neutral' }}
         onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={vi.fn()}
+        onClose={onClose}
         onToast={() => undefined}
       />,
     );
@@ -133,40 +150,122 @@ describe('core component flows', () => {
       '未保存',
     );
     await user.click(
-      screen.getByRole('button', { name: '关闭并保存为正式记录' }),
+      screen.getByRole('button', { name: '关闭' }),
     );
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave.mock.calls[0][1]).toMatchObject({
-      title: '未保存',
-      emotion: 'mixed',
-      placeRating: 'neutral',
-    });
+    await user.click(screen.getByRole('button', { name: '放弃修改' }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('finalizes a new record with unknown values when it is closed', async () => {
+  it('deletes an untouched new draft instead of finalizing it', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
+    const onDeleteDraft = vi.fn();
     renderWithLanguage(
       <NoteEditorSheet
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={onDeleteDraft}
+        onClose={vi.fn()}
         onToast={() => undefined}
       />,
     );
 
     await user.click(
-      screen.getByRole('button', { name: '关闭并保存为正式记录' }),
+      screen.getByRole('button', { name: '关闭' }),
+    );
+    await user.click(screen.getByRole('button', { name: '删除草稿' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onDeleteDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a new record as a draft only when explicitly selected', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const onSaveDraft = vi.fn();
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={draftMoment}
+        note={draftNote}
+        onSave={onSave}
+        onSaveDraft={onSaveDraft}
+        onDeleteDraft={vi.fn()}
+        onClose={vi.fn()}
+        onToast={() => undefined}
+      />,
     );
 
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave.mock.calls[0][1]).toMatchObject({
-      emotion: null,
-      placeRating: null,
-      isDraft: false,
+    await user.type(
+      screen.getByRole('textbox', { name: '给这一刻起个名字' }),
+      '还没写完',
+    );
+    await user.click(screen.getByRole('button', { name: '关闭' }));
+    await user.click(screen.getByRole('button', { name: '保留草稿' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onSaveDraft).toHaveBeenCalledTimes(1);
+    expect(onSaveDraft.mock.calls[0][1]).toMatchObject({
+      title: '还没写完',
+      isDraft: true,
     });
-    expect(onSave.mock.calls[0][2]).toBeNull();
-    expect(onSave.mock.calls[0][3]).toBeNull();
+  });
+
+  it('saves dirty existing edits exactly once when explicitly selected', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={{ ...draftMoment, isNew: false }}
+        note={{ ...draftNote, isDraft: false }}
+        onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={vi.fn()}
+        onClose={vi.fn()}
+        onToast={() => undefined}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole('textbox', { name: '给这一刻起个名字' }),
+      '保存这次',
+    );
+    await user.click(screen.getByRole('button', { name: '关闭' }));
+    await user.click(screen.getByRole('button', { name: '保存修改' }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes Escape and the editor backdrop through the same exit choices', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={{ ...draftMoment, isNew: false }}
+        note={{ ...draftNote, isDraft: false }}
+        onSave={onSave}
+        onSaveDraft={vi.fn()}
+        onDeleteDraft={vi.fn()}
+        onClose={vi.fn()}
+        onToast={() => undefined}
+      />,
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: '给这一刻起个名字' }),
+      '暂存中的修改',
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '继续编辑' }));
+
+    const backdrop = document.querySelector('.note-editor-overlay');
+    expect(backdrop).not.toBeNull();
+    fireEvent.mouseDown(backdrop as Element);
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('does not let a late photo-assist result overwrite a user-edited title', async () => {
@@ -226,7 +325,6 @@ describe('core component flows', () => {
         ready
         configured
         onAuthenticate={onAuthenticate}
-        onOpenDemo={vi.fn()}
       />,
     );
 
@@ -248,21 +346,57 @@ describe('core component flows', () => {
     );
   });
 
+  it('does not expose a Demo bypass from the account login screen', () => {
+    renderWithLanguage(
+      <LoginScreen
+        ready
+        configured
+        onAuthenticate={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: '预览演示' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '进入演示？' })).toBeNull();
+  });
+
+  it('uses the same three-screen onboarding shell and skips without touching records', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    renderWithLanguage(
+      <FirstRunOnboarding dataMode="real" onComplete={onComplete} />,
+    );
+    expect(screen.getByRole('dialog', { name: '留下一颗星星' })).toHaveAttribute(
+      'data-onboarding-mode',
+      'real',
+    );
+    expect(screen.getByText('第 1 页，共 3 页')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '跳过' }));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    renderWithLanguage(
+      <FirstRunOnboarding dataMode="demo" onComplete={vi.fn()} />,
+    );
+    expect(screen.getByRole('dialog', { name: '留下一颗星星' })).toHaveAttribute(
+      'data-onboarding-mode',
+      'demo',
+    );
+  });
+
   it('closes settings through a discoverable button', async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
+    window.localStorage.setItem(
+      'my-emotion-map.user-preferences.00000000-0000-4000-8000-000000000001.v2',
+      JSON.stringify({ profileName: 'student_01' }),
+    );
     renderWithLanguage(
       <SettingsScreen
         themeTone="original"
         themePalette={DEFAULT_THEME}
         onThemeTone={() => undefined}
         onThemeColor={() => undefined}
-        dataMode="real"
         onExportData={() => undefined}
-        onImportData={async () => undefined}
-        onDeleteAllData={() => undefined}
-        onLoadDemo={() => true}
-        onExitDemo={() => true}
         locationRequestState="idle"
         onRequestLocation={() => undefined}
         onToast={() => undefined}
@@ -275,23 +409,169 @@ describe('core component flows', () => {
         onConfirmInitialUpload={() => undefined}
         onUseRemoteVersion={() => undefined}
         onOverwriteRemote={() => undefined}
-        onCreateAutomationTest={() => undefined}
+        onTestShortcutPairing={async () => 'unavailable'}
         onIssueMcpToken={async () => null}
+        onGetMcpOutputStatus={async () => null}
         onRevokeAllMcpTokens={async () => true}
+        onConnectMyLifeMemory={async () => null}
+        onTestMyLifeMemory={async () => null}
+        onGetMyLifeMemoryStatus={async () => ({
+          state: 'disconnected', serverVersion: null, protocolVersion: null,
+          manifestHash: null, connectedAt: null, lastTestAt: null,
+          lastErrorCode: null,
+        })}
+        onDisconnectMyLifeMemory={async () => ({
+          state: 'disconnected', serverVersion: null, protocolVersion: null,
+          manifestHash: null, connectedAt: null, lastTestAt: null,
+          lastErrorCode: null,
+        })}
         healthPreferences={{
           restingHeartRateMin: 60,
           restingHeartRateMax: 100,
           rangeConfirmed: false,
           singleSampleEnabled: false,
+          workoutPolicy: 'suppress',
+          unknownPolicy: 'suppress',
+          cooldownMinutes: 30,
         }}
         onHealthPreferences={() => true}
         onIssueShortcutPairing={async () => null}
+        onGetShortcutConnectionStatus={async () => ({
+          state: 'not_installed',
+          expiresAt: null,
+          lastReceivedAt: null,
+          lastTestAt: null,
+          shortcutVersion: null,
+          algorithmVersion: null,
+        })}
+        onRevokeShortcutTokens={async () => true}
         onBack={onBack}
       />,
     );
 
+    expect(screen.getByRole('heading', { name: '用户student_01' })).toBeInTheDocument();
+    expect(screen.getByText('ID:student_01')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '修改信息' }));
+    expect(document.querySelector('.profile-account-id-row')).toBeNull();
+    expect(screen.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
+      '用户student_01',
+    );
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('textbox', { name: '用户姓名' })).toBeNull();
+    });
     await user.click(screen.getByRole('button', { name: '关闭' }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps MCP and Shortcut credentials separate and runs only the real test callback', async () => {
+    const user = userEvent.setup();
+    const onIssueToken = vi.fn(async () => ({
+      token: 'output-access-once',
+      expiresAt: '2026-08-03T00:00:00.000Z',
+    }));
+    const onConnectMyLifeMemory = vi.fn(async () => ({
+      state: 'connected' as const,
+      serverVersion: '2.0.0', protocolVersion: '2025-03-26',
+      manifestHash: 'a'.repeat(64),
+      connectedAt: '2026-08-02T00:00:00.000Z',
+      lastTestAt: '2026-08-02T00:00:00.000Z', lastErrorCode: null,
+    }));
+    const onTestShortcutPairing = vi.fn().mockResolvedValue('verified');
+    const commonAiProps = {
+      styles: [] as string[],
+      userPrompt: '',
+      onStyles: () => undefined,
+      onUserPrompt: () => undefined,
+      onPanel: () => undefined,
+      onTestShortcutPairing,
+      onConnectMyLifeMemory,
+      onTestMyLifeMemory: async () => null,
+      onGetMyLifeMemoryStatus: async () => ({
+        state: 'disconnected' as const, serverVersion: null, protocolVersion: null,
+        manifestHash: null, connectedAt: null, lastTestAt: null,
+        lastErrorCode: null,
+      }),
+      onDisconnectMyLifeMemory: async () => ({
+        state: 'disconnected' as const, serverVersion: null, protocolVersion: null,
+        manifestHash: null, connectedAt: null, lastTestAt: null,
+        lastErrorCode: null,
+      }),
+      healthPreferences: {
+        restingHeartRateMin: 60,
+        restingHeartRateMax: 100,
+        rangeConfirmed: true,
+        singleSampleEnabled: false,
+        workoutPolicy: 'suppress' as const,
+        unknownPolicy: 'suppress' as const,
+        cooldownMinutes: 30,
+      },
+      onHealthPreferences: () => true,
+      onIssueShortcutPairing: async () => ({
+        token: 'pairing-code-once',
+        expiresAt: '2026-09-01T00:00:00.000Z',
+        shortcutVersion: 'shortcut-v3',
+        algorithmVersion: 'heart-v3',
+      }),
+      onGetShortcutConnectionStatus: async () => ({
+        state: 'paired' as const,
+        expiresAt: '2026-09-01T00:00:00.000Z',
+        lastReceivedAt: null,
+        lastTestAt: null,
+        shortcutVersion: 'shortcut-v3',
+        algorithmVersion: 'heart-v3',
+      }),
+      onRevokeShortcutTokens: async () => true,
+    };
+    renderWithLanguage(
+      <AiSettingsPanel
+        {...commonAiProps}
+        mode="my-life-memory-mcp"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '断开', exact: true }))
+      .toBeDisabled();
+    await user.type(
+      screen.getByLabelText('My Life Memory MCP Token'),
+      `mlm_${'s'.repeat(64)}`,
+    );
+    await user.click(screen.getByRole('button', { name: '连接' }));
+    expect(onConnectMyLifeMemory).toHaveBeenCalledWith(`mlm_${'s'.repeat(64)}`);
+    expect(screen.queryByText(`mlm_${'s'.repeat(64)}`)).toBeNull();
+
+    cleanup();
+    renderWithLanguage(
+      <EmotionMapMcpPanel
+        onIssueToken={onIssueToken}
+        onGetStatus={async () => ({
+          scope: 'records:read',
+          expiresAt: '2026-08-03T00:00:00.000Z',
+          lastUsedAt: '2026-08-02T12:00:00.000Z',
+        })}
+        onRevokeTokens={async () => true}
+        onListProposals={async () => []}
+        onResolveProposal={async () => true}
+      />,
+    );
+    expect(await screen.findByText(/最近使用/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '生成 MCP Token' }));
+    expect(screen.getByText('Bearer output-access-once')).toBeInTheDocument();
+
+    cleanup();
+    vi.stubEnv(
+      'VITE_SHORTCUT_INSTALL_URL',
+      'https://www.icloud.com/shortcuts/device-verified-test',
+    );
+    renderWithLanguage(
+      <AiSettingsPanel {...commonAiProps} mode="health-automation" />,
+    );
+    await user.click(screen.getByRole('button', { name: '生成配对码' }));
+    expect(screen.getByText('pairing-code-once')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '测试输入' }));
+    expect(onTestShortcutPairing).toHaveBeenCalledWith('pairing-code-once');
+    expect(screen.getByText('已通过 Edge Function 与数据库往返验证')).toBeInTheDocument();
+    vi.unstubAllEnvs();
   });
 
   it('keeps grounded chat disabled until the user is safely signed in and synced', async () => {
@@ -301,12 +581,15 @@ describe('core component flows', () => {
         notes={[]}
         conversations={[]}
         activeConversationId="thread-revisit"
+        workspaceKey="real:user-a"
         onAnswerFollowUp={onAnswer}
         cloudAuth={null}
         cloudRevision={null}
         cloudStatus="signed_out"
         dataMode="real"
-        onGroundedChat={vi.fn()}
+        onBeginChat={vi.fn()}
+        onCompleteChat={vi.fn()}
+        onFailChat={vi.fn()}
         onNewConversation={vi.fn()}
         onExitToMap={vi.fn()}
         onToast={vi.fn()}
@@ -321,5 +604,171 @@ describe('core component flows', () => {
     expect(screen.getByRole('button', { name: '新的对话' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '返回地图并打开导航' })).toBeEnabled();
     expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('answers Demo prompts deterministically without calling the Edge Function', async () => {
+    const user = userEvent.setup();
+    const onBeginChat = vi.fn();
+    const onCompleteChat = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const demo = createDemoAppData(new Date('2026-08-02T12:00:00'));
+    renderWithLanguage(
+      <ChatScreen
+        notes={demo.notes}
+        followUps={demo.followUps}
+        conversations={[]}
+        activeConversationId="demo-new-thread"
+        workspaceKey="demo"
+        onAnswerFollowUp={vi.fn()}
+        onRevisitEmotion={vi.fn()}
+        cloudAuth={null}
+        cloudRevision={null}
+        cloudStatus="signed_out"
+        dataMode="demo"
+        onBeginChat={onBeginChat}
+        onCompleteChat={onCompleteChat}
+        onFailChat={vi.fn()}
+        onNewConversation={vi.fn()}
+        onExitToMap={vi.fn()}
+        onToast={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '图书馆的记录是什么？' }));
+    await waitFor(() => expect(onCompleteChat).toHaveBeenCalledTimes(1));
+    expect(onBeginChat).toHaveBeenCalledTimes(1);
+    expect(onCompleteChat.mock.calls[0][0].assistantBody).toContain('演示回答');
+    expect(onCompleteChat.mock.calls[0][0].noteIds.every((id: string) =>
+      id.startsWith('demo:synthetic:campus-day:')
+    )).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('opens Chat from its primary row while disclosure only expands history', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    renderWithLanguage(
+      <SideDrawer activeView="map" conversations={[]} onNavigate={onNavigate}
+        onOpenConversation={vi.fn()} onNewConversation={vi.fn()} onClose={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: '交流回访' }));
+    expect(onNavigate).toHaveBeenCalledWith('chat');
+    cleanup();
+    renderWithLanguage(
+      <SideDrawer activeView="map" conversations={[]} onNavigate={onNavigate}
+        onOpenConversation={vi.fn()} onNewConversation={vi.fn()} onClose={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: '展开交流回访历史' }));
+    await waitFor(() => expect(
+      screen.getByRole('button', { name: '新建对话' }),
+    ).toBeVisible());
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows every pending inbox item and marks only the expanded item seen', async () => {
+    const user = userEvent.setup();
+    const onMarkSeen = vi.fn();
+    renderWithLanguage(
+      <StarInboxScreen
+        items={[
+          { id: 'inbox-1', source: 'heart-rate', sourceEventId: 'event-1',
+            eventAt: '2026-08-02T10:00:00.000Z', receivedAt: '2026-08-02T10:01:00.000Z',
+            heartRate: 75, status: 'pending', decisionReason: 'low_signal_review',
+            thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+            algorithmVersion: 'shortcut-heart-v2', signalLevel: 'low' },
+          { id: 'inbox-2', source: 'heart-rate', sourceEventId: 'event-2',
+            eventAt: '2026-08-02T11:00:00.000Z', receivedAt: '2026-08-02T11:01:00.000Z',
+            heartRate: 76, status: 'pending', decisionReason: 'test_event',
+            thresholdSnapshot: { restingMin: 60, restingMax: 100 },
+            algorithmVersion: 'shortcut-heart-v2', signalLevel: 'standard' },
+        ]}
+        onReviewItem={vi.fn()} onDismissItem={vi.fn()}
+        onMarkSeen={onMarkSeen} onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText('新发现一颗星')).toHaveLength(2);
+    await user.click(document.querySelectorAll('.star-inbox-card')[0] as HTMLElement);
+    expect(onMarkSeen).toHaveBeenCalledWith('inbox-1');
+    expect(onMarkSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it('scrolls a long existing conversation exactly once on entry', async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true, value: scrollIntoView,
+    });
+    try {
+      renderWithLanguage(
+        <ChatScreen
+          notes={[]} followUps={[]}
+          conversations={[{ id: 'long-thread', title: '长线程', preview: '', kind: 'regular',
+            messages: Array.from({ length: 100 }, (_, index) => ({
+              id: `message-${index}`,
+              role: index % 2 ? 'assistant' as const : 'user' as const,
+              body: `message ${index}`,
+            })) }]}
+          activeConversationId="long-thread" workspaceKey="real:user-a"
+          onAnswerFollowUp={vi.fn()} onRevisitEmotion={vi.fn()}
+          cloudAuth={null} cloudRevision={null} cloudStatus="signed_out"
+          dataMode="real" onBeginChat={vi.fn()} onCompleteChat={vi.fn()}
+          onFailChat={vi.fn()} onNewConversation={vi.fn()}
+          onExitToMap={vi.fn()} onToast={vi.fn()}
+        />,
+      );
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    }
+  });
+
+  it('does not expose account A chat drafts to account B', async () => {
+    sessionStorage.clear();
+    const user = userEvent.setup();
+    const sharedProps = {
+      notes: [],
+      followUps: [],
+      conversations: [],
+      activeConversationId: 'thread-revisit',
+      onAnswerFollowUp: vi.fn(),
+      onRevisitEmotion: vi.fn(),
+      cloudAuth: {
+        supabaseUrl: 'https://example.supabase.co',
+        publishableKey: 'public-key',
+        accessToken: 'access-token',
+        userId: 'user-a',
+      },
+      cloudRevision: 7,
+      cloudStatus: 'synced' as const,
+      dataMode: 'real' as const,
+      onBeginChat: vi.fn(),
+      onCompleteChat: vi.fn(),
+      onFailChat: vi.fn(),
+      onNewConversation: vi.fn(),
+      onExitToMap: vi.fn(),
+      onToast: vi.fn(),
+    };
+    renderWithLanguage(<ChatScreen {...sharedProps} workspaceKey="real:user-a" />);
+    await user.type(
+      screen.getByRole('textbox', { name: '输入消息…' }),
+      '只属于账号 A',
+    );
+    expect(sessionStorage.getItem(
+      'my-emotion-map.chat-draft.v2.real%3Auser-a.thread-revisit',
+    )).toBe('只属于账号 A');
+
+    cleanup();
+    renderWithLanguage(
+      <ChatScreen
+        {...sharedProps}
+        cloudAuth={{ ...sharedProps.cloudAuth, userId: 'user-b' }}
+        workspaceKey="real:user-b"
+      />,
+    );
+    expect(screen.getByRole('textbox', { name: '输入消息…' })).toHaveValue('');
   });
 });

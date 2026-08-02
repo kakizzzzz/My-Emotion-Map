@@ -107,7 +107,11 @@ export function ProfileSettingsPanel({
         </label>
         <div className="profile-password-row">
           <Lock size={24} strokeWidth={2.2} />
-          <span aria-label={copy.auth.password}>••••••••</span>
+          <span aria-label={copy.auth.password} className="profile-password-dots">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((dot) => (
+              <i key={dot} aria-hidden="true" />
+            ))}
+          </span>
           <button
             type="button"
             onClick={() => setEditingPassword(true)}

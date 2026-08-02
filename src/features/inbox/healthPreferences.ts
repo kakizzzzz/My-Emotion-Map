@@ -9,6 +9,9 @@ export const DEFAULT_HEALTH_PREFERENCES: HealthPreferences = {
   restingHeartRateMax: 100,
   rangeConfirmed: false,
   singleSampleEnabled: false,
+  workoutPolicy: 'suppress',
+  unknownPolicy: 'suppress',
+  cooldownMinutes: 30,
 };
 
 export const healthPreferencesStorageKey = (userId: string) =>
@@ -40,6 +43,18 @@ export const loadHealthPreferences = (
       restingHeartRateMax: Math.round(max),
       rangeConfirmed: parsed.rangeConfirmed === true,
       singleSampleEnabled: parsed.singleSampleEnabled === true,
+      workoutPolicy: parsed.workoutPolicy === 'post_workout_review'
+        ? 'post_workout_review'
+        : 'suppress',
+      unknownPolicy: parsed.unknownPolicy === 'strict_review'
+        ? 'strict_review'
+        : 'suppress',
+      cooldownMinutes:
+        Number.isInteger(parsed.cooldownMinutes) &&
+        Number(parsed.cooldownMinutes) >= 5 &&
+        Number(parsed.cooldownMinutes) <= 180
+          ? Number(parsed.cooldownMinutes)
+          : 30,
     };
   } catch {
     return DEFAULT_HEALTH_PREFERENCES;

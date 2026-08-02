@@ -13,18 +13,66 @@ export const appendRevisitRecord = (
   emotion: EmotionKey,
   sourceFollowUpId?: string,
   revisitedAt = new Date().toISOString(),
-): RevisitRecord[] => [
-  ...revisits,
-  {
-    id: createRecordId('revisit'),
-    noteId: note.id,
-    originalEmotion: note.emotion,
-    revisitedEmotion: emotion,
-    originalOccurredAt: new Date(`${note.date}T${note.time}:00`).toISOString(),
-    revisitedAt,
-    sourceFollowUpId,
-  },
-];
+): RevisitRecord[] => setRevisitCurrentEmotion(
+  revisits,
+  note,
+  sourceFollowUpId ?? `manual:${createRecordId('revisit-source')}`,
+  emotion,
+  'different',
+  revisitedAt,
+);
+
+export const upsertFollowUpRevisit = (
+  revisits: RevisitRecord[],
+  note: EmotionNote,
+  sourceFollowUpId: string,
+  changeDirection: RevisitRecord['changeDirection'],
+  revisitedAt = new Date().toISOString(),
+): RevisitRecord[] => {
+  const existing = revisits.find(
+    (record) => record.sourceFollowUpId === sourceFollowUpId,
+  );
+  if (existing) {
+    return revisits.map((record) =>
+      record.id === existing.id
+        ? { ...record, changeDirection, revisitedAt }
+        : record,
+    );
+  }
+  return [
+    ...revisits,
+    {
+      id: createRecordId('revisit'),
+      noteId: note.id,
+      originalEmotion: note.emotion,
+      changeDirection,
+      originalOccurredAt: note.occurredAtUtc ??
+        new Date(`${note.localDate || note.date}T${note.localTime || note.time}:00`)
+          .toISOString(),
+      revisitedAt,
+      sourceFollowUpId,
+    },
+  ];
+};
+
+export const setRevisitCurrentEmotion = (
+  revisits: RevisitRecord[],
+  note: EmotionNote,
+  sourceFollowUpId: string,
+  currentEmotion: EmotionKey,
+  changeDirection: RevisitRecord['changeDirection'],
+  revisitedAt = new Date().toISOString(),
+): RevisitRecord[] => upsertFollowUpRevisit(
+  revisits,
+  note,
+  sourceFollowUpId,
+  changeDirection,
+  revisitedAt,
+).map((record) =>
+  record.sourceFollowUpId === sourceFollowUpId
+    ? { ...record, currentEmotion }
+    : record,
+);
 
 export const dismissInboxItem = (
   items: StarInboxItem[],
@@ -35,6 +83,20 @@ export const dismissInboxItem = (
     ? { ...item, status: 'dismissed', seenAt: item.seenAt ?? seenAt }
     : item,
 );
+
+export const clearInboxLocation = (item: StarInboxItem): StarInboxItem => {
+  const {
+    linkedMomentId: _linkedMomentId,
+    confirmedAt: _confirmedAt,
+    latitude: _latitude,
+    longitude: _longitude,
+    locationCapturedAt: _locationCapturedAt,
+    locationAccuracyMeters: _locationAccuracyMeters,
+    locationTimeRelation: _locationTimeRelation,
+    ...unlinked
+  } = item;
+  return { ...unlinked, status: 'pending' };
+};
 
 export const removeMomentAssociations = (
   snapshot: AppDataSnapshot,
@@ -78,12 +140,7 @@ export const removeMomentAssociations = (
     })),
     starInboxItems: snapshot.starInboxItems.map((item) =>
       item.linkedMomentId === moment.id
-        ? {
-            ...item,
-            linkedMomentId: undefined,
-            status: 'pending',
-            confirmedAt: undefined,
-          }
+        ? clearInboxLocation(item)
         : item,
     ),
   };

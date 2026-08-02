@@ -5,6 +5,8 @@ export type RetrievalStatus =
   | 'ambiguous'
   | 'not_found'
   | 'evidence_insufficient'
+  | 'clarification_required'
+  | 'unsupported'
   | 'unavailable';
 
 export const resolveRetrievalStatus = ({
@@ -16,12 +18,16 @@ export const resolveRetrievalStatus = ({
   scores: number[];
   dateCount: number;
 }): RetrievalStatus => {
-  if (intent === 'unsupported') return 'evidence_insufficient';
+  if (intent === 'unsupported') return 'unsupported';
+  if (intent === 'clarification_required') return 'clarification_required';
   if (!scores.length) return 'not_found';
-  if (scores.length > 1 && scores[0] - scores[1] < 8) return 'ambiguous';
   if (intent === 'comparison' && scores.length < 2) return 'evidence_insufficient';
   if (intent === 'pattern' && (scores.length < 3 || dateCount < 3)) {
     return 'evidence_insufficient';
   }
+  if (
+    (intent === 'lookup' || intent === 'reflection') &&
+    scores.length > 1 && scores[0] - scores[1] < 8
+  ) return 'ambiguous';
   return 'supported';
 };

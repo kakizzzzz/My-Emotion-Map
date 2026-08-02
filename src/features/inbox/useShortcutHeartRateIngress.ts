@@ -8,6 +8,13 @@ import {
   rememberShortcutEventId,
   stripShortcutFragment,
 } from './shortcutHeartRateBridge';
+import {
+  ackShortcutObservationRows,
+  fetchShortcutObservationPages,
+  mergeShortcutObservationItems,
+  parseShortcutObservationRow,
+} from './shortcutDelivery';
+import { SHORTCUT_REFRESH_EVENT } from '../../domain/shortcutConnection';
 
 export const useShortcutHeartRateIngress = ({
   userId,
@@ -34,58 +41,28 @@ export const useShortcutHeartRateIngress = ({
     if (!client || !userId) return;
     let cancelled = false;
     const refresh = async () => {
-      const { data, error } = await client
-        .from('shortcut_observations')
-        .select('id,event_id,sampled_at,context,samples,median_bpm,is_test,low_signal,created_at')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true })
-        .limit(20);
-      if (cancelled || error || !Array.isArray(data)) return;
-      setItems((current) => {
-        const known = new Set(current.map((item) => item.sourceEventId));
-        const additions: StarInboxItem[] = data.flatMap((row) => {
-          if (!row || typeof row.event_id !== 'string' || known.has(row.event_id) ||
-            typeof row.sampled_at !== 'string' || typeof row.median_bpm !== 'number') return [];
-          known.add(row.event_id);
-          const samples = Array.isArray(row.samples)
-            ? row.samples.flatMap((sample): Array<{ bpm: number; at: string }> => {
-                if (!sample || typeof sample !== 'object') return [];
-                const value = sample as { bpm?: unknown; at?: unknown };
-                return typeof value.bpm === 'number' && typeof value.at === 'string'
-                  ? [{ bpm: Math.round(value.bpm), at: value.at }]
-                  : [];
-              })
-            : [];
-          return [{
-            id: `shortcut:${String(row.id)}`,
-            source: 'heart-rate',
-            sourceEventId: row.event_id,
-            eventAt: row.sampled_at,
-            receivedAt: typeof row.created_at === 'string'
-              ? row.created_at
-              : new Date().toISOString(),
-            heartRate: Math.round(row.median_bpm),
-            verification: row.is_test === true ? 'test' : 'verified',
-            context: row.context === 'resting' || row.context === 'workout'
-              ? row.context
-              : 'unknown',
-            samples,
-            lowSignalConfidence: row.low_signal === true,
-            status: 'pending',
-          }];
-        });
-        return additions.length ? [...current, ...additions] : current;
+      const rows = await fetchShortcutObservationPages(client);
+      if (cancelled || !rows) return;
+      const parsed = rows.flatMap((row) => {
+        const item = parseShortcutObservationRow(row);
+        return item ? [item] : [];
       });
+      if (parsed.length) {
+        setItems((current) => mergeShortcutObservationItems(current, parsed));
+      }
+      await ackShortcutObservationRows(client, rows);
     };
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') void refresh();
     };
     void refresh();
     window.addEventListener('focus', refreshWhenVisible);
+    window.addEventListener(SHORTCUT_REFRESH_EVENT, refreshWhenVisible);
     document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
       cancelled = true;
       window.removeEventListener('focus', refreshWhenVisible);
+      window.removeEventListener(SHORTCUT_REFRESH_EVENT, refreshWhenVisible);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, [client, setItems, userId]);

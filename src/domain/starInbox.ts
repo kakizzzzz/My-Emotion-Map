@@ -1,4 +1,10 @@
 import type { HealthPreferences, StarInboxItem } from '../types';
+import {
+  evaluateHeartObservation,
+  type HeartContext,
+  type HeartObservationPreferences,
+  type HeartSample,
+} from '../../supabase/functions/_shared/heartObservationV3';
 
 export type ShortcutHeartResult =
   | { kind: 'ignored' }
@@ -8,6 +14,7 @@ export type ShortcutHeartResult =
   | { kind: 'pending'; sourceEventId: string; item: StarInboxItem };
 
 const EVENT_ID = /^[A-Za-z0-9._:-]{1,180}$/;
+const OFFSET_TIME = /(Z|[+-]\d{2}:?\d{2})$/i;
 
 const stableEventId = (value: string) => {
   let hash = 2166136261;
@@ -16,6 +23,38 @@ const stableEventId = (value: string) => {
     hash = Math.imul(hash, 16777619);
   }
   return `local-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+};
+
+const toAlgorithmPreferences = (
+  preferences: HealthPreferences,
+): HeartObservationPreferences => ({
+  min: preferences.restingHeartRateMin,
+  max: preferences.restingHeartRateMax,
+  singleSampleEnabled: preferences.singleSampleEnabled,
+  workoutPolicy: preferences.workoutPolicy,
+  unknownPolicy: preferences.unknownPolicy,
+  cooldownMinutes: preferences.cooldownMinutes,
+});
+
+const parseFragmentSamples = (
+  parameters: URLSearchParams,
+  version: string,
+  fallbackAt: string,
+): HeartSample[] | null => {
+  if (version === '1') {
+    const bpm = Number(parameters.get('hr'));
+    return Number.isFinite(bpm) ? [{ bpm, at: fallbackAt }] : null;
+  }
+  const bpms = (parameters.get('samples') ?? '').split(',').map(Number);
+  if (!bpms.length || bpms.some((bpm) => !Number.isFinite(bpm))) return null;
+  const timestamps = version === '3'
+    ? (parameters.get('sampleAts') ?? '').split('|').map((at) => at.trim())
+    : [];
+  if (version === '3' && timestamps.length !== bpms.length) return null;
+  return bpms.slice(0, 12).map((bpm, index) => ({
+    bpm,
+    at: timestamps[index] || fallbackAt,
+  }));
 };
 
 export const consumeShortcutHeartFragment = ({
@@ -35,56 +74,54 @@ export const consumeShortcutHeartFragment = ({
     : '';
   const parameters = new URLSearchParams(query);
   const version = parameters.get('v');
-  if (version !== '1' && version !== '2') return { kind: 'invalid', reason: 'version' };
+  if (version !== '1' && version !== '2' && version !== '3') {
+    return { kind: 'invalid', reason: 'version' };
+  }
   const source = parameters.get('src');
   if (source && source !== 'apple-health-shortcut') {
     return { kind: 'invalid', reason: 'source' };
   }
-  if (!preferences.rangeConfirmed) return { kind: 'invalid', reason: 'range-unconfirmed' };
+  if (!preferences.rangeConfirmed) {
+    return { kind: 'invalid', reason: 'range-unconfirmed' };
+  }
   const rawAt = (parameters.get('at') ?? '').trim().replace(' ', '+');
-  const sampledTime = new Date(rawAt).getTime();
-  if (!rawAt || Number.isNaN(sampledTime)) {
+  if (!rawAt || !OFFSET_TIME.test(rawAt)) {
     return { kind: 'invalid', reason: 'sample-time' };
   }
-  const ageMs = now.getTime() - sampledTime;
-  if (ageMs < -2 * 60_000 || ageMs > 10 * 60_000) {
-    return { kind: 'invalid', reason: 'freshness' };
-  }
-  const suppliedId = (parameters.get('eid') ?? '').trim();
-  const context = parameters.get('context') === 'resting' || parameters.get('context') === 'workout'
+  const context: HeartContext = parameters.get('context') === 'resting' ||
+    parameters.get('context') === 'workout'
     ? parameters.get('context') as 'resting' | 'workout'
     : 'unknown';
-  const sampleValues = version === '2'
-    ? (parameters.get('samples') ?? '')
-        .split(',')
-        .map(Number)
-        .filter((value) => Number.isFinite(value) && value >= 20 && value <= 260)
-        .slice(0, 12)
-    : [Number(parameters.get('hr'))];
-  if (!sampleValues.length || sampleValues.some((value) => value < 20 || value > 260)) {
-    return { kind: 'invalid', reason: 'heart-rate' };
-  }
-  if (version === '1' && !preferences.singleSampleEnabled) {
-    return { kind: 'invalid', reason: 'single-sample-disabled' };
-  }
-  const sorted = [...sampleValues].sort((left, right) => left - right);
-  const heartRate = sorted[Math.floor(sorted.length / 2)];
+  const samples = parseFragmentSamples(parameters, version, rawAt);
+  if (!samples) return { kind: 'invalid', reason: 'heart-rate' };
+
+  const suppliedId = (parameters.get('eid') ?? '').trim();
   const sourceEventId = EVENT_ID.test(suppliedId)
     ? suppliedId
-    : stableEventId(`${rawAt}|${sampleValues.join(',')}|apple-health-shortcut`);
+    : stableEventId(`${rawAt}|${samples.map((sample) => sample.bpm).join(',')}|apple-health-shortcut`);
   if (knownEventIds.has(sourceEventId)) {
     return { kind: 'duplicate', sourceEventId };
   }
-  const outsideCount = sampleValues.filter(
-    (value) =>
-      value < preferences.restingHeartRateMin ||
-      value > preferences.restingHeartRateMax,
-  ).length;
-  if ((version === '2' && context === 'resting' &&
-      sampleValues.length >= 3 && outsideCount < 2) ||
-    (version === '1' && outsideCount === 0)) {
+  const evaluation = evaluateHeartObservation({
+    samples,
+    context,
+    preferences: toAlgorithmPreferences(preferences),
+    now: now.getTime(),
+  });
+  if (evaluation.decision === 'invalid') {
+    return { kind: 'invalid', reason: evaluation.decisionReason };
+  }
+  if (
+    evaluation.decision === 'insufficient_signal' ||
+    evaluation.decision === 'suppressed_context'
+  ) return { kind: 'ignored' };
+  if (evaluation.decision === 'within_range') {
     return { kind: 'within-range', sourceEventId };
   }
+  if (evaluation.decision !== 'pending' || evaluation.medianBpm === null) {
+    return { kind: 'ignored' };
+  }
+
   return {
     kind: 'pending',
     sourceEventId,
@@ -92,14 +129,26 @@ export const consumeShortcutHeartFragment = ({
       id: `heart-${sourceEventId}`,
       source: 'heart-rate',
       sourceEventId,
-      eventAt: rawAt,
+      eventAt: evaluation.acceptedSamples[0].at,
       receivedAt: now.toISOString(),
-      heartRate: Math.round(heartRate),
+      heartRate: evaluation.medianBpm,
       verification: 'unverified',
       context,
-      samples: sampleValues.map((bpm) => ({ bpm: Math.round(bpm), at: rawAt })),
-      lowSignalConfidence:
-        version === '1' || sampleValues.length < 3 || context !== 'resting',
+      samples: evaluation.acceptedSamples,
+      lowSignalConfidence: evaluation.lowSignal,
+      decisionReason: evaluation.decisionReason as NonNullable<
+        StarInboxItem['decisionReason']
+      >,
+      thresholdSnapshot: {
+        restingMin: preferences.restingHeartRateMin,
+        restingMax: preferences.restingHeartRateMax,
+        singleSampleEnabled: preferences.singleSampleEnabled,
+        workoutPolicy: preferences.workoutPolicy,
+        unknownPolicy: preferences.unknownPolicy,
+        cooldownMinutes: preferences.cooldownMinutes,
+      },
+      algorithmVersion: evaluation.algorithmVersion,
+      signalLevel: evaluation.lowSignal ? 'low' : 'standard',
       status: 'pending',
     },
   };

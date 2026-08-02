@@ -9,6 +9,14 @@ import type {
 } from '../types';
 import { DEFAULT_THEME } from './themePreferences';
 
+export const DEMO_DATA_MANIFEST = {
+  sourceType: 'synthetic_demo',
+  sourceId: 'campus-day',
+  setting: 'Dongguk University Seoul main campus',
+  recordCount: 5,
+  statement: 'Fictional student-day records created only for product demonstration.',
+} as const;
+
 const localIsoDate = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -17,11 +25,11 @@ const localIsoDate = (date: Date) => {
 };
 
 export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
-  const sourceRecordId = 'default-record-star';
+  const sourceRecordId = DEMO_DATA_MANIFEST.sourceId;
   const anchorDate = new Date(
     anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 12,
   );
-  const days = [-2, -1, 0].map((offset) => {
+  const days = [-4, -3, -2, -1, 0].map((offset) => {
     const date = new Date(anchorDate);
     date.setDate(date.getDate() + offset);
     return localIsoDate(date);
@@ -45,6 +53,18 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
       emotion: 'calm', placeRating: 'safe',
       excerpt: '下课后留在走廊，把小组任务和明天要带的材料记了下来。',
     },
+    {
+      title: '学生会馆的晚饭', place: '东国大学学生会馆', time: '18:05',
+      longitude: 126.9988, latitude: 37.5573,
+      emotion: 'joy', placeRating: 'comfortable',
+      excerpt: '晚课前在学生会馆吃了简单的晚饭，也确认了小组集合时间。',
+    },
+    {
+      title: '八正道的夜间散步', place: '东国大学八正道', time: '20:15',
+      longitude: 126.9998, latitude: 37.5595,
+      emotion: 'curious', placeRating: 'comfortable',
+      excerpt: '离开校园前沿八正道慢慢走了一段，顺手记下明天最先要做的事。',
+    },
   ] satisfies Array<{
     title: string;
     place: string;
@@ -56,7 +76,7 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
     excerpt: string;
   }>;
   const notes: EmotionNote[] = definitions.map((definition, index) => ({
-    id: `demo:mlm:${sourceRecordId}:note:${index + 1}`,
+    id: `demo:synthetic:${sourceRecordId}:note:${index + 1}`,
     title: definition.title,
     titleSource: 'fallback',
     place: definition.place,
@@ -79,7 +99,7 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
     followUpEnabled: index === 1,
   }));
   const moments: EmotionMoment[] = definitions.map((definition, index) => ({
-    id: `demo:mlm:${sourceRecordId}:moment:${index + 1}`,
+    id: `demo:synthetic:${sourceRecordId}:moment:${index + 1}`,
     noteId: notes[index].id,
     emotion: definition.emotion,
     intensity: 4,
@@ -97,7 +117,7 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
     latitude: definition.latitude,
     placeRating: definition.placeRating,
   }));
-  const followUpId = `demo:mlm:${sourceRecordId}:followup:1`;
+  const followUpId = `demo:synthetic:${sourceRecordId}:followup:1`;
   const now = new Date().toISOString();
   const followUps: FollowUpRecord[] = [{
     id: followUpId,
@@ -117,7 +137,7 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
       kind: 'companion',
       unread: true,
       messages: [{
-        id: `demo:mlm:${sourceRecordId}:message:followup`,
+        id: `demo:synthetic:${sourceRecordId}:message:followup`,
         role: 'assistant',
         kind: 'followup_prompt',
         body: '',
@@ -126,26 +146,9 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
         createdAt: now,
       }],
     },
-    {
-      id: `demo:mlm:${sourceRecordId}:conversation:1`,
-      title: '这几条记录来自哪里？',
-      preview: '只引用了公开示范记录。',
-      kind: 'regular',
-      messages: [
-        {
-          id: `demo:mlm:${sourceRecordId}:message:question`, role: 'user',
-          body: '这几条记录来自哪里？', createdAt: now,
-        },
-        {
-          id: `demo:mlm:${sourceRecordId}:message:answer`, role: 'assistant',
-          body: '它们是东国大学本校的公开演示记录，不含真实账号数据。',
-          noteIds: notes.map((note) => note.id), createdAt: now,
-        },
-      ],
-    },
   ];
   return {
-    schemaVersion: 4,
+    schemaVersion: 6,
     dataMode: 'demo',
     moments,
     notes,
@@ -156,6 +159,6 @@ export const createDemoAppData = (anchor = new Date()): AppDataSnapshot => {
     themeTone: 'original',
     themePalette: DEFAULT_THEME,
     demoAnchorDate: localIsoDate(anchorDate),
-    lastConversationId: conversations[1].id,
+    lastConversationId: undefined,
   };
 };

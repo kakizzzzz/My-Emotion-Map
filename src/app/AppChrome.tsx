@@ -133,33 +133,43 @@ export function SideDrawer({
               const isChat = item.key === 'chat';
               return (
                 <div key={item.key}>
-                  <button
-                    className={`side-nav__item ${active ? 'is-active' : ''}`}
-                    aria-expanded={isChat ? aiExpanded : undefined}
-                    aria-controls={isChat ? 'side-chat-history' : undefined}
-                    onClick={() => {
-                      if (isChat) {
-                        setAiExpanded((current) => !current);
-                        return;
-                      }
-                      onNavigate(item.key);
-                    }}
-                  >
-                    <span className="side-nav__icon">
-                      <Icon size={22} strokeWidth={2.2} />
-                      {isChat && hasCommunicationUnread ? (
-                        <i className="side-nav__dot" />
-                      ) : null}
-                    </span>
-                    <span>
-                      <strong>{item.label}</strong>
-                    </span>
-                    {isChat && aiExpanded ? (
-                      <ChevronDown size={19} strokeWidth={2.2} />
-                    ) : (
-                      <ChevronRight size={19} strokeWidth={2.2} />
-                    )}
-                  </button>
+                  <div className="side-nav__row">
+                    <button
+                      className={`side-nav__item ${active ? 'is-active' : ''}`}
+                      onClick={() => onNavigate(item.key)}
+                    >
+                      <span className="side-nav__icon">
+                        <Icon size={22} strokeWidth={2.2} />
+                        {isChat && hasCommunicationUnread ? (
+                          <i className="side-nav__dot" />
+                        ) : null}
+                      </span>
+                      <span>
+                        <strong>{item.label}</strong>
+                      </span>
+                      {!isChat ? <ChevronRight size={19} strokeWidth={2.2} /> : null}
+                    </button>
+                    {isChat ? (
+                      <button
+                        type="button"
+                        className="side-nav__disclosure"
+                        aria-label={
+                          aiExpanded
+                            ? copy.navigation.hideChatHistory
+                            : copy.navigation.showChatHistory
+                        }
+                        aria-expanded={aiExpanded}
+                        aria-controls="side-chat-history"
+                        onClick={() => setAiExpanded((current) => !current)}
+                      >
+                        {aiExpanded ? (
+                          <ChevronDown size={19} strokeWidth={2.2} />
+                        ) : (
+                          <ChevronRight size={19} strokeWidth={2.2} />
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
 
                   <AnimatePresence initial={false}>
                     {isChat && aiExpanded ? (
@@ -193,9 +203,6 @@ export function SideDrawer({
                                 ) : null}
                               </button>
                             </>
-                          ) : null}
-                          {otherConversations.length ? (
-                            <p>{copy.navigation.today}</p>
                           ) : null}
                           {otherConversations.map((thread) => (
                             <button

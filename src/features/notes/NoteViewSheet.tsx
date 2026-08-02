@@ -161,7 +161,9 @@ export function NoteViewSheet({
                   </header>
                   <p>
                     {getEmotionLabel(record.originalEmotion, language)} →{' '}
-                    {getEmotionLabel(record.revisitedEmotion, language)}
+                    {record.currentEmotion
+                      ? getEmotionLabel(record.currentEmotion, language)
+                      : copy.note.notFilled}
                   </p>
                   <small>{copy.note.originalPreserved}</small>
                 </article>

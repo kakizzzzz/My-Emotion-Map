@@ -23,6 +23,11 @@ export const getSupabaseClient = () => {
   return client;
 };
 
+export const getSupabaseFunctionUrl = (functionName: string) =>
+  validUrl && /^[a-z0-9-]+$/.test(functionName)
+    ? `${supabaseUrl}/functions/v1/${functionName}`
+    : '';
+
 export const toCloudAuth = (session: Session | null): CloudAuth | null =>
   session && validUrl && publishableKey
     ? {

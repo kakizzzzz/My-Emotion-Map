@@ -3,14 +3,16 @@
 My Emotion Map is a local-first React/Vite app for saving moments as stars,
 reviewing them by place and date, and revisiting a saved record later.
 
-The v4 data model keeps unknown feelings unknown, preserves wall time without
-inventing a timezone, and separates every signed-in account from the Demo
-workspace. A new account opens an empty real map. Demo data appears only after
-the user explicitly chooses Demo and is never uploaded.
+The data model keeps unknown feelings unknown, preserves wall time without
+inventing a timezone, and separates every signed-in account. A successful
+sign-in opens only that account's real workspace; the local profile name is not
+the cloud account ID.
 
 Account/password auth, revisioned sync, photo assistance, grounded chat,
 Shortcut ingress and MCP access are implemented through the dedicated My
-Emotion Map Supabase project. My Life Memory is never queried or modified.
+Emotion Map Supabase project. My Life Memory is never modified. Its read-only
+MCP is queried only after the user connects it and asks an explicit My Life
+Memory, cross-memory, route or photo question.
 
 ## Local development
 
@@ -35,7 +37,7 @@ npm run check
 npm run check:all
 ```
 
-`check` runs TypeScript, ESLint, 74 unit/component tests, architecture checks
+`check` runs TypeScript, ESLint, unit/component tests, architecture checks
 and the production build. `check:all` also runs the mobile Chromium and iPhone
 WebKit flows. CI repeats both groups.
 
@@ -43,5 +45,7 @@ References:
 
 - `docs/ARCHITECTURE.md` — state and module ownership.
 - `docs/MAP_DATA_LICENSES.md` — map sources and attribution.
-- `docs/SHORTCUT_MCP_STAR_INBOX.md` — Shortcut v2, MCP and inbox boundaries.
+- `docs/SHORTCUT_MCP_STAR_INBOX.md` — Shortcut and inbox boundaries.
+- `docs/MY_LIFE_MEMORY_CONNECTION.md` — fixed read-only input connection.
+- `docs/EMOTION_MAP_MCP.md` — read-only external output and separate actions.
 - `docs/SECURITY.md` — secrets, RLS, sync and AI grounding.

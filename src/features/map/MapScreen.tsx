@@ -39,7 +39,15 @@ import type {
   MapProvider,
 } from './coordinateTransforms';
 import { resolveInitialViewport } from './resolveInitialViewport';
-import { rankLocalRecords } from '../../domain/query/rankRecords';
+import {
+  createLocalSearchIndex,
+  rankLocalSearch,
+} from '../../domain/query/rankRecords';
+import {
+  getDemoFitPadding,
+  getMomentBounds,
+  shouldFitDemoWorkspace,
+} from './demoViewport';
 
 export type MapScreenProps = {
   workspaceKey: string;
@@ -97,6 +105,7 @@ export function MapScreen({
   const draggedMomentIdRef = useRef<string | null>(null);
   const momentPointerPressedRef = useRef(false);
   const handledLocationRequestRef = useRef(0);
+  const handledDemoWorkspaceRef = useRef<string | null>(null);
   const cloudUserIdRef = useRef(cloudAuth?.userId ?? '');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -109,6 +118,7 @@ export function MapScreen({
   const [searchOpen, setSearchOpen] = useState(false);
   const [coordinateSearch, setCoordinateSearch] = useState('');
   const [textSearch, setTextSearch] = useState('');
+  const [debouncedTextSearch, setDebouncedTextSearch] = useState('');
   const [activeSearchField, setActiveSearchField] = useState<'coordinate' | 'text'>('text');
   const [tagMode, setTagMode] = useState<'add' | 'remove' | null>(null);
   const [currentTagGroup, setCurrentTagGroup] = useState(() => Date.now());
@@ -140,6 +150,29 @@ export function MapScreen({
       onEditMoment(addMomentAt(lng, lat));
     },
   });
+
+  useEffect(() => {
+    if (dataMode === 'real') handledDemoWorkspaceRef.current = null;
+  }, [dataMode]);
+
+  const fitDemoMoments = useCallback(() => {
+    if (!shouldFitDemoWorkspace({
+      dataMode,
+      workspaceKey,
+      handledWorkspaceKey: handledDemoWorkspaceRef.current,
+    })) return;
+    const map = mapRef.current;
+    const bounds = getMomentBounds(moments);
+    if (!map || !bounds) return;
+    const container = map.getContainer();
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    handledDemoWorkspaceRef.current = workspaceKey;
+    map.fitBounds(bounds, {
+      padding: getDemoFitPadding(container.clientWidth, container.clientHeight),
+      duration: reducedMotion ? 0 : 620,
+      maxZoom: 17,
+    });
+  }, [dataMode, mapRef, moments, workspaceKey]);
 
   const syncStarActionPosition = useCallback(() => {
     const map = mapRef.current;
@@ -176,6 +209,14 @@ export function MapScreen({
       // Keep the selected map style for the current session.
     }
   }, [mapStyle]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedTextSearch(textSearch),
+      120,
+    );
+    return () => window.clearTimeout(timer);
+  }, [textSearch]);
 
   useEffect(() => {
     if (!focusMomentId) return;
@@ -302,13 +343,18 @@ export function MapScreen({
     };
   }, [moments]);
 
+  const localSearchIndex = useMemo(
+    () => createLocalSearchIndex(moments, notes),
+    [moments, notes],
+  );
+
   const localSearchResults = useMemo(() => {
-    const query = textSearch.trim();
+    const query = debouncedTextSearch.trim();
     if (!query) return [];
-    return rankLocalRecords(query, moments, notes)
+    return rankLocalSearch(query, localSearchIndex)
       .map((item) => item.moment)
       .slice(0, 8);
-  }, [moments, notes, textSearch]);
+  }, [debouncedTextSearch, localSearchIndex]);
 
   const focusSearchResult = (moment: EmotionMoment) => {
     moveMapTo([moment.longitude, moment.latitude], 17, 620);
@@ -688,7 +734,10 @@ export function MapScreen({
         initialViewState={initialViewport}
         mapStyle={MAP_STYLES[mapStyle]}
         attributionControl={false}
-        onLoad={() => setMapLoadError(false)}
+        onLoad={() => {
+          setMapLoadError(false);
+          fitDemoMoments();
+        }}
         onError={() => setMapLoadError(true)}
         cursor="grab"
         onMove={syncStarActionPosition}

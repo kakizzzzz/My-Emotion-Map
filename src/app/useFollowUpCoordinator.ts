@@ -12,6 +12,7 @@ import type {
   Conversation,
   EmotionNote,
   FollowUpRecord,
+  RevisitRecord,
 } from '../types';
 import { createRecordId } from './createRecordId';
 import { useFollowUpScheduler } from './useFollowUpScheduler';
@@ -20,11 +21,13 @@ import {
   getFollowUpAssistantReply,
   getFollowUpPrompt,
 } from '../domain/followUps';
+import { upsertFollowUpRevisit } from './recordAssociations';
 
 type FollowUpCoordinatorOptions = {
   followUps: FollowUpRecord[];
   setFollowUps: Dispatch<SetStateAction<FollowUpRecord[]>>;
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
+  setRevisits: Dispatch<SetStateAction<RevisitRecord[]>>;
   notes: EmotionNote[];
   activeView: AppView;
   activeConversationId: string;
@@ -36,6 +39,7 @@ export function useFollowUpCoordinator({
   followUps,
   setFollowUps,
   setConversations,
+  setRevisits,
   notes,
   activeView,
   activeConversationId,
@@ -148,6 +152,16 @@ export function useFollowUpCoordinator({
             : item,
         ),
       );
+      const note = notes.find((item) => item.id === record.noteId);
+      if (kind !== 'skip' && note) {
+        setRevisits((current) => upsertFollowUpRevisit(
+          current,
+          note,
+          followUpId,
+          kind,
+          answeredAt,
+        ));
+      }
 
       setConversations((current) =>
         current.map((conversation) =>
@@ -187,8 +201,10 @@ export function useFollowUpCoordinator({
     [
       followUps,
       language,
+      notes,
       setConversations,
       setFollowUps,
+      setRevisits,
     ],
   );
 

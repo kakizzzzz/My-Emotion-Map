@@ -2,10 +2,15 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 const TEST_USER_ID = '00000000-0000-4000-8000-000000000001';
-const STORAGE_KEY = `my-emotion-map.workspace.user.${TEST_USER_ID}.v4`;
+const STORAGE_KEY = `my-emotion-map.workspace.user.${TEST_USER_ID}.v5`;
 const SUPABASE_AUTH_STORAGE_KEY = 'sb-uifgpmmlvmfrauzbbrem-auth-token';
 
-async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
+async function seedAuthenticatedSession(
+  page: Page,
+  includeBlankData: boolean,
+  showOnboarding = false,
+  legacyProfileName: string | null = null,
+) {
   await page.route(
     'https://uifgpmmlvmfrauzbbrem.supabase.co/rest/v1/**',
     async (route) => {
@@ -17,7 +22,7 @@ async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
       });
     },
   );
-  await page.addInitScript(({ storageKey, authStorageKey, blank, userId }) => {
+  await page.addInitScript(({ storageKey, authStorageKey, blank, userId, firstRun, profileName }) => {
     if (window.sessionStorage.getItem('e2e-storage-initialized')) return;
     window.localStorage.clear();
     window.localStorage.setItem(authStorageKey, JSON.stringify({
@@ -48,12 +53,26 @@ async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
         starInboxItems: [],
       }));
     }
+    if (!firstRun) {
+      window.localStorage.setItem(
+        `my-emotion-map.user.${userId}.onboardingSeenVersion`,
+        '1',
+      );
+    }
+    if (profileName) {
+      window.localStorage.setItem(
+        `my-emotion-map.user-preferences.${userId}.v2`,
+        JSON.stringify({ profileName }),
+      );
+    }
     window.sessionStorage.setItem('e2e-storage-initialized', 'true');
   }, {
     storageKey: STORAGE_KEY,
     authStorageKey: SUPABASE_AUTH_STORAGE_KEY,
     blank: includeBlankData,
     userId: TEST_USER_ID,
+    firstRun: showOnboarding,
+    profileName: legacyProfileName,
   });
 }
 
@@ -65,10 +84,11 @@ async function startBlank(page: Page) {
 
 async function expandMapTools(page: Page) {
   const toggle = page.getByRole('button', { name: '展开工具' });
-  if (await toggle.isVisible()) {
-    await toggle.click();
-    await page.waitForTimeout(350);
-  }
+  const collapse = page.getByRole('button', { name: '收起工具' });
+  if (await collapse.isVisible()) return;
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(collapse).toBeVisible();
 }
 
 async function dragNewStarToMap(page: Page) {
@@ -78,10 +98,26 @@ async function dragNewStarToMap(page: Page) {
   });
   const box = await star.boundingBox();
   if (!box) throw new Error('Star tool is not visible');
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(180, 360, { steps: 10 });
-  await page.mouse.up();
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await star.dispatchEvent('pointerdown', {
+    pointerId: 1,
+    pointerType: 'mouse',
+    isPrimary: true,
+    button: 0,
+    buttons: 1,
+    clientX: start.x,
+    clientY: start.y,
+  });
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      pointerId: 1, pointerType: 'mouse', isPrimary: true,
+      buttons: 1, clientX: x, clientY: y,
+    }));
+    window.dispatchEvent(new PointerEvent('pointerup', {
+      pointerId: 1, pointerType: 'mouse', isPrimary: true,
+      button: 0, clientX: x, clientY: y,
+    }));
+  }, { x: 180, y: 360 });
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toBeVisible();
 }
 
@@ -127,25 +163,39 @@ test('login uses account and password without an email field', async ({ page }) 
   await expect(page.getByLabel('再次输入密码')).toBeVisible();
 });
 
-test('Demo opens only after an explicit action and remains isolated', async ({ page }) => {
+test('login has no Demo bypass and opens no workspace without an account', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.map-screen')).toHaveCount(0);
-  await page.getByRole('button', { name: '演示数据' }).click();
-  await expect(page.locator('.map-screen')).toBeVisible();
-  await expect(page.locator('.map-star-button').first()).toBeVisible();
-  await expect.poll(() => page.evaluate(() =>
-    window.localStorage.getItem('my-emotion-map.workspace.demo.v3') !== null,
-  )).toBe(true);
+  await expect(page.getByRole('button', { name: '预览演示' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: '进入演示？' })).toHaveCount(0);
+  expect(await page.evaluate(() =>
+    window.localStorage.getItem('my-emotion-map.workspace.demo.v4'),
+  )).toBeNull();
   expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBeNull();
+});
+
+test('first real workspace uses the shared onboarding without creating records', async ({ page }) => {
+  await seedAuthenticatedSession(page, true, true);
+  await page.goto('/');
+  const onboarding = page.getByRole('dialog', { name: '留下一颗星星' });
+  await expect(onboarding).toBeVisible();
+  await expect(onboarding).toHaveAttribute('data-onboarding-mode', 'real');
+  await page.getByRole('button', { name: '跳过' }).click();
+  await expect(page.locator('.map-star-button')).toHaveCount(0);
+  const snapshot = await page.evaluate((key) =>
+    JSON.parse(window.localStorage.getItem(key) ?? '{}'), STORAGE_KEY,
+  );
+  expect(snapshot.moments).toEqual([]);
+  expect(snapshot.notes).toEqual([]);
 });
 
 test('authenticated identity opens an empty real workspace', async ({
   page,
 }) => {
-  await seedAuthenticatedSession(page, false);
+  await seedAuthenticatedSession(page, false, false, 'e2e_student');
   await page.goto('/');
 
-  await expect(page.locator('.demo-mode-banner')).toHaveCount(0);
+  await expect(page.locator('.demo-mode-badge')).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(0);
 
   await page.getByRole('button', { name: '打开页面导航' }).click();
@@ -156,13 +206,52 @@ test('authenticated identity opens an empty real workspace', async ({
   ).toHaveCount(0);
   await drawer.getByRole('button', { name: '设置' }).click();
 
-  await expect(page.getByRole('heading', { name: 'e2e_student' })).toBeVisible();
-  await expect(page.getByText('ID: e2e_student')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '用户e2e_student' })).toBeVisible();
+  await expect(page.getByText('ID:e2e_student')).toBeVisible();
   await expect(page.getByText('00000000-0000-4000-8000-000000000001')).toHaveCount(0);
   await expect(page.getByText('Mina Park')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '退出账号' })).toBeVisible();
-  await page.getByRole('button', { name: '个人' }).click();
-  await expect(page.getByRole('textbox', { name: '本地档案名称' })).toBeVisible();
+  await page.getByRole('button', { name: '修改信息' }).click();
+  await expect(page.locator('.profile-account-id-row')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
+    '用户e2e_student',
+  );
+});
+
+test('Shortcut setup stays vertical and cannot fake a test before pairing', async ({
+  page,
+}) => {
+  await startBlank(page);
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  await page.getByRole('dialog', { name: '页面导航' })
+    .getByRole('button', { name: '设置' })
+    .click();
+  await page.getByRole('button', { name: 'AI设置' }).click();
+
+  const assistantCardBox = await page.locator('.ai-settings-panel > .connection-card')
+    .first().boundingBox();
+  const aiLinksBox = await page.locator('.ai-settings-links').boundingBox();
+  expect(aiLinksBox?.width).toBeCloseTo(assistantCardBox!.width, 0);
+  expect(await page.locator('.ai-style-options').evaluate(
+    (element) => getComputedStyle(element).justifyContent,
+  )).toBe('center');
+
+  await page.getByRole('button', { name: 'Apple健康自动化' }).click();
+
+  await expect(page.getByText('未安装')).toBeVisible();
+  await expect(page.getByText('暂不可用：还没有经过真机验证的一键安装链接。')).toBeVisible();
+  await expect(page.getByRole('button', { name: '生成配对码' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '测试输入' })).toBeDisabled();
+  await page.getByText('高级复核规则').click();
+  const policyButtons = [
+    page.getByRole('button', { name: '允许单次样本复核' }),
+    page.getByRole('button', { name: '允许运动后复核' }),
+    page.getByRole('button', { name: '严格复核未知情境' }),
+  ];
+  const boxes = await Promise.all(policyButtons.map((button) => button.boundingBox()));
+  expect(boxes.every(Boolean)).toBe(true);
+  expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + boxes[0]!.height - 1);
+  expect(boxes[2]!.y).toBeGreaterThan(boxes[1]!.y + boxes[1]!.height - 1);
 });
 
 test('blank new user, keyboard sheets, and accessibility smoke', async ({
@@ -171,7 +260,7 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   await startBlank(page);
 
   await expect(page.locator('.map-star-button')).toHaveCount(0);
-  await expect(page.locator('.demo-mode-banner')).toHaveCount(0);
+  await expect(page.locator('.demo-mode-badge')).toHaveCount(0);
   await expect(page.getByRole('dialog', { name: /定位/ })).toHaveCount(0);
 
   const menu = page.getByRole('button', { name: '打开页面导航' });
@@ -184,11 +273,13 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
 
   await menu.click();
   const navigation = page.getByRole('dialog', { name: '页面导航' });
-  const chatDisclosure = navigation
-    .locator('.side-nav__item')
-    .filter({ hasText: '交流回访' });
+  const chatDisclosure = navigation.getByRole('button', {
+    name: '展开交流回访历史',
+  });
   await chatDisclosure.click();
-  await expect(chatDisclosure).toHaveAttribute('aria-expanded', 'true');
+  await expect(navigation.getByRole('button', {
+    name: '收起交流回访历史',
+  })).toHaveAttribute('aria-expanded', 'true');
   await expect(navigation.locator('#side-chat-history')).toBeVisible();
   await navigation.getByRole('button', { name: '新建对话' }).click();
   await expect(page.locator('.chat-screen')).toBeVisible();
@@ -196,7 +287,8 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   await expect(page.locator('.composer-row > *')).toHaveCount(2);
   await page.getByRole('button', { name: '返回地图并打开导航' }).click();
   await expect(page.locator('.map-screen')).toBeVisible();
-  await expect(page.getByRole('dialog', { name: '页面导航' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await openCalendar(page);
   await page.waitForTimeout(350);
@@ -345,9 +437,9 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
 
   await page.getByRole('button', { name: '打开页面导航' }).click();
   const navigation = page.getByRole('dialog', { name: '页面导航' });
-  const chatDisclosure = navigation
-    .locator('.side-nav__item')
-    .filter({ hasText: '交流回访' });
+  const chatDisclosure = navigation.getByRole('button', {
+    name: '展开交流回访历史',
+  });
   await chatDisclosure.click();
   await expect(navigation.locator('#side-chat-history')).toBeVisible();
   await navigation
@@ -359,7 +451,8 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
   await expect(followUpOptions).toHaveCount(5);
   await expect(followUpOptions).toHaveText(['轻了', '更强', '变了', '一样', '跳过']);
   await page.getByRole('button', { name: '轻了' }).click();
-  await expect(page.locator('.positive-confetti > i')).toHaveCount(20);
+  await expect(page.locator('.positive-confetti')).toHaveCount(0);
+  await expect(page.getByText('已保存这次回访')).toBeVisible();
   await expect(page.locator('.message-options')).toHaveCount(0);
   await page.getByRole('button', { name: '记录现在的感受' }).click();
   await expect(
@@ -398,17 +491,32 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await startBlank(page);
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  await page.getByRole('button', { name: '交流回访', exact: true }).click();
+  const composer = page.locator('.chat-composer');
+  const textareaBox = await composer.getByRole('textbox').boundingBox();
+  const sendBox = await composer.getByRole('button', { name: '发送' }).boundingBox();
+  expect(textareaBox?.width).toBeGreaterThanOrEqual(220);
+  expect(sendBox).toMatchObject({ width: 44, height: 44 });
+  await page.getByRole('button', { name: '返回地图并打开导航' }).click();
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toHaveCount(0);
   await dragNewStarToMap(page);
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toBeVisible();
   await page
     .getByRole('textbox', { name: '给这一刻起个名字' })
     .fill('中途退出也保留');
-  await expect(
-    page.getByRole('button', { name: '关闭并保存为正式记录' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: '关闭并保存为正式记录' }).click();
+  await page.getByRole('button', { name: '关闭' }).click();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
+  await page.getByRole('button', { name: '保留草稿' }).click();
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(1);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const raw = window.localStorage.getItem(storageKey);
+    const data = raw ? JSON.parse(raw) : null;
+    return data?.notes?.[0]?.title ?? null;
+  }, STORAGE_KEY)).toBe('中途退出也保留');
   const stored = await page.evaluate((storageKey) => {
     const raw = window.localStorage.getItem(storageKey);
     return raw ? JSON.parse(raw) : null;
@@ -417,8 +525,9 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
     title: '中途退出也保留',
     emotion: null,
     placeRating: null,
-    isDraft: false,
+    isDraft: true,
   });
+  expect(stored.moments[0]).toMatchObject({ isNew: true });
 
   const animationDuration = await page.locator('.map-screen').evaluate(
     (element) => getComputedStyle(element).animationDuration,

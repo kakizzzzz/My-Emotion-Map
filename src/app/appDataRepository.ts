@@ -13,7 +13,6 @@ import type {
   EmotionNote,
   FollowUpRecord,
   PlaceRating,
-  RevisitRecord,
   StarInboxItem,
 } from '../types';
 import { createDemoAppData } from './demoData';
@@ -27,25 +26,41 @@ import {
   sanitizeStarInboxItem,
 } from './appDataV3';
 import { migrateLegacyTemporalFields } from '../domain/time/temporal';
+import { sanitizeExternalEvidence } from './sanitizeExternalEvidence';
 import {
   LEGACY_APP_DATA_STORAGE_KEY,
   isWorkspaceWithinBudget,
   stableSerialize,
   workspaceStorageKey,
+  legacyUserWorkspaceStorageKey,
 } from './workspace/workspaceStorage';
+import {
+  chatWorkspaceKey,
+  clearChatDraftsForWorkspace,
+  clearLegacyChatDrafts,
+} from './workspace/chatDraftStorage';
+import { clearInboxLocation } from './recordAssociations';
+import { sanitizeRevisits } from './appDataRevisits';
 
 export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export type AppDataLoadIssue =
   | 'storage-unavailable'
   | 'corrupt-json'
-  | 'invalid-import';
+  | 'invalid-import'
+  | 'upgrade-required';
 
 export type LoadedAppData = AppDataSnapshot & {
   loadIssue?: AppDataLoadIssue;
   migrationIssues?: string[];
+  upgradeRequiredVersion?: number;
 };
+
+export type AppDataMigrationResult =
+  | { status: 'ok'; snapshot: AppDataSnapshot; issues: string[] }
+  | { status: 'upgrade_required'; sourceVersion: number }
+  | { status: 'invalid'; issues: string[] };
 
 const EMOTIONS: ReadonlySet<EmotionKey> = new Set([
   'calm',
@@ -372,6 +387,7 @@ const sanitizeMessage = (
     role: source.role,
     body: asString(source.body, 20_000),
     kind:
+      source.kind === 'clarification' ||
       source.kind === 'followup_prompt' ||
       source.kind === 'followup_answer' ||
       source.kind === 'followup_reply'
@@ -382,6 +398,7 @@ const sanitizeMessage = (
           .filter((item): item is string => typeof item === 'string')
           .slice(0, 20)
       : undefined,
+    externalEvidence: sanitizeExternalEvidence(source.externalEvidence),
     options: Array.isArray(source.options)
       ? source.options
           .map((option) => {
@@ -413,6 +430,38 @@ const sanitizeMessage = (
           })
           .filter((option): option is ChatOption => Boolean(option))
       : undefined,
+    clarificationOptions: Array.isArray(source.clarificationOptions)
+      ? source.clarificationOptions
+          .map(asObject)
+          .filter((item): item is Record<string, unknown> => Boolean(item))
+          .flatMap((item) => {
+            const optionId = asString(item.optionId, 200);
+            const label = asString(item.label, 300);
+            const continuationToken = asString(item.continuationToken, 4_000);
+            return optionId && label && continuationToken
+              ? [{ optionId, label, continuationToken }]
+              : [];
+          })
+          .slice(0, 3)
+      : undefined,
+    requestId: asString(source.requestId, 200) || undefined,
+    replyToRequestId: asString(source.replyToRequestId, 200) || undefined,
+    deliveryState:
+      source.deliveryState === 'pending' ||
+      source.deliveryState === 'delivered' ||
+      source.deliveryState === 'failed' ||
+      source.deliveryState === 'stopped'
+        ? source.deliveryState
+        : undefined,
+    retryable: source.retryable === true,
+    referenceConfirmation: (() => {
+      const reference = asObject(source.referenceConfirmation);
+      const optionId = asString(reference?.optionId, 200);
+      const continuationToken = asString(reference?.continuationToken, 4_000);
+      return optionId && continuationToken
+        ? { optionId, continuationToken }
+        : undefined;
+    })(),
     followUpId:
       typeof source.followUpId === 'string'
         ? source.followUpId.slice(0, 200)
@@ -526,37 +575,6 @@ const sanitizeFollowUp = (
   };
 };
 
-const sanitizeRevisit = (
-  value: unknown,
-  issues: string[],
-): RevisitRecord | null => {
-  const source = asObject(value);
-  if (
-    !source ||
-    !asString(source.id, 200) ||
-    !asString(source.noteId, 200) ||
-    !(source.originalEmotion === null || isEmotion(source.originalEmotion)) ||
-    !isEmotion(source.revisitedEmotion) ||
-    !isValidTimestamp(source.originalOccurredAt) ||
-    !isValidTimestamp(source.revisitedAt)
-  ) {
-    issues.push('revisit-dropped');
-    return null;
-  }
-  return {
-    id: asString(source.id, 200),
-    noteId: asString(source.noteId, 200),
-    originalEmotion: source.originalEmotion as EmotionKey | null,
-    revisitedEmotion: source.revisitedEmotion,
-    originalOccurredAt: source.originalOccurredAt,
-    revisitedAt: source.revisitedAt,
-    sourceFollowUpId:
-      typeof source.sourceFollowUpId === 'string'
-        ? source.sourceFollowUpId.slice(0, 200)
-        : undefined,
-  };
-};
-
 export const createEmptyAppData = (): AppDataSnapshot => ({
   schemaVersion: CURRENT_SCHEMA_VERSION,
   dataMode: 'real',
@@ -574,6 +592,8 @@ export {
   appendRevisitRecord,
   dismissInboxItem,
   removeMomentAssociations,
+  setRevisitCurrentEmotion,
+  upsertFollowUpRevisit,
 } from './recordAssociations';
 
 const inferLegacyDataMode = (
@@ -592,16 +612,16 @@ const inferLegacyDataMode = (
 
 export const migrateAppData = (
   value: unknown,
-): { snapshot: AppDataSnapshot; issues: string[] } => {
+): AppDataMigrationResult => {
   const issues: string[] = [];
   const source = asObject(value);
   if (!source) {
-    return { snapshot: createEmptyAppData(), issues: ['root-invalid'] };
+    return { status: 'invalid', issues: ['root-invalid'] };
   }
   const sourceVersion =
     typeof source.schemaVersion === 'number' ? source.schemaVersion : 1;
   if (sourceVersion > CURRENT_SCHEMA_VERSION) {
-    issues.push('schema-newer-than-client');
+    return { status: 'upgrade_required', sourceVersion };
   }
   const rawMoments = Array.isArray(source.moments)
     ? source.moments
@@ -700,14 +720,12 @@ export const migrateAppData = (
   );
   const followUpIds = new Set(followUps.map((record) => record.id));
   const followUpById = new Map(followUps.map((record) => [record.id, record]));
-  const revisits = Array.isArray(source.revisits)
-    ? source.revisits
-        .map((item) => sanitizeRevisit(item, issues))
-        .filter(
-          (item): item is RevisitRecord =>
-            Boolean(item && noteIds.has(item.noteId)),
-        )
-    : [];
+  const revisits = sanitizeRevisits(
+    source.revisits,
+    issues,
+    noteIds,
+    followUpById,
+  );
   const momentIds = new Set(moments.map((moment) => moment.id));
   const starInboxItems = Array.isArray(source.starInboxItems)
     ? source.starInboxItems
@@ -715,14 +733,7 @@ export const migrateAppData = (
         .filter((item): item is StarInboxItem => Boolean(item))
         .map((item) =>
           item.linkedMomentId && !momentIds.has(item.linkedMomentId)
-            ? {
-                ...item,
-                linkedMomentId: undefined,
-                status:
-                  item.status === 'completed' || item.status === 'draft_created'
-                    ? ('pending' as const)
-                    : item.status,
-              }
+            ? clearInboxLocation(item)
             : item,
         )
     : [];
@@ -741,6 +752,7 @@ export const migrateAppData = (
     ? source.themePalette
     : DEFAULT_THEME;
   return {
+    status: 'ok',
     snapshot: {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       dataMode,
@@ -802,10 +814,28 @@ export const loadAppData = (
   try {
     const key = workspaceStorageKey(mode, userId);
     if (!key) return createEmptyAppData();
-    const stored = window.localStorage.getItem(key);
+    const stored = window.localStorage.getItem(key) ?? (
+      mode === 'real' && userId
+        ? window.localStorage.getItem(legacyUserWorkspaceStorageKey(userId))
+        : null
+    );
     if (!stored) return mode === 'demo' ? createDemoAppData() : createEmptyAppData();
     try {
-      const { snapshot, issues } = migrateAppData(JSON.parse(stored));
+      const migrated = migrateAppData(JSON.parse(stored));
+      if (migrated.status === 'upgrade_required') {
+        return {
+          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          loadIssue: 'upgrade-required',
+          upgradeRequiredVersion: migrated.sourceVersion,
+        };
+      }
+      if (migrated.status === 'invalid') {
+        return {
+          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          loadIssue: 'corrupt-json',
+        };
+      }
+      const { snapshot, issues } = migrated;
       if (snapshot.dataMode !== mode) {
         return {
           ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
@@ -845,12 +875,26 @@ export const parseImportedAppData = (
   text: string,
 ):
   | { ok: true; snapshot: AppDataSnapshot; issues: string[] }
-  | { ok: false; issue: AppDataLoadIssue } => {
+  | {
+      ok: false;
+      issue: AppDataLoadIssue;
+      sourceVersion?: number;
+    } => {
   try {
     const parsed = JSON.parse(text);
     if (!asObject(parsed)) return { ok: false, issue: 'invalid-import' };
     const migrated = migrateAppData(parsed);
-    return { ok: true, ...migrated };
+    if (migrated.status === 'upgrade_required') {
+      return {
+        ok: false,
+        issue: 'upgrade-required',
+        sourceVersion: migrated.sourceVersion,
+      };
+    }
+    if (migrated.status === 'invalid') {
+      return { ok: false, issue: 'invalid-import' };
+    }
+    return { ok: true, snapshot: migrated.snapshot, issues: migrated.issues };
   } catch {
     return { ok: false, issue: 'corrupt-json' };
   }
@@ -867,6 +911,7 @@ export const clearAllLocalData = (userId: string | null, mode: DataMode) => {
   const activeKey = workspaceStorageKey(mode, userId);
   const keys = [
     activeKey,
+    userId ? legacyUserWorkspaceStorageKey(userId) : null,
     userId ? `my-emotion-map.user-preferences.${userId}.v2` : null,
     userId ? `my-emotion-map.health-preferences.${userId}.v2` : null,
     userId ? `my-emotion-map.shortcut-heart-dedupe.${userId}.v2` : null,
@@ -875,7 +920,9 @@ export const clearAllLocalData = (userId: string | null, mode: DataMode) => {
     keys.forEach((key) => {
       if (key) window.localStorage.removeItem(key);
     });
-    return true;
+    return clearLegacyChatDrafts() && clearChatDraftsForWorkspace(
+      chatWorkspaceKey(userId, mode),
+    );
   } catch {
     return false;
   }

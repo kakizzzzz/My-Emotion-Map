@@ -16,12 +16,14 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   language: 'zh',
   aboutMe: '',
   aiToneTags: [],
+  aiUserPrompt: '',
   chatPreferenceTags: [],
 };
 
 export const createDefaultLocalSettings = (): LocalSettings => ({
   ...DEFAULT_LOCAL_SETTINGS,
   aiToneTags: [],
+  aiUserPrompt: '',
   chatPreferenceTags: [],
 });
 
@@ -31,6 +33,34 @@ const AI_TONE_TAG_ALIASES: Record<string, string> = {
   直接: 'direct',
   简洁: 'concise',
   有耐心: 'patient',
+  犀利: 'sharp',
+};
+
+const DEFAULT_PROFILE_NAME_PREFIX: Record<AppLanguage, string> = {
+  zh: '用户',
+  en: 'User ',
+  ko: '사용자 ',
+};
+
+export const buildDefaultProfileName = (
+  account: string,
+  language: AppLanguage,
+) => {
+  const normalizedAccount = account.trim().toLocaleLowerCase();
+  const prefix = DEFAULT_PROFILE_NAME_PREFIX[language];
+  return normalizedAccount ? `${prefix}${normalizedAccount}` : prefix.trim();
+};
+
+export const toneTagsFromUserPrompt = (value: string) => {
+  const prompt = value.normalize('NFKC').toLocaleLowerCase();
+  const matches: string[] = [];
+  if (/简洁|短一些|简短|concise|shorter|짧게|간결/.test(prompt)) {
+    matches.push('concise');
+  }
+  if (/直接|直说|direct|straight|직접/.test(prompt)) matches.push('direct');
+  if (/温和|柔和|gentle|soft|부드럽/.test(prompt)) matches.push('gentle');
+  if (/犀利|尖锐|sharp|incisive|날카롭/.test(prompt)) matches.push('sharp');
+  return matches.slice(0, 3);
 };
 
 const COMMUNICATION_TAG_ALIASES: Record<string, string> = {
@@ -76,6 +106,10 @@ export const loadLocalSettings = (userId: string | null = null): LocalSettings =
             .map((item) => AI_TONE_TAG_ALIASES[item] ?? item)
             .slice(0, 20)
         : [],
+      aiUserPrompt:
+        typeof parsed.aiUserPrompt === 'string'
+          ? parsed.aiUserPrompt.trim().slice(0, 240)
+          : '',
       chatPreferenceTags: Array.isArray(parsed.chatPreferenceTags)
         ? parsed.chatPreferenceTags
             .filter((item): item is string => typeof item === 'string')

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { Bell, Check, ChevronLeft, ChevronRight, Mic, Plus, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { EMOTION_ORDER } from "../../data";
@@ -25,24 +25,37 @@ import type {
   SpeechRecognitionLike,
 } from './speechRecognition';
 import { useDialogFocus } from '../../app/useDialogFocus';
+import {
+  initialEditorExitState,
+  reduceEditorExit,
+  type EditorExitAction,
+} from './noteEditorExit';
+
+type SaveNoteHandler = (
+  momentId: string,
+  note: EmotionNote,
+  emotion: EmotionKey | null,
+  rating: PlaceRating | null,
+  color?: string,
+  place?: string,
+) => void;
 
 export function NoteEditorSheet({
   moment,
   note,
   onSave,
+  onSaveDraft,
+  onDeleteDraft,
+  onClose,
   onToast,
   photoAssistDelivery = null,
 }: {
   moment: EmotionMoment;
   note: EmotionNote;
-  onSave: (
-    momentId: string,
-    note: EmotionNote,
-    emotion: EmotionKey | null,
-    rating: PlaceRating | null,
-    color?: string,
-    place?: string,
-  ) => void;
+  onSave: SaveNoteHandler;
+  onSaveDraft: SaveNoteHandler;
+  onDeleteDraft: (momentId: string) => void;
+  onClose: () => void;
   onToast: ToastHandler;
   photoAssistDelivery?: PhotoAssistDelivery | null;
 }) {
@@ -74,20 +87,60 @@ export function NoteEditorSheet({
   const appliedPhotoAssistRef = useRef<string | null>(null);
   const [addQuestionOpen, setAddQuestionOpen] = useState(false);
   const [customQuestion, setCustomQuestion] = useState('');
+  const [exitState, dispatchExit] = useReducer(
+    reduceEditorExit,
+    initialEditorExitState,
+  );
   const prompts = answers;
   const currentPrompt = prompts[promptIndex];
   const isLastPrompt = promptIndex === prompts.length - 1;
   const isPromptComplete = questionsComplete || !currentPrompt;
-  const requestClose = () => {
-    save();
+  const [initialEditorDigest] = useState(() => JSON.stringify({
+    title: initialTitle,
+    titleSource: note.titleSource ?? 'user',
+    place: note.place || moment.place,
+    emotion: note.emotion,
+    placeRating: note.placeRating,
+    answers: moment.isNew
+      ? normalizeNewRecordPrompts(note.answers, language)
+      : normalizeGuidedAnswers(note.answers),
+    followUp: note.followUpEnabled ?? false,
+  }));
+  const editorDigest = JSON.stringify({
+    title,
+    titleSource,
+    place,
+    emotion,
+    placeRating,
+    answers,
+    followUp,
+  });
+  const isDirty = editorDigest !== initialEditorDigest;
+
+  const applyExitAction = (action: EditorExitAction) => {
+    const next = reduceEditorExit(exitState, action);
+    dispatchExit(action);
+    if (next.outcome === 'save') save();
+    if (next.outcome === 'keep_draft') saveDraft();
+    if (next.outcome === 'delete_draft') onDeleteDraft(moment.id);
+    if (next.outcome === 'close' || next.outcome === 'discard') onClose();
   };
+  const requestClose = () => applyExitAction({
+    type: 'request_close',
+    isNew: Boolean(moment.isNew),
+    dirty: isDirty,
+  });
   const editorDialogRef = useDialogFocus<HTMLElement>({
-    isOpen: !addQuestionOpen,
+    isOpen: !addQuestionOpen && exitState.view === 'editing',
     onEscape: requestClose,
   });
   const addQuestionDialogRef = useDialogFocus<HTMLElement>({
     isOpen: addQuestionOpen,
     onEscape: () => setAddQuestionOpen(false),
+  });
+  const exitDialogRef = useDialogFocus<HTMLElement>({
+    isOpen: exitState.view === 'confirm_new' || exitState.view === 'confirm_existing',
+    onEscape: () => applyExitAction({ type: 'continue_editing' }),
   });
 
   useEffect(
@@ -293,7 +346,7 @@ export function NoteEditorSheet({
     }
   };
 
-  function save() {
+  function buildNote(isDraft: boolean) {
     const savedPlace = place.trim() || copy.map.selectedLocation;
     const enteredTitle = title.trim();
     const savedTitle = enteredTitle || (savedPlace
@@ -303,9 +356,9 @@ export function NoteEditorSheet({
       answers.find((answer) => answer.answer.trim())?.answer.trim() ||
       note.excerpt ||
       copy.note.notFilledExcerpt;
-    onSave(
-      moment.id,
-      {
+    return {
+      savedPlace,
+      savedNote: {
         ...note,
         title: savedTitle,
         titleSource: enteredTitle ? titleSource : 'fallback',
@@ -315,9 +368,29 @@ export function NoteEditorSheet({
         placeRating,
         answers,
         excerpt,
-        isDraft: false,
+        isDraft,
         followUpEnabled: followUp,
       },
+    };
+  }
+
+  function save() {
+    const { savedPlace, savedNote } = buildNote(false);
+    onSave(
+      moment.id,
+      savedNote,
+      emotion,
+      placeRating,
+      starColor,
+      savedPlace,
+    );
+  }
+
+  function saveDraft() {
+    const { savedPlace, savedNote } = buildNote(true);
+    onSaveDraft(
+      moment.id,
+      savedNote,
       emotion,
       placeRating,
       starColor,
@@ -331,9 +404,6 @@ export function NoteEditorSheet({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, pointerEvents: 'none' }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && !addQuestionOpen) requestClose();
-      }}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) requestClose();
       }}
@@ -344,6 +414,8 @@ export function NoteEditorSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="note-editor-title"
+        aria-hidden={exitState.view !== 'editing' ? true : undefined}
+        inert={exitState.view !== 'editing' ? true : undefined}
         tabIndex={-1}
         initial={{ y: 38, opacity: 0.92 }}
         animate={{ y: 0, opacity: 1 }}
@@ -361,7 +433,7 @@ export function NoteEditorSheet({
             <button
               className="note-header-action popup-close-button"
               onClick={requestClose}
-              aria-label={copy.note.closeAndSave}
+              aria-label={copy.note.closeEditor}
             >
               <X size={19} strokeWidth={2.2} />
             </button>
@@ -741,6 +813,71 @@ export function NoteEditorSheet({
           ) : null}
         </AnimatePresence>
       </motion.section>
+      <AnimatePresence>
+        {exitState.view === 'confirm_new' || exitState.view === 'confirm_existing' ? (
+          <motion.div
+            className="note-editor-exit-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                applyExitAction({ type: 'continue_editing' });
+              }
+            }}
+          >
+            <motion.section
+              ref={exitDialogRef}
+              className="note-editor-exit-sheet"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="note-editor-exit-title"
+              tabIndex={-1}
+              initial={{ y: 18, opacity: 0.96 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 12, opacity: 0 }}
+              transition={MOTION.sheet}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <h2 id="note-editor-exit-title">
+                {exitState.view === 'confirm_new'
+                  ? copy.note.exitNewTitle
+                  : copy.note.exitExistingTitle}
+              </h2>
+              <div className="note-editor-exit-actions">
+                {exitState.view === 'confirm_new' ? (
+                  <>
+                    <button
+                      className="is-primary"
+                      onClick={() => applyExitAction({ type: 'keep_draft' })}
+                    >
+                      {copy.note.keepDraft}
+                    </button>
+                    <button onClick={() => applyExitAction({ type: 'delete_draft' })}>
+                      {copy.note.deleteDraft}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="is-primary"
+                      onClick={() => applyExitAction({ type: 'save' })}
+                    >
+                      {copy.note.saveChanges}
+                    </button>
+                    <button onClick={() => applyExitAction({ type: 'discard' })}>
+                      {copy.note.discardChanges}
+                    </button>
+                  </>
+                )}
+                <button onClick={() => applyExitAction({ type: 'continue_editing' })}>
+                  {copy.note.continueEditing}
+                </button>
+              </div>
+            </motion.section>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </motion.div>
   );
 }

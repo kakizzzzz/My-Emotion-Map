@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import {
@@ -23,6 +22,7 @@ import { MOTION } from '../../motion';
 import { useAppLanguage } from '../../i18n';
 import type {
   ChatOption,
+  ChatDeliveryState,
   Conversation,
   DataMode,
   EmotionNote,
@@ -38,19 +38,20 @@ import type { CloudAuth } from '../../services/supabaseClient';
 import type { CloudSyncStatus } from '../../services/useCloudSync';
 import { requestEmotionChat } from '../../services/emotionChat';
 import type { ToastHandler } from '../../app/appTypes';
-import { loadLocalSettings } from '../../app/profilePreferences';
-import { STAR_COLORS } from '../../domain/notePrompts';
-
-const POSITIVE_CONFETTI = Array.from({ length: 20 }, (_, index) => ({
-  color: STAR_COLORS[index % 9],
-  left: 4 + ((index * 37) % 92),
-  drift: -46 + ((index * 29) % 92),
-  delay: (index % 5) * 0.055,
-  duration: 1.05 + (index % 4) * 0.12,
-  rotation: 180 + ((index * 73) % 360),
-  width: index % 3 === 0 ? 8 : 6,
-  height: index % 2 === 0 ? 17 : 13,
-}));
+import {
+  loadLocalSettings,
+  toneTagsFromUserPrompt,
+} from '../../app/profilePreferences';
+import { chatDraftKey } from '../../app/workspace/chatDraftStorage';
+import { createRecordId } from '../../app/createRecordId';
+import type {
+  BeginChatInput,
+  CompleteChatInput,
+} from '../../app/useChatDeliveryHandlers';
+import {
+  DEMO_SUGGESTED_PROMPTS,
+  createDemoChatResponse,
+} from './demoChatResponder';
 
 function AiAvatar() {
   return (
@@ -60,21 +61,21 @@ function AiAvatar() {
   );
 }
 
-const draftKey = (conversationId: string) =>
-  `my-emotion-map.chat-draft.${conversationId}`;
-
 export function ChatScreen({
   notes,
   followUps,
   conversations,
   activeConversationId,
+  workspaceKey,
   onAnswerFollowUp,
   onRevisitEmotion,
   cloudAuth,
   cloudRevision,
   cloudStatus,
   dataMode,
-  onGroundedChat,
+  onBeginChat,
+  onCompleteChat,
+  onFailChat,
   onNewConversation,
   onExitToMap,
   onToast,
@@ -83,6 +84,7 @@ export function ChatScreen({
   followUps: FollowUpRecord[];
   conversations: Conversation[];
   activeConversationId: string;
+  workspaceKey: string;
   onAnswerFollowUp: (
     followUpId: string,
     label: string,
@@ -93,11 +95,11 @@ export function ChatScreen({
   cloudRevision: number | null;
   cloudStatus: CloudSyncStatus;
   dataMode: DataMode;
-  onGroundedChat: (
-    conversationId: string,
-    userBody: string,
-    assistantBody: string,
-    noteIds: string[],
+  onBeginChat: (input: BeginChatInput) => void;
+  onCompleteChat: (input: CompleteChatInput) => void;
+  onFailChat: (
+    requestId: string,
+    state: Extract<ChatDeliveryState, 'failed' | 'stopped'>,
   ) => void;
   onNewConversation: () => void;
   onExitToMap: () => void;
@@ -105,25 +107,34 @@ export function ChatScreen({
 }) {
   const { copy, language } = useAppLanguage();
   const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
-  const [draft, setDraft] = useState(() => {
+  const activeDraftKey = chatDraftKey(workspaceKey, activeConversationId);
+  const readDraft = (key: string) => {
     try {
-      return sessionStorage.getItem(draftKey(activeConversationId)) ?? '';
+      return sessionStorage.getItem(key) ?? '';
     } catch {
       return '';
     }
-  });
+  };
+  const [draftState, setDraftState] = useState(() => ({
+    key: activeDraftKey,
+    value: readDraft(activeDraftKey),
+  }));
+  const draft = draftState.key === activeDraftKey ? draftState.value : '';
+  const setDraft = (value: string) => {
+    setDraftState({ key: activeDraftKey, value });
+  };
   const [sending, setSending] = useState(false);
-  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
-  const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const [showJumpToEnd, setShowJumpToEnd] = useState(false);
   const [unreadBelow, setUnreadBelow] = useState(0);
-  const [positiveCelebration, setPositiveCelebration] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
-  const celebrationTimerRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const nearBottomRef = useRef(true);
+  const resizeReadyRef = useRef(false);
+  const observedMessageCountRef = useRef(0);
   const previousMessageCountRef = useRef(0);
   const savedConversation = conversations.find(
     (item) => item.id === activeConversationId,
@@ -135,6 +146,7 @@ export function ChatScreen({
     kind: 'regular' as const,
     messages: [],
   };
+  const renderedMessageCountRef = useRef(conversation.messages.length);
   const previewNote = notes.find((note) => note.id === previewNoteId) ?? null;
   const previewDialogRef = useDialogFocus<HTMLDivElement>({
     isOpen: Boolean(previewNote),
@@ -145,7 +157,8 @@ export function ChatScreen({
       (conversation.id === FOLLOW_UP_CONVERSATION_ID ||
         conversation.kind === 'companion'),
   );
-  const available = Boolean(
+  const isDemo = dataMode === 'demo';
+  const available = isDemo || Boolean(
     cloudAuth &&
       cloudRevision !== null &&
       cloudStatus === 'synced' &&
@@ -158,35 +171,23 @@ export function ChatScreen({
     () => getFollowUpOptions(language),
     [language],
   );
+  const demoPrompts = DEMO_SUGGESTED_PROMPTS[language];
   const responseStyle = useMemo(
     () => {
       if (!cloudAuth) return [];
-      const allowlist = new Set(['concise', 'direct', 'gentle']);
-      return loadLocalSettings(cloudAuth.userId).aiToneTags
-        .filter((item): item is 'concise' | 'direct' | 'gentle' =>
+      const settings = loadLocalSettings(cloudAuth.userId);
+      const allowlist = new Set(['concise', 'direct', 'gentle', 'sharp']);
+      return [...new Set([
+        ...settings.aiToneTags,
+        ...toneTagsFromUserPrompt(settings.aiUserPrompt),
+      ])]
+        .filter((item): item is 'concise' | 'direct' | 'gentle' | 'sharp' =>
           allowlist.has(item),
         )
         .slice(0, 3);
     },
     [cloudAuth],
   );
-
-  useEffect(() => () => {
-    if (celebrationTimerRef.current !== null) {
-      window.clearTimeout(celebrationTimerRef.current);
-    }
-  }, []);
-
-  const celebratePositiveChange = () => {
-    setPositiveCelebration((current) => current + 1);
-    if (celebrationTimerRef.current !== null) {
-      window.clearTimeout(celebrationTimerRef.current);
-    }
-    celebrationTimerRef.current = window.setTimeout(() => {
-      setPositiveCelebration(0);
-      celebrationTimerRef.current = null;
-    }, 1_700);
-  };
 
   const scrollToEnd = useCallback((behavior: ScrollBehavior) => {
     const target = endRef.current;
@@ -199,8 +200,38 @@ export function ChatScreen({
   }, []);
 
   useLayoutEffect(() => {
+    if (draftState.key !== activeDraftKey) {
+      setDraftState({ key: activeDraftKey, value: readDraft(activeDraftKey) });
+    }
+  }, [activeDraftKey, draftState.key]);
+
+  useLayoutEffect(() => {
+    renderedMessageCountRef.current = conversation.messages.length;
+  });
+
+  useLayoutEffect(() => {
+    previousMessageCountRef.current = renderedMessageCountRef.current;
+    resizeReadyRef.current = false;
     scrollToEnd('instant');
-    previousMessageCountRef.current = 0;
+  }, [activeConversationId, scrollToEnd]);
+
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (!resizeReadyRef.current) {
+        resizeReadyRef.current = true;
+        observedMessageCountRef.current = renderedMessageCountRef.current;
+        return;
+      }
+      if (observedMessageCountRef.current !== renderedMessageCountRef.current) {
+        observedMessageCountRef.current = renderedMessageCountRef.current;
+        return;
+      }
+      if (nearBottomRef.current) scrollToEnd('instant');
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, [activeConversationId, scrollToEnd]);
 
   useEffect(() => {
@@ -222,13 +253,23 @@ export function ChatScreen({
   }, [conversation.messages, scrollToEnd]);
 
   useEffect(() => {
+    if (draftState.key !== activeDraftKey) return;
     try {
-      if (draft) sessionStorage.setItem(draftKey(activeConversationId), draft);
-      else sessionStorage.removeItem(draftKey(activeConversationId));
+      if (draft) sessionStorage.setItem(activeDraftKey, draft);
+      else sessionStorage.removeItem(activeDraftKey);
     } catch {
       // Session-only drafts can remain in React state when storage is blocked.
     }
-  }, [activeConversationId, draft]);
+  }, [activeDraftKey, draft, draftState.key]);
+
+  useEffect(() => {
+    if (activeRequestId) return;
+    conversation.messages.forEach((message) => {
+      if (message.deliveryState === 'pending' && message.requestId) {
+        onFailChat(message.requestId, 'stopped');
+      }
+    });
+  }, [activeRequestId, conversation.messages, onFailChat]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -238,59 +279,80 @@ export function ChatScreen({
     textarea.style.overflowY = textarea.scrollHeight > 104 ? 'auto' : 'hidden';
   }, [draft]);
 
-  const sendMessage = async (message: string) => {
+  const sendMessage = async (
+    message: string,
+    retryRequestId?: string,
+    referenceConfirmation?: {
+      optionId: string;
+      continuationToken: string;
+    },
+  ) => {
     if (
       !available ||
-      !cloudAuth ||
-      cloudRevision === null ||
       !message ||
       sending ||
       message.length > 1_200
     ) {
       return;
     }
+    const requestId = retryRequestId ?? createRecordId('chat-request');
     setSending(true);
-    setPendingMessage(message);
-    setFailedMessage(null);
+    setActiveRequestId(requestId);
+    onBeginChat({
+      conversationId: conversation.id,
+      requestId,
+      body: message,
+      createdAt: new Date().toISOString(),
+      referenceConfirmation,
+    });
     setDraft('');
     window.requestAnimationFrame(() => scrollToEnd('smooth'));
     const controller = new AbortController();
     abortRef.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 22_000);
     try {
-      const recentNoteIds = conversation.messages
-        .flatMap((item) => item.noteIds ?? [])
-        .slice(-6);
-      const result = await requestEmotionChat({
-        auth: cloudAuth,
-        message,
-        language,
-        conversationId: conversation.id,
-        selectedNoteIds: recentNoteIds,
-        responseStyle,
-        clientRevision: cloudRevision,
-        signal: controller.signal,
-      });
+      const result = isDemo
+        ? createDemoChatResponse({ message, language, notes })
+        : cloudAuth && cloudRevision !== null
+          ? await requestEmotionChat({
+              auth: cloudAuth,
+              requestId,
+              message,
+              language,
+              conversationId: conversation.id,
+              explicitNoteIds: [],
+              conversationAnchorNoteIds: conversation.messages
+                .flatMap((item) => item.noteIds ?? [])
+                .slice(-6),
+              responseStyle,
+              clientRevision: cloudRevision,
+              referenceConfirmation,
+              signal: controller.signal,
+            })
+          : null;
       if (!result || !result.answer.trim()) throw new Error('Unavailable');
-      onGroundedChat(
-        conversation.id,
-        message,
-        result.answer,
-        result.evidence.map((item) => item.noteId),
-      );
-      setPendingMessage(null);
+      onCompleteChat({
+        conversationId: conversation.id,
+        requestId,
+        assistantBody: result.answer,
+        noteIds: result.evidence.map((item) => item.noteId),
+        externalEvidence: result.externalEvidence,
+        clarificationOptions: result.clarificationOptions ?? [],
+        retryable: result.status === 'generation_rejected',
+        createdAt: new Date().toISOString(),
+      });
     } catch {
-      setPendingMessage(null);
       if (controller.signal.aborted) {
-        setDraft(message);
+        onFailChat(requestId, 'stopped');
       } else {
-        setFailedMessage(message);
+        onFailChat(requestId, 'failed');
         onToast(copy.chat.chatUnavailable, { durationMs: 2800 });
       }
     } finally {
       window.clearTimeout(timer);
       abortRef.current = null;
       setSending(false);
+      setActiveRequestId(null);
     }
   };
 
@@ -310,34 +372,6 @@ export function ChatScreen({
 
   return (
     <section className="paper-screen chat-screen" aria-busy={sending}>
-      {positiveCelebration > 0 ? (
-        <>
-          <div
-            key={positiveCelebration}
-            className="positive-confetti"
-            aria-hidden="true"
-          >
-            {POSITIVE_CONFETTI.map((piece, index) => (
-              <i
-                key={index}
-                style={{
-                  '--confetti-left': `${piece.left}%`,
-                  '--confetti-drift': `${piece.drift}px`,
-                  '--confetti-delay': `${piece.delay}s`,
-                  '--confetti-duration': `${piece.duration}s`,
-                  '--confetti-rotation': `${piece.rotation}deg`,
-                  '--confetti-width': `${piece.width}px`,
-                  '--confetti-height': `${piece.height}px`,
-                  '--confetti-color': piece.color,
-                } as CSSProperties}
-              />
-            ))}
-          </div>
-          <span className="visually-hidden" role="status">
-            {copy.chat.positiveCelebration}
-          </span>
-        </>
-      ) : null}
       <header className="chat-header chat-header--thread">
         <div>
           <h1>{isFollowUp ? copy.navigation.chat : conversation.title}</h1>
@@ -358,6 +392,7 @@ export function ChatScreen({
             onClick={() => {
               if (sending) {
                 abortRef.current?.abort();
+                if (activeRequestId) onFailChat(activeRequestId, 'stopped');
                 return;
               }
               onNewConversation();
@@ -384,6 +419,7 @@ export function ChatScreen({
           if (distance < 96) setUnreadBelow(0);
         }}
       >
+        <div ref={contentRef} className="message-scroll__content">
         {conversation.messages.length ? (
           conversation.messages.map((message) => {
             const followUp = message.followUpId
@@ -433,6 +469,20 @@ export function ChatScreen({
                       })}
                     </div>
                   ) : null}
+                  {message.externalEvidence?.length ? (
+                    <div
+                      className="message-external-evidence"
+                      aria-label={copy.settings.myLifeMemory}
+                    >
+                      {message.externalEvidence.map((item) => (
+                        <span key={`${item.referenceId}:${item.matchReason}`}>
+                          <small>{copy.settings.myLifeMemory}</small>
+                          {item.title}
+                          {item.date ? ` · ${item.date}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   {body ? <div className="message-bubble">{body}</div> : null}
                   {showOptions && followUp ? (
                     <div className="message-options">
@@ -446,15 +496,71 @@ export function ChatScreen({
                               option.label,
                               option.responseKind,
                             );
-                            if (option.responseKind === 'lighter') {
-                              celebratePositiveChange();
-                            }
+                            onToast(copy.chat.followUpSaved);
                           }}
                         >
                           {option.label}
                         </button>
                       ))}
                     </div>
+                  ) : null}
+                  {message.clarificationOptions?.length ? (
+                    <div className="message-options message-options--clarification">
+                      {message.clarificationOptions.slice(0, 3).map((option) => (
+                        <button
+                          key={option.optionId}
+                          type="button"
+                          disabled={sending}
+                          onClick={() => void sendMessage(
+                            option.label,
+                            undefined,
+                            {
+                              optionId: option.optionId,
+                              continuationToken: option.continuationToken,
+                            },
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {message.role === 'user' &&
+                  (message.deliveryState === 'failed' ||
+                    message.deliveryState === 'stopped') ? (
+                    <button
+                      type="button"
+                      className="message-retry-action"
+                      aria-label={copy.common.retry}
+                      disabled={sending || !message.requestId}
+                      onClick={() => void sendMessage(
+                        message.body,
+                        message.requestId,
+                        message.referenceConfirmation,
+                      )}
+                    >
+                      <RotateCcw size={18} strokeWidth={2.2} />
+                    </button>
+                  ) : null}
+                  {message.role === 'assistant' && message.retryable ? (
+                    <button
+                      type="button"
+                      className="message-retry-action"
+                      aria-label={copy.common.retry}
+                      disabled={sending || !message.replyToRequestId}
+                      onClick={() => {
+                        const original = conversation.messages.find((item) =>
+                          item.requestId === message.replyToRequestId
+                        );
+                        if (original) void sendMessage(
+                          original.body,
+                          undefined,
+                          original.referenceConfirmation,
+                        );
+                      }}
+                    >
+                      <RotateCcw size={18} strokeWidth={2.2} />
+                    </button>
                   ) : null}
                   {canRevisit && followUp ? (
                     <button
@@ -475,15 +581,27 @@ export function ChatScreen({
             <strong>{copy.chat.noFollowUpTitle}</strong>
             <p>{copy.chat.noFollowUpBody}</p>
           </div>
+        ) : isDemo ? (
+          <section className="demo-chat-prompts" aria-label={copy.demo.promptTitle}>
+            <p>{copy.demo.promptTitle}</p>
+            <div>
+              {demoPrompts.map((prompt) => (
+                <button
+                  key={prompt.text}
+                  type="button"
+                  onClick={() => void sendMessage(prompt.text)}
+                  disabled={sending}
+                >
+                  {prompt.text}
+                </button>
+              ))}
+            </div>
+          </section>
         ) : null}
 
-        {pendingMessage ? (
-          <>
-            <article className="message-row message-row--user is-transient">
-              <div className="message-stack">
-                <div className="message-bubble">{pendingMessage}</div>
-              </div>
-            </article>
+        {conversation.messages.some(
+          (message) => message.deliveryState === 'pending',
+        ) ? (
             <article className="message-row message-row--assistant is-pending">
               <AiAvatar />
               <div className="message-stack">
@@ -494,25 +612,9 @@ export function ChatScreen({
                 </div>
               </div>
             </article>
-          </>
-        ) : null}
-
-        {failedMessage ? (
-          <article className="message-row message-row--user is-retryable">
-            <div className="message-stack">
-              <div className="message-bubble">{failedMessage}</div>
-              <button
-                type="button"
-                className="message-retry-action"
-                aria-label={copy.common.retry}
-                onClick={() => void sendMessage(failedMessage)}
-              >
-                <RotateCcw size={18} strokeWidth={2.2} />
-              </button>
-            </div>
-          </article>
         ) : null}
         <div ref={endRef} className="message-end-anchor" />
+        </div>
       </div>
 
       {showJumpToEnd ? (

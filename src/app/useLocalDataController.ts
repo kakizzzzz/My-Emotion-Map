@@ -27,7 +27,6 @@ import {
   clearAllLocalData,
   canonicalSnapshotDigest,
   createEmptyAppData,
-  loadAppData,
   parseImportedAppData,
   removeMomentAssociations,
   saveAppData,
@@ -264,10 +263,15 @@ export function useLocalDataController({
     async (file: File) => {
       const parsed = parseImportedAppData(await file.text());
       if (!parsed.ok) {
-        showToast(copy.feedback.dataImportFailed, {
-          placement: 'top',
-          durationMs: 4_000,
-        });
+        showToast(
+          parsed.issue === 'upgrade-required'
+            ? copy.feedback.dataUpgradeRequired
+            : copy.feedback.dataImportFailed,
+          {
+            placement: 'top',
+            durationMs: 4_000,
+          },
+        );
         return;
       }
       if (dataMode === 'real' && parsed.snapshot.dataMode === 'demo') {
@@ -297,26 +301,11 @@ export function useLocalDataController({
     showToast(copy.feedback.allDataDeleted);
   }, [applySnapshot, copy.feedback, dataMode, showToast, userId]);
 
-  const loadDemoMode = useCallback(() => {
-    if (snapshot.dataMode === 'real') saveAppData(snapshot, userId);
-    applySnapshot(loadAppData(userId, 'demo'));
-    showToast(copy.feedback.demoLoaded);
-    return true;
-  }, [applySnapshot, copy.feedback, showToast, snapshot, userId]);
-
-  const exitDemoMode = useCallback(() => {
-    applySnapshot(userId ? loadAppData(userId, 'real') : createEmptyAppData());
-    showToast(copy.feedback.demoExited);
-    return true;
-  }, [applySnapshot, copy.feedback, showToast, userId]);
-
   return {
     applySnapshot,
     deleteMoment,
     exportData,
     importData,
     deleteAllData,
-    loadDemoMode,
-    exitDemoMode,
   };
 }

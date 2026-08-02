@@ -55,11 +55,22 @@
   }
 }
 
-.login-language-switch {
+.login-top-controls {
   position: absolute;
   z-index: 2;
   top: max(16px, calc(env(safe-area-inset-top) + 8px));
   right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-language-switch button:focus-visible {
+  outline: 2px solid var(--em-dark);
+  outline-offset: 2px;
+}
+
+.login-language-switch {
   display: flex;
   gap: 2px;
   padding: 4px;
@@ -218,18 +229,70 @@
   transform: none;
 }
 
-.login-demo-action {
-  display: block;
-  min-height: 44px;
-  margin: 8px auto -4px;
-  padding: 0 18px;
-  border-radius: var(--em-radius-pill);
-  color: var(--em-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
+.login-demo-confirmation-backdrop {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px max(14px, env(safe-area-inset-right))
+    max(18px, calc(env(safe-area-inset-bottom) + 10px));
+  background: rgba(30, 30, 29, 0.18);
+  backdrop-filter: blur(5px);
 }
 
-.login-demo-action:focus-visible {
+.login-demo-confirmation {
+  width: min(100%, 420px);
+  padding: 22px;
+  border-radius: 26px;
+  background: var(--em-card-surface);
+  box-shadow: var(--em-shadow-sheet);
+}
+
+.login-demo-confirmation > svg {
+  margin-bottom: 14px;
+  color: var(--em-text-secondary);
+}
+
+.login-demo-confirmation h2,
+.login-demo-confirmation p {
+  margin: 0;
+}
+
+.login-demo-confirmation h2 {
+  font-size: 20px;
+}
+
+.login-demo-confirmation p {
+  margin-top: 8px;
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.login-demo-confirmation > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.login-demo-confirmation button {
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: var(--em-radius-pill);
+  background: var(--em-soft-surface);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.login-demo-confirmation button.is-primary {
+  background: var(--em-dark);
+  color: var(--em-on-dark);
+}
+
+.login-demo-confirmation button:focus-visible {
   outline: 2px solid var(--em-dark);
   outline-offset: 2px;
 }
