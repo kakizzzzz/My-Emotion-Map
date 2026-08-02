@@ -22,8 +22,37 @@
 }
 
 .login-map-background svg {
+  display: block;
   width: 100%;
   height: 100%;
+}
+
+.login-water-contour {
+  will-change: stroke-dashoffset;
+  animation: login-water-dots-flow 2.8s linear infinite;
+}
+
+.login-water-contour:nth-child(2) {
+  animation-delay: -0.56s;
+}
+
+.login-water-contour:nth-child(3) {
+  animation-delay: -1.12s;
+}
+
+.login-water-contour:nth-child(4) {
+  animation-delay: -1.68s;
+}
+
+.login-water-contour:nth-child(5) {
+  animation-delay: -2.24s;
+}
+
+@keyframes login-water-dots-flow {
+  to {
+    /* Four complete dot intervals make the loop visually seamless. */
+    stroke-dashoffset: -28px;
+  }
 }
 
 .login-language-switch {
@@ -70,7 +99,7 @@
   margin: 0 0 32px;
   font-family: "Afacad", "Noto Serif SC", "Noto Serif KR", sans-serif;
   font-size: 36px;
-  font-weight: 750;
+  font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1;
   text-align: center;
@@ -97,7 +126,7 @@
 .login-card > header h2 {
   margin: 0;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
 }
 
@@ -153,12 +182,20 @@
   margin-top: 20px;
 }
 
+.login-auth-error {
+  margin-top: 12px;
+  color: var(--em-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
 .login-actions button {
   height: 48px;
   padding: 0 12px;
   border-radius: var(--em-radius-pill);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   transition: transform var(--em-fast);
 }
 
@@ -181,16 +218,28 @@
   transform: none;
 }
 
+.login-demo-action {
+  display: block;
+  min-height: 44px;
+  margin: 8px auto -4px;
+  padding: 0 18px;
+  border-radius: var(--em-radius-pill);
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.login-demo-action:focus-visible {
+  outline: 2px solid var(--em-dark);
+  outline-offset: 2px;
+}
+
 .login-restoring {
-  padding: 28px 16px;
+  padding: 16px;
   color: var(--em-text-secondary);
   font-size: 15px;
   font-weight: 500;
   text-align: center;
-}
-
-.login-screen ~ .toast--bottom {
-  bottom: max(28px, calc(env(safe-area-inset-bottom) + 20px));
 }
 
 @media (max-width: 340px) {
@@ -203,5 +252,11 @@
 @media (prefers-reduced-motion: reduce) {
   .login-actions button:active {
     transform: none;
+  }
+
+  .login-water-contour {
+    animation: none;
+    stroke-dashoffset: 0;
+    will-change: auto;
   }
 }

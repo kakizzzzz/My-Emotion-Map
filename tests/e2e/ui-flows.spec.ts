@@ -1,9 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
-const STORAGE_KEY = 'my-emotion-map.app-data.v1';
+const TEST_USER_ID = '00000000-0000-4000-8000-000000000001';
+const STORAGE_KEY = `my-emotion-map.workspace.user.${TEST_USER_ID}.v4`;
 const SUPABASE_AUTH_STORAGE_KEY = 'sb-uifgpmmlvmfrauzbbrem-auth-token';
-const DEMO_PROFILE_ID = '7c5e2f8a-4c6f-4c1d-9b2f-2a6f5e8d2026';
 
 async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
   await page.route(
@@ -17,7 +17,7 @@ async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
       });
     },
   );
-  await page.addInitScript(({ storageKey, authStorageKey, blank }) => {
+  await page.addInitScript(({ storageKey, authStorageKey, blank, userId }) => {
     if (window.sessionStorage.getItem('e2e-storage-initialized')) return;
     window.localStorage.clear();
     window.localStorage.setItem(authStorageKey, JSON.stringify({
@@ -27,7 +27,7 @@ async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
       expires_at: Math.floor(Date.now() / 1000) + 315360000,
       token_type: 'bearer',
       user: {
-        id: '00000000-0000-4000-8000-000000000001',
+        id: userId,
         aud: 'authenticated',
         role: 'authenticated',
         email: 'internal-account-identifier',
@@ -53,6 +53,7 @@ async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
     storageKey: STORAGE_KEY,
     authStorageKey: SUPABASE_AUTH_STORAGE_KEY,
     blank: includeBlankData,
+    userId: TEST_USER_ID,
   });
 }
 
@@ -62,7 +63,16 @@ async function startBlank(page: Page) {
   await expect(page.locator('.map-screen')).toBeVisible();
 }
 
+async function expandMapTools(page: Page) {
+  const toggle = page.getByRole('button', { name: '展开工具' });
+  if (await toggle.isVisible()) {
+    await toggle.click();
+    await page.waitForTimeout(350);
+  }
+}
+
 async function dragNewStarToMap(page: Page) {
+  await expandMapTools(page);
   const star = page.getByRole('button', {
     name: '点击在当前位置添加星星，或拖到地图上放置',
   });
@@ -117,14 +127,26 @@ test('login uses account and password without an email field', async ({ page }) 
   await expect(page.getByLabel('再次输入密码')).toBeVisible();
 });
 
-test('authenticated preview shows labelled Demo content and a fictional profile', async ({
+test('Demo opens only after an explicit action and remains isolated', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.map-screen')).toHaveCount(0);
+  await page.getByRole('button', { name: '演示数据' }).click();
+  await expect(page.locator('.map-screen')).toBeVisible();
+  await expect(page.locator('.map-star-button').first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    window.localStorage.getItem('my-emotion-map.workspace.demo.v2') !== null,
+  )).toBe(true);
+  expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBeNull();
+});
+
+test('authenticated identity opens an empty real workspace', async ({
   page,
 }) => {
   await seedAuthenticatedSession(page, false);
   await page.goto('/');
 
-  await expect(page.locator('.demo-mode-banner')).toContainText('演示数据');
-  expect(await page.locator('.map-star-button').count()).toBeGreaterThan(0);
+  await expect(page.locator('.demo-mode-banner')).toHaveCount(0);
+  await expect(page.locator('.map-star-button')).toHaveCount(0);
 
   await page.getByRole('button', { name: '打开页面导航' }).click();
   const drawer = page.getByRole('dialog', { name: '页面导航' });
@@ -134,12 +156,13 @@ test('authenticated preview shows labelled Demo content and a fictional profile'
   ).toHaveCount(0);
   await drawer.getByRole('button', { name: '设置' }).click();
 
-  await expect(page.getByText('Mina Park')).toBeVisible();
-  await expect(page.getByText(DEMO_PROFILE_ID)).toBeVisible();
-  await page.getByRole('button', { name: '修改个人信息' }).click();
-  await expect(
-    page.getByRole('textbox', { name: '用户 ID' }),
-  ).toHaveValue(DEMO_PROFILE_ID);
+  await expect(page.getByRole('heading', { name: 'e2e_student' })).toBeVisible();
+  await expect(page.getByText('ID: e2e_student')).toBeVisible();
+  await expect(page.getByText('00000000-0000-4000-8000-000000000001')).toHaveCount(0);
+  await expect(page.getByText('Mina Park')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '退出账号' })).toBeVisible();
+  await page.getByRole('button', { name: '个人' }).click();
+  await expect(page.getByRole('textbox', { name: '本地档案名称' })).toBeVisible();
 });
 
 test('blank new user, keyboard sheets, and accessibility smoke', async ({
@@ -162,17 +185,14 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   await menu.click();
   await page.getByRole('button', { name: '交流回访' }).click();
   await expect(page.locator('.chat-screen')).toBeVisible();
-  await expect(
-    page.getByText('发送第一条消息后，这段对话才会保存。'),
-  ).toBeVisible();
   await expect(page.locator('.message-row')).toHaveCount(0);
   await expect(page.locator('.composer-row > *')).toHaveCount(2);
   await page.getByRole('button', { name: '返回地图并打开导航' }).click();
   await expect(page.locator('.map-screen')).toBeVisible();
-  await expect(page.getByRole('dialog', { name: '页面导航' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '页面导航' })).toHaveCount(0);
 
   await openCalendar(page);
+  await page.waitForTimeout(350);
   const calendarActions = page.locator('.calendar-header-actions > button');
   await expect(calendarActions).toHaveCount(2);
   const [calendarModeBox, calendarCloseBox] = await Promise.all([
@@ -194,6 +214,7 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
     .getByRole('button', { name: '关闭' })
     .click();
 
+  await expandMapTools(page);
   const search = page.getByRole('button', { name: '搜索记录或坐标' });
   await search.focus();
   await page.keyboard.press('Enter');
@@ -219,8 +240,70 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
   await completeEditor(page, 'E2E 安静角落');
 
   await expect(page.locator('.map-star-button')).toHaveCount(1);
+  const coordinatesBeforeDrag = await page.evaluate((storageKey) => {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) throw new Error('Saved app data was not found');
+    const data = JSON.parse(raw) as { moments: Array<{ latitude: number; longitude: number }> };
+    return data.moments[0];
+  }, STORAGE_KEY);
+  const savedStar = page.locator('.map-star-button').first();
+  const savedStarBox = await savedStar.boundingBox();
+  if (!savedStarBox) throw new Error('Saved star is not visible');
+  const hitTarget = await page.evaluate(({ x, y }) => {
+    const target = document.elementFromPoint(x, y);
+    return {
+      tag: target?.tagName,
+      className: target?.getAttribute('class'),
+      isStar: Boolean(target?.closest('.map-star-anchor')),
+    };
+  }, {
+    x: savedStarBox.x + savedStarBox.width / 2,
+    y: savedStarBox.y + savedStarBox.height / 2,
+  });
+  if (!hitTarget.isStar) {
+    throw new Error(`Saved star is not hit-testable: ${JSON.stringify(hitTarget)}`);
+  }
+  await page.mouse.move(
+    savedStarBox.x + savedStarBox.width / 2,
+    savedStarBox.y + savedStarBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    savedStarBox.x + savedStarBox.width / 2 + 68,
+    savedStarBox.y + savedStarBox.height / 2 + 28,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  await expect.poll(async () =>
+    page.evaluate((storageKey) => {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return null;
+      const data = JSON.parse(raw) as { moments: Array<{ latitude: number; longitude: number }> };
+      return data.moments[0];
+    }, STORAGE_KEY),
+  ).not.toEqual(coordinatesBeforeDrag);
+  const coordinatesAfterDrag = await page.evaluate((storageKey) => {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) throw new Error('Saved app data was not found');
+    const data = JSON.parse(raw) as { moments: Array<{ latitude: number; longitude: number }> };
+    return data.moments[0];
+  }, STORAGE_KEY);
   await page.reload();
   await expect(page.locator('.map-star-button')).toHaveCount(1);
+  await expect.poll(async () =>
+    page.evaluate((storageKey) => {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return null;
+      const data = JSON.parse(raw) as { moments: Array<{ latitude: number; longitude: number }> };
+      const moment = data.moments[0];
+      return moment
+        ? { latitude: moment.latitude, longitude: moment.longitude }
+        : null;
+    }, STORAGE_KEY),
+  ).toEqual({
+    latitude: coordinatesAfterDrag.latitude,
+    longitude: coordinatesAfterDrag.longitude,
+  });
 
   await openCalendar(page);
   await page
@@ -250,27 +333,32 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
   }, STORAGE_KEY);
   await page.reload();
 
-  await page.getByRole('button', { name: /打开星星信箱/ }).click();
-  await page
-    .locator('.star-inbox-card--follow-up')
-    .first()
-    .click();
-  await page
-    .getByRole('button', { name: '现在回看，我仍然很喜欢这段经历。' })
-    .click();
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  await page.getByRole('button', { name: '交流回访' }).click();
+  await expect(page.locator('.chat-screen')).toBeVisible();
+  const followUpOptions = page.locator('.message-options > button');
+  await expect(followUpOptions).toHaveCount(5);
+  await expect(followUpOptions).toHaveText(['轻了', '更强', '变了', '一样', '跳过']);
+  await page.getByRole('button', { name: '轻了' }).click();
+  await expect(page.locator('.message-options')).toHaveCount(0);
+  await page.getByRole('button', { name: '记录现在的感受' }).click();
   await expect(
     page.getByRole('dialog', { name: /现在想起/ }),
   ).toBeVisible();
   await page
     .getByRole('button', { name: '开心' })
     .click();
-  await page.getByRole('button', { name: '记录现在的感受' }).click();
+  await page
+    .getByRole('dialog', { name: /现在想起/ })
+    .getByRole('button', { name: '记录现在的感受' })
+    .click();
 
   await page.reload();
   await page.locator('.map-star-button').click();
   await page.getByRole('button', { name: '查看星星记录' }).click();
   await page.getByRole('button', { name: '回访记录' }).click();
-  await expect(page.getByText('情绪重访历史')).toBeVisible();
+  await expect(page.getByText('3 天回访')).toBeVisible();
+  await expect(page.getByText('轻了')).toBeVisible();
   await page
     .getByRole('dialog', { name: '星星记录' })
     .getByLabel('关闭')
@@ -311,7 +399,7 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   const animationDuration = await page.locator('.map-screen').evaluate(
     (element) => getComputedStyle(element).animationDuration,
   );
-  expect(['0s', '0.01ms', '1e-05s']).toContain(animationDuration);
+  expect(['0s', '0.01ms', '1e-05s', '0.00001s']).toContain(animationDuration);
 });
 
 test('tablet, landscape, desktop, and 200% zoom layouts stay usable', async ({
@@ -338,6 +426,7 @@ test('tablet, landscape, desktop, and 200% zoom layouts stay usable', async ({
     await expect(
       page.getByRole('button', { name: '打开页面导航' }),
     ).toBeVisible();
+    await expandMapTools(page);
     await expect(
       page.getByRole('button', {
         name: '点击在当前位置添加星星，或拖到地图上放置',

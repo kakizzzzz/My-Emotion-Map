@@ -11,6 +11,59 @@ import type { UserLocation } from '../../useLocationController';
 import type { CoordinatePair } from './coordinateTransforms';
 import { MAP_STYLES } from './mapPreferences';
 
+function SavedMomentMarker({
+  moment,
+  selected,
+  onSelectMoment,
+}: {
+  moment: EmotionMoment;
+  selected: boolean;
+  onSelectMoment: (momentId: string) => void;
+}) {
+  const { copy, language } = useAppLanguage();
+
+  return (
+    <Marker
+      longitude={moment.longitude}
+      latitude={moment.latitude}
+      anchor="center"
+    >
+      <div className="map-star-anchor" data-moment-id={moment.id}>
+        <motion.button
+          className="map-star-button"
+          initial={moment.isNew ? { opacity: 0, scale: 0.6 } : false}
+          animate={{ opacity: 1, scale: 1 }}
+          whileTap={{ scale: 0.94 }}
+          transition={moment.isNew ? MOTION.placement : MOTION.press}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectMoment(moment.id);
+          }}
+          aria-label={
+            moment.isNew
+              ? typeof moment.heartRate === 'number'
+                ? copy.map.newHeartRateStar(moment.heartRate)
+                : copy.map.newStar
+              : `${moment.place}, ${getEmotionLabel(moment.emotion, language)}`
+          }
+        >
+          {moment.isNew ? (
+            <StarMarkerGlyph size={36} color="#EDC727" />
+          ) : (
+            <EmotionStar
+              emotion={moment.emotion}
+              size={36}
+              order={moment.tagOrder}
+              selected={selected}
+              colorOverride={moment.color}
+            />
+          )}
+        </motion.button>
+      </div>
+    </Marker>
+  );
+}
+
 export function MapMarkers({
   moments,
   selectedId,
@@ -28,7 +81,8 @@ export function MapMarkers({
   starDragPreview: CoordinatePair | null;
   onSelectMoment: (momentId: string) => void;
 }) {
-  const { copy, language } = useAppLanguage();
+  const { copy } = useAppLanguage();
+
   return (
     <>
       <Source id="tag-lines" type="geojson" data={tagLine as never}>
@@ -86,51 +140,12 @@ export function MapMarkers({
       ) : null}
 
       {moments.map((moment) => (
-        <Marker
+        <SavedMomentMarker
           key={moment.id}
-          longitude={moment.longitude}
-          latitude={moment.latitude}
-          anchor="center"
-        >
-          <div className="map-star-anchor">
-            <motion.button
-              className="map-star-button"
-              initial={
-                moment.isNew ? { opacity: 0, scale: 0.6 } : false
-              }
-              animate={{ opacity: 1, scale: 1 }}
-              whileTap={{ scale: 0.94 }}
-              transition={
-                moment.isNew ? MOTION.placement : MOTION.press
-              }
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectMoment(moment.id);
-              }}
-              aria-label={
-                moment.isNew
-                  ? typeof moment.heartRate === 'number'
-                    ? copy.map.newHeartRateStar(moment.heartRate)
-                    : copy.map.newStar
-                  : `${moment.place}, ${
-                      getEmotionLabel(moment.emotion, language)
-                    }`
-              }
-            >
-              {moment.isNew ? (
-                <StarMarkerGlyph size={36} color="#EDC727" />
-              ) : (
-                <EmotionStar
-                  emotion={moment.emotion}
-                  size={36}
-                  order={moment.tagOrder}
-                  selected={selectedId === moment.id}
-                  colorOverride={moment.color}
-                />
-              )}
-            </motion.button>
-          </div>
-        </Marker>
+          moment={moment}
+          selected={selectedId === moment.id}
+          onSelectMoment={onSelectMoment}
+        />
       ))}
     </>
   );

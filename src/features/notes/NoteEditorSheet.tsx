@@ -364,7 +364,7 @@ export function NoteEditorSheet({
       className="overlay-layer note-editor-overlay"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      exit={{ opacity: 0, pointerEvents: 'none' }}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && !addQuestionOpen) requestClose();
       }}

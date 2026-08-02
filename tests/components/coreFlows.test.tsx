@@ -230,11 +230,16 @@ describe('core component flows', () => {
         ready
         configured
         onAuthenticate={onAuthenticate}
-        onToast={() => undefined}
+        onOpenDemo={vi.fn()}
       />,
     );
 
     expect(screen.queryByLabelText('邮箱')).not.toBeInTheDocument();
+    expect(document.querySelector('.login-map-background svg')).toBeInTheDocument();
+    expect(document.querySelector('.login-world-map-dot')).not.toBeInTheDocument();
+    expect(
+      document.querySelectorAll('.login-water-contour[data-water-group="flow"]'),
+    ).toHaveLength(5);
     await user.type(screen.getByLabelText('账号'), 'student_01');
     await user.type(screen.getByLabelText('密码'), 'safe-pass-123');
     await user.click(screen.getByRole('button', { name: '登录' }));
@@ -266,12 +271,25 @@ describe('core component flows', () => {
         onRequestLocation={() => undefined}
         onToast={() => undefined}
         cloudConfigured
+        cloudUserId="00000000-0000-4000-8000-000000000001"
         cloudAccount="student_01"
         cloudStatus="synced"
         onSignOut={async () => undefined}
+        onUpdatePassword={async () => 'success'}
         onConfirmInitialUpload={() => undefined}
         onUseRemoteVersion={() => undefined}
         onOverwriteRemote={() => undefined}
+        onCreateAutomationTest={() => undefined}
+        onIssueMcpToken={async () => null}
+        onRevokeAllMcpTokens={async () => true}
+        healthPreferences={{
+          restingHeartRateMin: 60,
+          restingHeartRateMax: 100,
+          rangeConfirmed: false,
+          singleSampleEnabled: false,
+        }}
+        onHealthPreferences={() => true}
+        onIssueShortcutPairing={async () => null}
         onBack={onBack}
       />,
     );
@@ -299,7 +317,7 @@ describe('core component flows', () => {
       />,
     );
 
-    expect(screen.getByText('发送第一条消息后，这段对话才会保存。')).toBeInTheDocument();
+    expect(document.querySelector('.message-bubble')).toBeNull();
     expect(
       screen.getByRole('textbox', { name: /请先在设置中登录/ }),
     ).toBeDisabled();

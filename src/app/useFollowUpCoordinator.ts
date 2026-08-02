@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   type Dispatch,
   type SetStateAction,
 } from 'react';
@@ -9,40 +10,39 @@ import type {
   AppView,
   ChatOption,
   Conversation,
+  EmotionNote,
   FollowUpRecord,
 } from '../types';
-import type { CommunicationSurface } from './appTypes';
 import { createRecordId } from './createRecordId';
 import { useFollowUpScheduler } from './useFollowUpScheduler';
 import {
   FOLLOW_UP_CONVERSATION_ID,
   getFollowUpAssistantReply,
-  getFollowUpOptions,
+  getFollowUpPrompt,
 } from '../domain/followUps';
 
 type FollowUpCoordinatorOptions = {
   followUps: FollowUpRecord[];
   setFollowUps: Dispatch<SetStateAction<FollowUpRecord[]>>;
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
+  notes: EmotionNote[];
   activeView: AppView;
-  communicationSurface: CommunicationSurface;
   activeConversationId: string;
   language: AppLanguage;
   navigationCopy: AppCopy['navigation'];
-  onRequestRevisit: (noteId: string) => void;
 };
 
 export function useFollowUpCoordinator({
   followUps,
   setFollowUps,
   setConversations,
+  notes,
   activeView,
-  communicationSurface,
   activeConversationId,
   language,
   navigationCopy,
-  onRequestRevisit,
 }: FollowUpCoordinatorOptions) {
+  const answeringRef = useRef(new Set<string>());
   const activeFollowUp =
     followUps.find((record) => record.status === 'active') ?? null;
   useFollowUpScheduler(followUps, setFollowUps);
@@ -61,14 +61,16 @@ export function useFollowUpCoordinator({
       }
       const isVisible =
         activeView === 'chat' &&
-        communicationSurface === 'conversation' &&
         activeConversationId === FOLLOW_UP_CONVERSATION_ID;
+      const note = notes.find((item) => item.id === activeFollowUp.noteId);
+      if (!note) return current;
+      const prompt = getFollowUpPrompt(activeFollowUp, note, language);
       const followUpMessage = {
         id: createRecordId('follow-up'),
         role: 'assistant' as const,
-        body: activeFollowUp.prompt,
+        body: '',
+        kind: 'followup_prompt' as const,
         noteIds: [activeFollowUp.noteId],
-        options: getFollowUpOptions(language),
         followUpId: activeFollowUp.id,
         createdAt:
           activeFollowUp.promptedAt ?? new Date().toISOString(),
@@ -78,7 +80,7 @@ export function useFollowUpCoordinator({
           {
             id: FOLLOW_UP_CONVERSATION_ID,
             title: navigationCopy.chat,
-            preview: activeFollowUp.prompt,
+            preview: prompt,
             kind: 'companion' as const,
             unread: !isVisible,
             messages: [followUpMessage],
@@ -91,7 +93,7 @@ export function useFollowUpCoordinator({
           ? {
               ...conversation,
               title: navigationCopy.chat,
-              preview: activeFollowUp.prompt,
+              preview: prompt,
               unread: !isVisible,
               messages: [
                 ...conversation.messages,
@@ -105,9 +107,9 @@ export function useFollowUpCoordinator({
     activeConversationId,
     activeFollowUp,
     activeView,
-    communicationSurface,
     language,
     navigationCopy.chat,
+    notes,
     setConversations,
   ]);
 
@@ -116,16 +118,18 @@ export function useFollowUpCoordinator({
       followUpId: string,
       label: string,
       kind: ChatOption['responseKind'],
-      source: 'chat' | 'inbox',
     ) => {
+      if (answeringRef.current.has(followUpId)) return;
       const record = followUps.find((item) => item.id === followUpId);
       if (
         !record ||
         (record.status !== 'active' &&
           !(record.status === 'queued' && new Date(record.dueAt).getTime() <= Date.now()))
       ) return;
+      answeringRef.current.add(followUpId);
       const answeredAt = new Date().toISOString();
       const assistantReply = getFollowUpAssistantReply(kind, language);
+      const answerCommandId = createRecordId('follow-up-command');
       setFollowUps((current) =>
         current.map((item) =>
           item.id === followUpId
@@ -135,7 +139,8 @@ export function useFollowUpCoordinator({
                   kind === 'skip' ? 'skipped' : 'answered',
                 response: label,
                 responseKind: kind,
-                answeredVia: source,
+                responseOptionId: kind,
+                answerCommandId,
                 answeredAt,
                 assistantReply,
                 seenAt: item.seenAt ?? answeredAt,
@@ -144,49 +149,44 @@ export function useFollowUpCoordinator({
         ),
       );
 
-      if (source === 'chat') {
-        setConversations((current) =>
-          current.map((conversation) =>
-            conversation.id === FOLLOW_UP_CONVERSATION_ID
-              ? {
-                  ...conversation,
-                  unread: false,
-                  preview: assistantReply,
-                  messages: [
-                    ...conversation.messages.map((message) =>
-                      message.followUpId === followUpId
-                        ? { ...message, options: undefined }
-                        : message,
-                    ),
-                    {
-                      id: createRecordId('follow-up-response'),
-                      role: 'user',
-                      body: label,
-                      followUpId,
-                      createdAt: answeredAt,
-                    },
-                    {
-                      id: createRecordId('follow-up-reply'),
-                      role: 'assistant',
-                      body: assistantReply,
-                      followUpId,
-                      createdAt: answeredAt,
-                    },
-                  ],
-                }
-              : conversation,
-          ),
-        );
-      }
-
-      if (kind !== 'skip') {
-        window.setTimeout(() => onRequestRevisit(record.noteId), 220);
-      }
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === FOLLOW_UP_CONVERSATION_ID
+            ? {
+                ...conversation,
+                unread: false,
+                preview: assistantReply,
+                messages: [
+                  ...conversation.messages.map((message) =>
+                    message.followUpId === followUpId
+                      ? { ...message, options: undefined }
+                      : message,
+                  ),
+                  {
+                    id: createRecordId('follow-up-response'),
+                    role: 'user',
+                    kind: 'followup_answer',
+                    body: label,
+                    followUpId,
+                    createdAt: answeredAt,
+                  },
+                  {
+                    id: createRecordId('follow-up-reply'),
+                    role: 'assistant',
+                    kind: 'followup_reply',
+                    body: assistantReply,
+                    followUpId,
+                    createdAt: answeredAt,
+                  },
+                ],
+              }
+            : conversation,
+        ),
+      );
     },
     [
       followUps,
       language,
-      onRequestRevisit,
       setConversations,
       setFollowUps,
     ],

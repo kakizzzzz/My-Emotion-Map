@@ -78,6 +78,12 @@ export function SideDrawer({
   const hasCommunicationUnread = conversations.some(
     (conversation) => conversation.unread,
   );
+  const companionConversation = conversations.find(
+    (conversation) => conversation.id === FOLLOW_UP_CONVERSATION_ID,
+  );
+  const otherConversations = conversations.filter(
+    (conversation) => conversation.id !== FOLLOW_UP_CONVERSATION_ID,
+  );
   const dialogRef = useDialogFocus<HTMLElement>({ onEscape: onClose });
   const navItems: Array<{
     key: AppView;
@@ -131,6 +137,10 @@ export function SideDrawer({
                         onNavigate(item.key);
                         return;
                       }
+                      if (activeView !== 'chat' && companionConversation) {
+                        onOpenConversation(companionConversation.id);
+                        return;
+                      }
                       if (!conversations.length) {
                         onNewConversation();
                         return;
@@ -158,20 +168,18 @@ export function SideDrawer({
                     <div className="side-ai-accordion">
                       <div className="side-ai-list">
                         <p>{copy.navigation.pinned}</p>
-                        {conversations.slice(0, 1).map((thread) => (
-                          <button key={thread.id} onClick={() => onOpenConversation(thread.id)}>
+                        {companionConversation ? (
+                          <button key={companionConversation.id} onClick={() => onOpenConversation(companionConversation.id)}>
                             <strong>
-                              {thread.id === FOLLOW_UP_CONVERSATION_ID
-                                ? copy.navigation.chat
-                                : thread.title}
+                              {copy.navigation.chat}
                             </strong>
-                            {thread.badge ? <em>{thread.badge}</em> : null}
+                            {companionConversation.badge ? <em>{companionConversation.badge}</em> : null}
                           </button>
-                        ))}
-                        {conversations.length > 1 ? (
+                        ) : null}
+                        {otherConversations.length ? (
                           <p>{copy.navigation.today}</p>
                         ) : null}
-                        {conversations.slice(1).map((thread) => (
+                        {otherConversations.map((thread) => (
                           <button key={thread.id} onClick={() => onOpenConversation(thread.id)}>
                             <strong>{thread.title}</strong>
                             {thread.badge ? <em>{thread.badge}</em> : null}
@@ -196,66 +204,6 @@ export function SideDrawer({
           </button>
         </footer>
       </motion.aside>
-    </motion.div>
-  );
-}
-
-export function CelebrationLayer() {
-  const { copy } = useAppLanguage();
-  const particles = [
-    [-118, -112, '#D2936D'],
-    [-78, -148, '#D9B94F'],
-    [-32, -126, '#7F9E91'],
-    [18, -154, '#7297AE'],
-    [64, -130, '#D2936D'],
-    [112, -100, '#D9B94F'],
-    [132, -42, '#7F9E91'],
-    [104, 10, '#7297AE'],
-    [70, 54, '#D2936D'],
-    [18, 76, '#D9B94F'],
-    [-32, 68, '#7F9E91'],
-    [-78, 48, '#7297AE'],
-    [-116, 4, '#D2936D'],
-    [-138, -50, '#D9B94F'],
-  ];
-  return (
-    <motion.div
-      className="celebration-layer"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
-      <motion.div
-        className="celebration-message"
-        initial={{ opacity: 0, scale: 0.95, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ delay: 0.16, ...MOTION.nav }}
-      >
-        <span>
-          <strong>{copy.feedback.celebration}</strong>
-        </span>
-      </motion.div>
-      <div className="celebration-burst" aria-hidden="true">
-        {particles.map(([x, y, color], index) => (
-          <motion.i
-            key={index}
-            style={{ background: color }}
-            initial={{ x: 0, y: 0, opacity: 0, scale: 0.4, rotate: 0 }}
-            animate={{
-              x,
-              y,
-              opacity: [0, 0.78, 0],
-              scale: [0.4, 1, 0.72],
-              rotate: index % 2 ? 120 : -100,
-            }}
-            transition={{
-              duration: 1.45,
-              delay: index * 0.025,
-              ease: [0.16, 1, 0.3, 1],
-            }}
-          />
-        ))}
-      </div>
     </motion.div>
   );
 }

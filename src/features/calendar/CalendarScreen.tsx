@@ -198,11 +198,7 @@ export function CalendarScreen({
                   >
                     <ChevronLeft size={20} strokeWidth={2.2} />
                   </button>
-                  <strong>
-                    {mode === 'month'
-                      ? `${copy.calendar.yearLabel(anchor.year)} · ${copy.calendar.monthLabel(anchor.month + 1)}–${copy.calendar.monthLabel(anchor.month + 2)}`
-                      : copy.calendar.yearLabel(anchor.year)}
-                  </strong>
+                  <strong>{copy.calendar.yearLabel(anchor.year)}</strong>
                   <button
                     onClick={() =>
                       mode === 'month'

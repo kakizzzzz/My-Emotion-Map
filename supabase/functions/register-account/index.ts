@@ -185,9 +185,10 @@ runtime.serve(async (request) => {
         signal: AbortSignal.timeout(10_000),
       },
     );
-    const created = createResponse.ok
-      ? (asObject(await createResponse.json()))
-      : null;
+    const createPayload = asObject(
+      await createResponse.json().catch(() => null),
+    );
+    const created = createResponse.ok ? createPayload : null;
     const createdUser = asObject(created?.user);
     const createdUserId =
       typeof created?.id === 'string'
@@ -196,9 +197,31 @@ runtime.serve(async (request) => {
           ? createdUser.id
           : null;
     if (!createdUserId) {
+      const createMessage = [
+        createPayload?.message,
+        createPayload?.error_description,
+        createPayload?.msg,
+      ]
+        .filter((value): value is string => typeof value === 'string')
+        .join(' ')
+        .toLowerCase();
+      if (/already|exists|registered|duplicate/.test(createMessage)) {
+        return jsonResponse(
+          { status: 'unavailable', code: 'account_exists' },
+          409,
+          headers,
+        );
+      }
+      if (createMessage.includes('password')) {
+        return jsonResponse(
+          { status: 'unavailable', code: 'weak_password' },
+          422,
+          headers,
+        );
+      }
       return jsonResponse(
         { status: 'unavailable', code: 'registration_unavailable' },
-        createResponse.status === 422 ? 409 : 503,
+        503,
         headers,
       );
     }

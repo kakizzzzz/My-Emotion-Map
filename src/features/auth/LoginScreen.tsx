@@ -1,113 +1,18 @@
 import { useState, type FormEvent } from 'react';
 import { AtSign, KeyRound, Lock } from 'lucide-react';
 import { LANGUAGE_OPTIONS, useAppLanguage } from '../../i18n';
-import type { ToastHandler } from '../../app/appTypes';
 import {
   isValidAccountId,
   type AuthMode,
   type AuthResult,
 } from '../../services/accountAuth';
-
-const isInsideRotatedEllipse = (
-  x: number,
-  y: number,
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  rotation = 0,
-) => {
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-  const dx = x - cx;
-  const dy = y - cy;
-  const rotatedX = dx * cos + dy * sin;
-  const rotatedY = -dx * sin + dy * cos;
-  return (
-    (rotatedX * rotatedX) / (rx * rx) +
-      (rotatedY * rotatedY) / (ry * ry) <=
-    1
-  );
-};
-
-const LOGIN_MAP_WIDTH = 430;
-const LOGIN_MAP_HEIGHT = 932;
-const LOGIN_MAP_DOT_SPACING = 7;
-
-const isLoginMapLand = (x: number, y: number) =>
-  isInsideRotatedEllipse(x, y, 0.1, 0.25, 0.18, 0.08, -0.25) ||
-  isInsideRotatedEllipse(x, y, 0.2, 0.34, 0.15, 0.12, 0.08) ||
-  isInsideRotatedEllipse(x, y, 0.3, 0.44, 0.08, 0.04, 0.25) ||
-  isInsideRotatedEllipse(x, y, 0.31, 0.57, 0.1, 0.14, 0.12) ||
-  isInsideRotatedEllipse(x, y, 0.48, 0.26, 0.1, 0.06, -0.1) ||
-  isInsideRotatedEllipse(x, y, 0.54, 0.36, 0.09, 0.06, -0.08) ||
-  isInsideRotatedEllipse(x, y, 0.55, 0.5, 0.1, 0.14, -0.1) ||
-  isInsideRotatedEllipse(x, y, 0.72, 0.31, 0.2, 0.1, 0.03) ||
-  isInsideRotatedEllipse(x, y, 0.82, 0.41, 0.15, 0.11, 0.12) ||
-  isInsideRotatedEllipse(x, y, 0.68, 0.5, 0.06, 0.08, -0.15) ||
-  isInsideRotatedEllipse(x, y, 0.79, 0.57, 0.09, 0.05, 0.35) ||
-  isInsideRotatedEllipse(x, y, 0.83, 0.68, 0.1, 0.05, 0.08) ||
-  isInsideRotatedEllipse(x, y, 0.47, 0.82, 0.45, 0.04);
-
-const LOGIN_MAP_DOTS = Array.from({
-  length: Math.ceil(LOGIN_MAP_HEIGHT / LOGIN_MAP_DOT_SPACING) + 1,
-}).flatMap((_, row) =>
-  Array.from({
-    length: Math.ceil(LOGIN_MAP_WIDTH / LOGIN_MAP_DOT_SPACING) + 1,
-  }).flatMap((__, col) => {
-    const x =
-      col * LOGIN_MAP_DOT_SPACING +
-      (row % 2 ? LOGIN_MAP_DOT_SPACING / 2 : 0);
-    const y = row * LOGIN_MAP_DOT_SPACING;
-    if (!isLoginMapLand(x / LOGIN_MAP_WIDTH, y / LOGIN_MAP_HEIGHT)) return [];
-    return [{ x, y, opacity: 0.08 + ((col * 3 + row) % 6) * 0.018 }];
-  }),
-);
-
-function LoginWorldMapBackground() {
-  return (
-    <div className="login-map-background" aria-hidden="true">
-      <svg
-        viewBox={`0 0 ${LOGIN_MAP_WIDTH} ${LOGIN_MAP_HEIGHT}`}
-        preserveAspectRatio="xMidYMid slice"
-      >
-        <defs>
-          <linearGradient id="emotion-login-map-fade" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="white" stopOpacity="0.18" />
-            <stop offset="14%" stopColor="white" stopOpacity="0.5" />
-            <stop offset="78%" stopColor="white" stopOpacity="0.72" />
-            <stop offset="100%" stopColor="white" stopOpacity="0.3" />
-          </linearGradient>
-          <mask id="emotion-login-map-mask">
-            <rect
-              width={LOGIN_MAP_WIDTH}
-              height={LOGIN_MAP_HEIGHT}
-              fill="url(#emotion-login-map-fade)"
-            />
-          </mask>
-        </defs>
-        <g mask="url(#emotion-login-map-mask)">
-          {LOGIN_MAP_DOTS.map((dot) => (
-            <circle
-              key={`${dot.x}-${dot.y}`}
-              cx={dot.x}
-              cy={dot.y}
-              r="1.25"
-              fill="currentColor"
-              opacity={dot.opacity}
-            />
-          ))}
-        </g>
-      </svg>
-    </div>
-  );
-}
+import { LoginWaterBackground } from './LoginWaterBackground';
 
 export function LoginScreen({
   ready,
   configured,
   onAuthenticate,
-  onToast,
+  onOpenDemo,
 }: {
   ready: boolean;
   configured: boolean;
@@ -117,7 +22,7 @@ export function LoginScreen({
     password: string,
     passwordConfirmation: string,
   ) => Promise<AuthResult>;
-  onToast: ToastHandler;
+  onOpenDemo: () => void;
 }) {
   const { copy, language, setLanguage } = useAppLanguage();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -125,26 +30,28 @@ export function LoginScreen({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   const authenticate = async () => {
     const normalizedAccount = account.trim();
     if (!isValidAccountId(normalizedAccount)) {
-      onToast(copy.auth.invalidAccount, { durationMs: 2400 });
+      setAuthError(copy.auth.invalidAccount);
       return;
     }
     if (password.length < 8) {
-      onToast(copy.auth.passwordTooShort, { durationMs: 2400 });
+      setAuthError(copy.auth.passwordTooShort);
       return;
     }
     if (authMode === 'register' && password !== confirmPassword) {
-      onToast(copy.auth.passwordMismatch, { durationMs: 2400 });
+      setAuthError(copy.auth.passwordMismatch);
       return;
     }
     if (!configured || busy) {
-      onToast(copy.auth.unavailable, { durationMs: 2600 });
+      setAuthError(copy.auth.unavailable);
       return;
     }
 
+    setAuthError('');
     setBusy(true);
     try {
       const result = await onAuthenticate(
@@ -154,14 +61,26 @@ export function LoginScreen({
         confirmPassword,
       );
       if (result === 'signed_in') {
-        onToast(copy.auth.signedIn, { durationMs: 1800 });
+        return;
       } else if (result === 'confirmation_required') {
-        onToast(copy.auth.confirmationRequired, { durationMs: 4200 });
+        setAuthMode('login');
+        setConfirmPassword('');
+        setAuthError(copy.auth.confirmationRequired);
+      } else if (result === 'account_exists') {
+        setAuthMode('login');
+        setConfirmPassword('');
+        setAuthError(copy.auth.accountExists);
+      } else if (result === 'rate_limited') {
+        setAuthError(copy.auth.rateLimited);
+      } else if (result === 'weak_password') {
+        setAuthError(copy.auth.passwordRejected);
+      } else if (result === 'invalid_credentials') {
+        setAuthError(copy.auth.invalidCredentials);
       } else {
-        onToast(copy.auth.unavailable, { durationMs: 2800 });
+        setAuthError(copy.auth.unavailable);
       }
     } catch {
-      onToast(copy.auth.unavailable, { durationMs: 2800 });
+      setAuthError(copy.auth.unavailable);
     } finally {
       setBusy(false);
     }
@@ -174,7 +93,7 @@ export function LoginScreen({
 
   return (
     <section className="login-screen" aria-label={copy.auth.loginTitle}>
-      <LoginWorldMapBackground />
+      <LoginWaterBackground />
       <div className="login-language-switch" aria-label={copy.settings.language}>
         {LANGUAGE_OPTIONS.map((option) => (
           <button
@@ -223,7 +142,10 @@ export function LoginScreen({
                   spellCheck={false}
                   autoComplete="username"
                   value={account}
-                  onChange={(event) => setAccount(event.target.value.slice(0, 24))}
+                  onChange={(event) => {
+                    setAccount(event.target.value.slice(0, 24));
+                    setAuthError('');
+                  }}
                   placeholder={copy.auth.account}
                   aria-label={copy.auth.account}
                 />
@@ -234,7 +156,10 @@ export function LoginScreen({
                   type="password"
                   autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value.slice(0, 200))}
+                  onChange={(event) => {
+                    setPassword(event.target.value.slice(0, 200));
+                    setAuthError('');
+                  }}
                   placeholder={copy.auth.password}
                   aria-label={copy.auth.password}
                 />
@@ -246,15 +171,21 @@ export function LoginScreen({
                     type="password"
                     autoComplete="new-password"
                     value={confirmPassword}
-                    onChange={(event) =>
-                      setConfirmPassword(event.target.value.slice(0, 200))
-                    }
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value.slice(0, 200));
+                      setAuthError('');
+                    }}
                     placeholder={copy.auth.confirmPassword}
                     aria-label={copy.auth.confirmPassword}
                   />
                 </label>
               ) : null}
             </div>
+            {authError ? (
+              <div className="login-auth-error" role="status" aria-live="polite">
+                {authError}
+              </div>
+            ) : null}
             <div className="login-actions">
               <button
                 type={authMode === 'login' ? 'submit' : 'button'}
@@ -264,6 +195,7 @@ export function LoginScreen({
                   if (authMode === 'login') return;
                   setAuthMode('login');
                   setConfirmPassword('');
+                  setAuthError('');
                 }}
               >
                 {busy && authMode === 'login'
@@ -277,6 +209,7 @@ export function LoginScreen({
                 onClick={() => {
                   if (authMode === 'register') return;
                   setAuthMode('register');
+                  setAuthError('');
                 }}
               >
                 {busy && authMode === 'register'
@@ -284,6 +217,14 @@ export function LoginScreen({
                   : copy.auth.register}
               </button>
             </div>
+            <button
+              type="button"
+              className="login-demo-action"
+              onClick={onOpenDemo}
+              disabled={busy}
+            >
+              {copy.demo.label}
+            </button>
           </div>
         </form>
       )}

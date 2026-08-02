@@ -12,12 +12,15 @@ import type {
   EmotionNote,
   FollowUpRecord,
   HealthPreferences,
+  MapViewport,
   RevisitRecord,
   StarInboxItem,
   ThemePalette,
   ThemeTone,
 } from "./types";
 import {
+  createEmptyAppData,
+  getWorkspaceStorageKey,
   loadAppData,
   appendRevisitRecord,
   dismissInboxItem,
@@ -29,13 +32,9 @@ import {
 import {
   THEME_PRESETS,
   getThemeStyle,
-  protectThemePaletteContrast,
 } from './app/themePreferences';
-import type {
-  CommunicationSurface,
-  ToastNotice,
-  ToastHandler,
-} from './app/appTypes';
+import type { ToastNotice, ToastHandler } from './app/appTypes';
+import { AppToast } from './app/AppToast';
 import { createRecord } from './app/recordFactory';
 import { useFollowUpCoordinator } from './app/useFollowUpCoordinator';
 import { useLocalDataController } from './app/useLocalDataController';
@@ -46,8 +45,9 @@ import {
 import {
   loadHealthPreferences,
   isOutsideRestingHeartRateRange,
+  saveHealthPreferences,
 } from './features/inbox/healthPreferences';
-import { CelebrationLayer, GlobalInboxButton, GlobalMenuButton, SideDrawer } from './app/AppChrome';
+import { GlobalInboxButton, GlobalMenuButton, SideDrawer } from './app/AppChrome';
 import { LocationPermissionPrompt } from './features/location/LocationPermissionPrompt';
 import { MapScreen } from './features/map/MapScreen';
 import { NoteEditorSheet } from './features/notes/NoteEditorSheet';
@@ -60,6 +60,7 @@ import { useCloudSync } from './services/useCloudSync';
 import { createRecordId } from './app/createRecordId';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { authenticateAccount } from './services/accountAuth';
+import { createExternalAccessHandlers } from './services/externalAccess';
 
 const CalendarScreen = lazy(() =>
   import('./features/calendar/CalendarScreen').then((module) => ({
@@ -80,51 +81,9 @@ const SettingsScreen = lazy(() =>
   })),
 );
 
-function AppToast({
-  notice,
-  onDismiss,
-}: {
-  notice: ToastNotice | null;
-  onDismiss: () => void;
-}) {
-  return (
-    <AnimatePresence>
-      {notice ? (
-        <motion.div
-          key={notice.id}
-          className={`toast toast--${notice.placement}`}
-          initial={{ opacity: 0, y: 8, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 8, scale: 0.98 }}
-          transition={{ duration: 0.12 }}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <span>{notice.message}</span>
-          {notice.actionLabel && notice.onAction ? (
-            <button
-              type="button"
-              onClick={() => {
-                notice.onAction?.();
-                onDismiss();
-              }}
-            >
-              {notice.actionLabel}
-            </button>
-          ) : null}
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  );
-}
-
 export function App() {
-  const initialData = useMemo(() => loadAppData(), []);
-  const initialLocalSettings = useMemo(
-    () => loadLocalSettings(initialData.dataMode),
-    [initialData.dataMode],
-  );
+  const initialData = useMemo(() => createEmptyAppData(), []);
+  const initialLocalSettings = useMemo(() => loadLocalSettings(), []);
   const [activeView, setActiveView] = useState<AppView>('map');
   const [language, setLanguage] = useState<AppLanguage>(
     initialLocalSettings.language,
@@ -144,9 +103,9 @@ export function App() {
   const locationController = useLocationController({
     isMapActive: activeView === 'map',
   });
+  const userLocation = locationController.userLocation;
+  const openLocationRequest = locationController.openLocationRequest;
   const [sideOpen, setSideOpen] = useState(false);
-  const [communicationSurface, setCommunicationSurface] =
-    useState<CommunicationSurface>('conversation');
   const [moments, setMoments] = useState<EmotionMoment[]>(initialData.moments);
   const [notes, setNotes] = useState<EmotionNote[]>(initialData.notes);
   const [conversations, setConversations] = useState<Conversation[]>(
@@ -161,6 +120,9 @@ export function App() {
   const [starInboxItems, setStarInboxItems] =
     useState<StarInboxItem[]>(initialData.starInboxItems);
   const [dataMode, setDataMode] = useState(initialData.dataMode);
+  const [guestDemo, setGuestDemo] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const activeWorkspaceUserRef = useRef<string | null>(null);
   const [mapFocusMomentId, setMapFocusMomentId] = useState<string | null>(null);
   const [activeConversationId, setActiveConversationId] = useState(
     FOLLOW_UP_CONVERSATION_ID,
@@ -168,7 +130,6 @@ export function App() {
   const [viewingMomentId, setViewingMomentId] = useState<string | null>(null);
   const [editingMomentId, setEditingMomentId] = useState<string | null>(null);
   const [revisitNoteId, setRevisitNoteId] = useState<string | null>(null);
-  const [celebrating, setCelebrating] = useState(false);
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [photoAssistByMomentId, setPhotoAssistByMomentId] = useState<
     Record<string, PhotoAssistDelivery>
@@ -178,11 +139,18 @@ export function App() {
   const [themePalette, setThemePalette] = useState<ThemePalette>(
     initialData.themePalette,
   );
-  const healthPreferences = useMemo<HealthPreferences>(
-    () => loadHealthPreferences(),
-    [],
+  const [lastViewport, setLastViewport] = useState<MapViewport | undefined>(
+    initialData.lastViewport,
   );
   const cloudSession = useSupabaseSession();
+  const [healthPreferences, setHealthPreferences] = useState<HealthPreferences>(
+    () => loadHealthPreferences(null),
+  );
+  useEffect(() => {
+    setHealthPreferences(
+      loadHealthPreferences(cloudSession.session?.user.id ?? null),
+    );
+  }, [cloudSession.session?.user.id]);
 
   const editingMoment = moments.find((moment) => moment.id === editingMomentId) ?? null;
   const editingNote = editingMoment
@@ -198,12 +166,11 @@ export function App() {
     followUps,
     setFollowUps,
     setConversations,
+    notes,
     activeView,
-    communicationSurface,
     activeConversationId,
     language,
     navigationCopy: copy.navigation,
-    onRequestRevisit: setRevisitNoteId,
   });
   const unreadStarInboxCount =
     starInboxItems.filter(
@@ -211,9 +178,7 @@ export function App() {
         item.status === 'pending' &&
         !item.seenAt &&
         isOutsideRestingHeartRateRange(item.heartRate, healthPreferences),
-    ).length +
-    followUps.filter((record) => record.status === 'active' && !record.seenAt)
-      .length;
+    ).length;
   const themeStyle = getThemeStyle(themePalette);
 
   const applyThemePreset = (tone: ThemeTone) => {
@@ -245,6 +210,9 @@ export function App() {
     exitDemoMode,
   } = useLocalDataController({
     initialData,
+    userId: cloudSession.session?.user.id ?? null,
+    persistenceEnabled:
+      workspaceReady && (Boolean(cloudSession.session) || guestDemo),
     moments,
     notes,
     conversations,
@@ -254,6 +222,9 @@ export function App() {
     dataMode,
     themeTone,
     themePalette,
+    lastViewport,
+    activeConversationId,
+    language,
     setMoments,
     setNotes,
     setConversations,
@@ -263,6 +234,8 @@ export function App() {
     setDataMode,
     setThemeTone,
     setThemePalette,
+    setLastViewport,
+    setActiveConversationId,
     setViewingMomentId,
     setEditingMomentId,
     setRevisitNoteId,
@@ -270,6 +243,28 @@ export function App() {
     copy,
     showToast,
   });
+  useEffect(() => {
+    if (!cloudSession.ready) return;
+    const userId = cloudSession.session?.user.id ?? null;
+    if (!userId) {
+      if (activeWorkspaceUserRef.current) applySnapshot(createEmptyAppData());
+      activeWorkspaceUserRef.current = null;
+      if (!guestDemo) setWorkspaceReady(false);
+      return;
+    }
+    if (activeWorkspaceUserRef.current === userId && workspaceReady) return;
+    setWorkspaceReady(false);
+    setGuestDemo(false);
+    applySnapshot(loadAppData(userId, 'real'));
+    activeWorkspaceUserRef.current = userId;
+    setWorkspaceReady(true);
+  }, [
+    applySnapshot,
+    cloudSession.ready,
+    cloudSession.session?.user.id,
+    guestDemo,
+    workspaceReady,
+  ]);
   const cloudSnapshot = useMemo(() => ({
     schemaVersion: initialData.schemaVersion,
     dataMode,
@@ -281,13 +276,20 @@ export function App() {
     starInboxItems,
     themeTone,
     themePalette,
+    lastViewport,
+    lastConversationId: conversations.some(
+      (conversation) => conversation.id === activeConversationId,
+    )
+      ? activeConversationId
+      : undefined,
   }), [
-    conversations, dataMode, followUps, initialData.schemaVersion, moments,
-    notes, revisits, starInboxItems, themePalette, themeTone,
+    activeConversationId, conversations, dataMode, followUps,
+    initialData.schemaVersion, moments, notes, revisits, starInboxItems,
+    themePalette, themeTone, lastViewport,
   ]);
   const cloudSync = useCloudSync({
     client: cloudSession.client,
-    session: cloudSession.session,
+    session: workspaceReady ? cloudSession.session : null,
     snapshot: cloudSnapshot,
     applySnapshot,
   });
@@ -306,6 +308,52 @@ export function App() {
       password,
       passwordConfirmation,
     });
+  };
+
+  const updateCloudPassword = async (password: string) => {
+    if (!cloudSession.client || !cloudSession.session) {
+      return 'unavailable' as const;
+    }
+    const { error } = await cloudSession.client.auth.updateUser({ password });
+    if (!error) return 'success' as const;
+    return error.code === 'weak_password' || error.status === 422
+      ? 'weak_password' as const
+      : 'unavailable' as const;
+  };
+
+  const externalAccess = useMemo(() => createExternalAccessHandlers({
+    client: cloudSession.client,
+    userId: cloudSession.session?.user.id ?? null,
+    dataMode,
+    healthPreferences,
+    userLocation,
+    language,
+    notes,
+    setMoments,
+    setNotes,
+    setFollowUps,
+    onDraftCreated: (momentId) => {
+      setMapFocusMomentId(momentId);
+      setActiveView('map');
+      setEditingMomentId(momentId);
+    },
+    onRequireLocation: () => openLocationRequest('settings'),
+  }), [
+    cloudSession.client,
+    cloudSession.session?.user.id,
+    dataMode,
+    healthPreferences,
+    language,
+    openLocationRequest,
+    userLocation,
+    notes,
+  ]);
+
+  const updateHealthPreferences = (preferences: HealthPreferences) => {
+    const userId = cloudSession.session?.user.id;
+    if (!userId || !saveHealthPreferences(userId, preferences)) return false;
+    setHealthPreferences(preferences);
+    return true;
   };
 
   const appendGroundedChat = (
@@ -355,12 +403,14 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = LANGUAGE_HTML_LANGS[language];
     saveLocalSettings({
-      ...loadLocalSettings(dataMode),
+      ...loadLocalSettings(),
       language,
     });
   }, [dataMode, language]);
 
   useShortcutHeartRateIngress({
+    userId: cloudSession.session?.user.id ?? null,
+    client: cloudSession.client,
     items: starInboxItems,
     setItems: setStarInboxItems,
     preferences: healthPreferences,
@@ -378,23 +428,17 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => {
-    if (!celebrating) return;
-    const timer = window.setTimeout(() => setCelebrating(false), 2400);
-    return () => window.clearTimeout(timer);
-  }, [celebrating]);
-
   const navigate = (view: AppView) => {
     if (view === 'chat') {
-      setActiveConversationId(FOLLOW_UP_CONVERSATION_ID);
-      setCommunicationSurface('conversation');
-      setConversations((current) =>
-        current.map((conversation) =>
-          conversation.id === FOLLOW_UP_CONVERSATION_ID
-            ? { ...conversation, unread: false }
-            : conversation,
-        ),
+      const currentExists = conversations.some(
+        (conversation) => conversation.id === activeConversationId,
       );
+      if (!currentExists) {
+        const last = [...conversations]
+          .reverse()
+          .find((conversation) => conversation.kind !== 'companion');
+        setActiveConversationId(last?.id ?? createRecordId('conversation'));
+      }
     }
     setActiveView(view);
     setSideOpen(false);
@@ -409,22 +453,19 @@ export function App() {
       ),
     );
     setActiveConversationId(id);
-    setCommunicationSurface('conversation');
     setActiveView('chat');
     setSideOpen(false);
   };
 
   const startNewConversation = () => {
     setActiveConversationId(createRecordId('conversation'));
-    setCommunicationSurface('conversation');
     setActiveView('chat');
     setSideOpen(false);
   };
 
   const exitConversationToMap = () => {
     setActiveView('map');
-    setCommunicationSurface('conversation');
-    setSideOpen(true);
+    setSideOpen(false);
   };
 
   const openStarInbox = () => {
@@ -438,15 +479,7 @@ export function App() {
           : item,
       ),
     );
-    setFollowUps((current) =>
-      current.map((record) =>
-        record.status === 'active' && !record.seenAt
-          ? { ...record, seenAt }
-          : record,
-      ),
-    );
-    setCommunicationSurface('star-inbox');
-    setActiveView('chat');
+    setActiveView('inbox');
     setSideOpen(false);
   };
 
@@ -478,6 +511,8 @@ export function App() {
       eventTimeSource: 'health-sample',
       heartRate: item.heartRate,
       isInboxDraft: true,
+      locationCapturedAt: new Date().toISOString(),
+      locationTimeRelation: 'confirmation',
     });
     setMoments((current) => [...current, moment]);
     setNotes((current) => [...current, note]);
@@ -489,6 +524,7 @@ export function App() {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             locationCapturedAt: now,
+            locationTimeRelation: 'confirmation',
             locationAccuracyMeters: position.coords.accuracy,
             linkedMomentId: moment.id,
             confirmedAt: now,
@@ -504,7 +540,15 @@ export function App() {
   };
 
   const dismissStarInboxItem = (itemId: string) => {
+    const sourceEventId = starInboxItems.find((item) => item.id === itemId)
+      ?.sourceEventId;
     setStarInboxItems((current) => dismissInboxItem(current, itemId));
+    if (sourceEventId && cloudSession.client) {
+      void cloudSession.client
+        .from('shortcut_observations')
+        .update({ status: 'dismissed' })
+        .eq('event_id', sourceEventId);
+    }
     showToast(copy.feedback.inboxDismissed);
   };
 
@@ -521,6 +565,18 @@ export function App() {
     color?: string,
     place?: string,
   ) => {
+    const completedExternalEventIds = starInboxItems
+      .filter((item) => item.linkedMomentId === momentId)
+      .map((item) => item.sourceEventId);
+    const pendingFollowUpIds = new Set(
+      followUps
+        .filter(
+          (record) =>
+            record.noteId === nextNote.id &&
+            (record.status === 'queued' || record.status === 'active'),
+        )
+        .map((record) => record.id),
+    );
     setNotes((current) => {
       const exists = current.some((note) => note.id === nextNote.id);
       return exists
@@ -547,6 +603,12 @@ export function App() {
         ? { ...item, status: 'completed' }
         : item,
     ));
+    if (cloudSession.client && completedExternalEventIds.length) {
+      void cloudSession.client
+        .from('shortcut_observations')
+        .update({ status: 'consumed' })
+        .in('event_id', completedExternalEventIds);
+    }
     setFollowUps((current) => {
       const pendingForNote = current.filter(
         (record) =>
@@ -563,6 +625,18 @@ export function App() {
       if (pendingForNote.length) return current;
       return [...current, createFollowUpForNote(nextNote, language)];
     });
+    if (!nextNote.followUpEnabled && pendingFollowUpIds.size) {
+      setConversations((current) =>
+        current.map((conversation) => ({
+          ...conversation,
+          messages: conversation.messages.filter(
+            (message) =>
+              !message.followUpId ||
+              !pendingFollowUpIds.has(message.followUpId),
+          ),
+        })),
+      );
+    }
     setEditingMomentId(null);
     setPhotoAssistByMomentId((current) => {
       if (!(momentId in current)) return current;
@@ -590,18 +664,21 @@ export function App() {
     showToast(copy.feedback.feelingSaved);
   };
 
-  if (!cloudSession.session) {
+  if ((!cloudSession.session && !guestDemo) || !workspaceReady) {
     return (
       <AppLanguageContext.Provider value={languageContextValue}>
         <div className="app-stage">
           <main className="app-shell" data-theme-tone={themeTone} style={themeStyle}>
             <LoginScreen
-              ready={cloudSession.ready}
+              ready={cloudSession.ready && !cloudSession.session}
               configured={Boolean(cloudSession.client)}
               onAuthenticate={authenticateCloudAccount}
-              onToast={showToast}
+              onOpenDemo={() => {
+                applySnapshot(loadAppData(null, 'demo'));
+                setGuestDemo(true);
+                setWorkspaceReady(true);
+              }}
             />
-            <AppToast notice={toast} onDismiss={() => setToast(null)} />
           </main>
         </div>
       </AppLanguageContext.Provider>
@@ -612,26 +689,26 @@ export function App() {
     <AppLanguageContext.Provider value={languageContextValue}>
       <div className="app-stage">
         <main className="app-shell" data-theme-tone={themeTone} style={themeStyle}>
-        {dataMode === 'demo' ? (
-          <div className="demo-mode-banner" role="status">
-            <strong>{copy.demo.label}</strong>
-            <span>{copy.demo.description}</span>
-          </div>
-        ) : null}
         <div
           className={`screen-layer persistent-map-layer ${
-            activeView === 'chat' && communicationSurface === 'conversation'
-              ? 'is-hidden'
-              : ''
+            activeView === 'chat' || activeView === 'inbox' ? 'is-hidden' : ''
           }`}
           aria-hidden={
-            (activeView === 'chat' &&
-              communicationSurface === 'conversation') ||
+            activeView === 'chat' || activeView === 'inbox' ||
             Boolean(editingMoment)
           }
           inert={editingMoment ? true : undefined}
         >
           <MapScreen
+            workspaceKey={
+              getWorkspaceStorageKey(
+                cloudSession.session?.user.id ?? null,
+                dataMode,
+              ) ?? dataMode
+            }
+            dataMode={dataMode}
+            savedViewport={lastViewport}
+            onViewportChange={setLastViewport}
             moments={moments}
             setMoments={setMoments}
             notes={notes}
@@ -683,41 +760,41 @@ export function App() {
               exit={{ opacity: 0.96 }}
               transition={CONTENT_FADE}
             >
-              {communicationSurface === 'star-inbox' ? (
-                <StarInboxScreen
-                  items={starInboxItems}
-                  followUps={followUps}
-                  notes={savedNotes}
-                  healthPreferences={healthPreferences}
-                  onReviewItem={reviewStarInboxItem}
-                  onDismissItem={dismissStarInboxItem}
-                  onAnswerFollowUp={(followUpId, label, kind) => {
-                    answerFollowUp(followUpId, label, kind, 'inbox');
-                    if (kind !== 'skip') {
-                      setActiveView('map');
-                    }
-                  }}
-                  onClose={() => navigate('map')}
-                />
-              ) : (
-                <ChatScreen
-                  key={activeConversationId}
-                  notes={savedNotes}
-                  conversations={conversations}
-                  activeConversationId={activeConversationId}
-                  onAnswerFollowUp={(followUpId, label, kind) =>
-                    answerFollowUp(followUpId, label, kind, 'chat')
-                  }
-                  cloudAuth={cloudSession.cloudAuth}
-                  cloudRevision={cloudSync.revision}
-                  cloudStatus={cloudSync.status}
-                  dataMode={dataMode}
-                  onGroundedChat={appendGroundedChat}
-                  onNewConversation={startNewConversation}
-                  onExitToMap={exitConversationToMap}
-                  onToast={showToast}
-                />
-              )}
+              <ChatScreen
+                key={activeConversationId}
+                notes={savedNotes}
+                followUps={followUps}
+                conversations={conversations}
+                activeConversationId={activeConversationId}
+                onAnswerFollowUp={answerFollowUp}
+                onRevisitEmotion={setRevisitNoteId}
+                cloudAuth={cloudSession.cloudAuth}
+                cloudRevision={cloudSync.revision}
+                cloudStatus={cloudSync.status}
+                dataMode={dataMode}
+                onGroundedChat={appendGroundedChat}
+                onNewConversation={startNewConversation}
+                onExitToMap={exitConversationToMap}
+                onToast={showToast}
+              />
+            </motion.div>
+          ) : null}
+
+          {activeView === 'inbox' ? (
+            <motion.div
+              key="inbox"
+              className="screen-layer route-overlay-layer"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <StarInboxScreen
+                items={starInboxItems}
+                healthPreferences={healthPreferences}
+                onReviewItem={reviewStarInboxItem}
+                onDismissItem={dismissStarInboxItem}
+                onClose={() => navigate('map')}
+              />
             </motion.div>
           ) : null}
 
@@ -734,35 +811,79 @@ export function App() {
                 themePalette={themePalette}
                 onThemeTone={applyThemePreset}
                 onThemeColor={(key, color) =>
-                  setThemePalette((current) =>
-                    protectThemePaletteContrast({
-                      ...current,
-                      [key]: color,
-                    }),
-                  )
+                  setThemePalette((current) => ({
+                    ...current,
+                    [key]: color,
+                  }))
                 }
                 dataMode={dataMode}
                 onExportData={exportData}
                 onImportData={importData}
                 onDeleteAllData={deleteAllData}
-                onLoadDemo={loadDemoMode}
-                onExitDemo={exitDemoMode}
+                onLoadDemo={() => {
+                  setGuestDemo(!cloudSession.session);
+                  return loadDemoMode();
+                }}
+                onExitDemo={() => {
+                  const exited = exitDemoMode();
+                  if (!cloudSession.session) {
+                    setGuestDemo(false);
+                    setWorkspaceReady(false);
+                  }
+                  return exited;
+                }}
                 locationRequestState={locationController.requestState}
                 onRequestLocation={() =>
                   locationController.openLocationRequest('settings')
                 }
                 onToast={showToast}
                 cloudConfigured={Boolean(cloudSession.client)}
+                cloudUserId={cloudSession.session?.user.id ?? null}
                 cloudAccount={
                   typeof cloudSession.session?.user.user_metadata.account_id === 'string'
                     ? cloudSession.session.user.user_metadata.account_id
                     : null
                 }
                 cloudStatus={cloudSync.status}
-                onSignOut={() => cloudSession.client?.auth.signOut() ?? Promise.resolve()}
+                onSignOut={async () => {
+                  setWorkspaceReady(false);
+                  setGuestDemo(false);
+                  activeWorkspaceUserRef.current = null;
+                  applySnapshot(createEmptyAppData());
+                  await (cloudSession.client?.auth.signOut() ?? Promise.resolve());
+                }}
+                onUpdatePassword={updateCloudPassword}
                 onConfirmInitialUpload={cloudSync.confirmInitialUpload}
                 onUseRemoteVersion={cloudSync.useRemoteVersion}
                 onOverwriteRemote={cloudSync.overwriteRemoteWithLocal}
+                onCreateAutomationTest={() => {
+                  const now = new Date().toISOString();
+                  const id = createRecordId('shortcut-test');
+                  setStarInboxItems((current) => [
+                    ...current,
+                    {
+                      id,
+                      source: 'heart-rate',
+                      sourceEventId: id,
+                      eventAt: now,
+                      receivedAt: now,
+                      heartRate: 108,
+                      verification: 'test',
+                      context: 'unknown',
+                      samples: [{ bpm: 108, at: now }],
+                      lowSignalConfidence: true,
+                      status: 'pending',
+                    },
+                  ]);
+                  showToast(copy.feedback.shortcutHeartReceived);
+                }}
+                onIssueMcpToken={externalAccess.issueMcpToken}
+                onRevokeAllMcpTokens={externalAccess.revokeAllTokens}
+                healthPreferences={healthPreferences}
+                onHealthPreferences={updateHealthPreferences}
+                onIssueShortcutPairing={externalAccess.issueShortcutPairing}
+                onListMcpProposals={externalAccess.listMcpProposals}
+                onResolveMcpProposal={externalAccess.resolveMcpProposal}
                 onBack={() => navigate('map')}
               />
             </motion.div>
@@ -772,8 +893,7 @@ export function App() {
 
         {!editingMoment &&
         !sideOpen &&
-        (activeView === 'map' ||
-          (activeView === 'chat' && communicationSurface === 'conversation')) ? (
+        activeView === 'map' ? (
           <>
             <GlobalInboxButton
               unreadCount={unreadStarInboxCount}
@@ -850,8 +970,6 @@ export function App() {
             />
           ) : null}
         </AnimatePresence>
-
-        <AnimatePresence>{celebrating ? <CelebrationLayer /> : null}</AnimatePresence>
 
         <LocationPermissionPrompt
           isOpen={locationController.isPermissionPromptOpen}

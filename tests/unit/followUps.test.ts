@@ -34,12 +34,15 @@ const records: FollowUpRecord[] = [
 
 describe('follow-up promotion', () => {
   it.each(['zh', 'en', 'ko'] as const)(
-    'offers an explicit positive response in %s',
+    'returns exactly the five canonical options in %s',
     (language) => {
-      expect(getFollowUpOptions(language)[0]).toMatchObject({
-        id: 'positive',
-        responseKind: 'positive',
-      });
+      const options = getFollowUpOptions(language);
+      expect(options.map((option) => option.id)).toEqual([
+        'lighter', 'stronger', 'different', 'same', 'skip',
+      ]);
+      expect(options.map((option) => option.responseKind)).toEqual(
+        options.map((option) => option.id),
+      );
     },
   );
 

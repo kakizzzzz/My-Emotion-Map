@@ -51,6 +51,29 @@ export const sanitizeStarInboxItem = (
     eventAt,
     receivedAt,
     heartRate: Math.round(source.heartRate),
+    verification:
+      source.verification === 'verified' ||
+      source.verification === 'unverified' ||
+      source.verification === 'test'
+        ? source.verification
+        : undefined,
+    context:
+      source.context === 'resting' || source.context === 'workout'
+        ? source.context
+        : 'unknown',
+    samples: Array.isArray(source.samples)
+      ? source.samples
+          .map(asObject)
+          .filter((sample): sample is Record<string, unknown> => Boolean(sample))
+          .filter(
+            (sample) =>
+              typeof sample.bpm === 'number' && sample.bpm >= 20 &&
+              sample.bpm <= 260 && isTimestamp(sample.at),
+          )
+          .slice(0, 12)
+          .map((sample) => ({ bpm: Math.round(sample.bpm as number), at: sample.at as string }))
+      : undefined,
+    lowSignalConfidence: source.lowSignalConfidence === true ? true : undefined,
     latitude: hasLocation ? source.latitude as number : undefined,
     longitude: hasLocation ? source.longitude as number : undefined,
     locationCapturedAt: isTimestamp(source.locationCapturedAt)

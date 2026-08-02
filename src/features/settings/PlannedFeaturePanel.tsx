@@ -1,4 +1,4 @@
-import { Cloud, HeartPulse, LogOut, Smartphone } from 'lucide-react';
+import { Cloud, HeartPulse, Smartphone } from 'lucide-react';
 import { useAppLanguage } from '../../i18n';
 import type { CloudSyncStatus } from '../../services/useCloudSync';
 
@@ -7,7 +7,6 @@ export function PlannedFeaturePanel({
   cloudConfigured,
   cloudAccount,
   cloudStatus,
-  onSignOut,
   onConfirmInitialUpload,
   onUseRemoteVersion,
   onOverwriteRemote,
@@ -16,7 +15,6 @@ export function PlannedFeaturePanel({
   cloudConfigured: boolean;
   cloudAccount: string | null;
   cloudStatus: CloudSyncStatus;
-  onSignOut: () => Promise<unknown>;
   onConfirmInitialUpload: () => void;
   onUseRemoteVersion: () => void;
   onOverwriteRemote: () => void;
@@ -33,7 +31,7 @@ export function PlannedFeaturePanel({
               <strong>{copy.settings.health}</strong>
               <small>{copy.health.plannedDescription}</small>
             </span>
-            <span className="connection-status">{copy.common.planned}</span>
+            <span className="connection-status">{copy.settings.manualTransfer}</span>
           </div>
           <div className="connection-card__body"><p className="settings-honesty-note">{copy.health.notConnected}</p></div>
         </article>
@@ -52,7 +50,7 @@ export function PlannedFeaturePanel({
             <strong>{copy.settings.connectionsLabels.iosShortcuts}</strong>
             <small>{copy.settings.connectionsLabels.healthTransfer}</small>
           </span>
-          <span className="connection-status">{copy.common.experimental}</span>
+          <span className="connection-status">{copy.settings.manualTransfer}</span>
         </div>
         <div className="connection-card__body"><p className="settings-honesty-note">{copy.settings.shortcutNotConnected}</p></div>
       </article>
@@ -90,9 +88,6 @@ export function PlannedFeaturePanel({
                   </button>
                 </div>
               ) : null}
-              <button className="connection-check-button" onClick={() => void onSignOut()}>
-                <LogOut size={18} strokeWidth={2.2} />{copy.settings.signOut}
-              </button>
             </>
           ) : (
             <p className="settings-honesty-note">

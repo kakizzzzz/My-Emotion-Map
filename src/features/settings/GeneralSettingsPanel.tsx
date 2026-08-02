@@ -18,7 +18,6 @@ export function GeneralSettingsPanel({
   locationRequestState,
   onPanel,
   onRequestLocation,
-  onExportData,
   onImportData,
   onDeleteAllData,
   onLoadDemo,
@@ -32,7 +31,6 @@ export function GeneralSettingsPanel({
   locationRequestState: LocationRequestState;
   onPanel: (panel: SettingsPanel) => void;
   onRequestLocation: () => void;
-  onExportData: () => void;
   onImportData: (file: File) => Promise<void>;
   onDeleteAllData: () => void;
   onLoadDemo: () => boolean;
@@ -51,6 +49,10 @@ export function GeneralSettingsPanel({
         <button onClick={() => onPanel('location')}>
           <MapPin size={24} strokeWidth={2.2} />
           <span>{copy.location.settingsTitle}</span>
+        </button>
+        <button onClick={() => onPanel('export')}>
+          <Download size={24} strokeWidth={2.2} />
+          <span>{copy.settings.exportData}</span>
         </button>
         <button onClick={() => onPanel('data')}>
           <Download size={24} strokeWidth={2.2} />
@@ -137,12 +139,7 @@ export function GeneralSettingsPanel({
         <Download size={24} strokeWidth={2.2} />
         <h2>{copy.settings.dataManagement}</h2>
       </header>
-      <p>{copy.settings.dataManagementBody}</p>
       <div className="data-management-actions">
-        <button onClick={onExportData}>
-          <Download size={19} strokeWidth={2.2} />
-          {copy.settings.exportJson}
-        </button>
         <button onClick={() => importInputRef.current?.click()}>
           <Upload size={19} strokeWidth={2.2} />
           {copy.settings.importJson}

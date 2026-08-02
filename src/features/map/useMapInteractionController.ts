@@ -3,7 +3,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { MapRef } from 'react-map-gl/maplibre';
@@ -87,6 +86,8 @@ export function useMapInteractionController({
   const beginStarDrag = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (isLocationRequesting || starPointerStartRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
       starPointerStartRef.current = {
         x: event.clientX,
         y: event.clientY,
@@ -110,30 +111,6 @@ export function useMapInteractionController({
     [finishStarDrag, isLocationRequesting, resetDrag, updateStarDragAt],
   );
 
-  const beginStarMouseDrag = useCallback(
-    (event: ReactMouseEvent<HTMLButtonElement>) => {
-      if (isLocationRequesting || starPointerStartRef.current) return;
-      starPointerStartRef.current = {
-        x: event.clientX,
-        y: event.clientY,
-      };
-      starDragActiveRef.current = false;
-      starDragPreviewRef.current = null;
-
-      const move = (moveEvent: MouseEvent) => {
-        moveEvent.preventDefault();
-        updateStarDragAt(moveEvent.clientX, moveEvent.clientY);
-      };
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', finishStarDrag);
-      starDragCleanupRef.current = () => {
-        window.removeEventListener('mousemove', move);
-        window.removeEventListener('mouseup', finishStarDrag);
-      };
-    },
-    [finishStarDrag, isLocationRequesting, updateStarDragAt],
-  );
-
   useEffect(
     () => () => {
       clearDragListeners();
@@ -147,6 +124,5 @@ export function useMapInteractionController({
     ignoreNextStarClickRef,
     moveMapTo,
     beginStarDrag,
-    beginStarMouseDrag,
   };
 }

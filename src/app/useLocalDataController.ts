@@ -6,7 +6,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import type { AppCopy } from '../i18n';
+import type { AppCopy, AppLanguage } from '../i18n';
 import type {
   AppDataSnapshot,
   AppView,
@@ -15,6 +15,7 @@ import type {
   EmotionMoment,
   EmotionNote,
   FollowUpRecord,
+  MapViewport,
   RevisitRecord,
   StarInboxItem,
   ThemePalette,
@@ -24,17 +25,24 @@ import type { ToastHandler } from './appTypes';
 import type { LoadedAppData } from './appDataRepository';
 import {
   clearAllLocalData,
-  createDemoAppData,
+  canonicalSnapshotDigest,
   createEmptyAppData,
+  loadAppData,
   parseImportedAppData,
   removeMomentAssociations,
   saveAppData,
-  serializeAppData,
 } from './appDataRepository';
 import { promoteNextDueFollowUp } from '../domain/followUps';
+import {
+  exportReadableData,
+  type DataExportRange,
+} from './exportReadableData';
+import { createRecordId } from './createRecordId';
 
 type LocalDataControllerOptions = {
   initialData: LoadedAppData;
+  userId: string | null;
+  persistenceEnabled: boolean;
   moments: EmotionMoment[];
   notes: EmotionNote[];
   conversations: Conversation[];
@@ -44,6 +52,9 @@ type LocalDataControllerOptions = {
   dataMode: DataMode;
   themeTone: ThemeTone;
   themePalette: ThemePalette;
+  lastViewport?: MapViewport;
+  activeConversationId: string;
+  language: AppLanguage;
   setMoments: Dispatch<SetStateAction<EmotionMoment[]>>;
   setNotes: Dispatch<SetStateAction<EmotionNote[]>>;
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
@@ -53,6 +64,8 @@ type LocalDataControllerOptions = {
   setDataMode: Dispatch<SetStateAction<DataMode>>;
   setThemeTone: Dispatch<SetStateAction<ThemeTone>>;
   setThemePalette: Dispatch<SetStateAction<ThemePalette>>;
+  setLastViewport: Dispatch<SetStateAction<MapViewport | undefined>>;
+  setActiveConversationId: Dispatch<SetStateAction<string>>;
   setViewingMomentId: Dispatch<SetStateAction<string | null>>;
   setEditingMomentId: Dispatch<SetStateAction<string | null>>;
   setRevisitNoteId: Dispatch<SetStateAction<string | null>>;
@@ -63,6 +76,8 @@ type LocalDataControllerOptions = {
 
 export function useLocalDataController({
   initialData,
+  userId,
+  persistenceEnabled,
   moments,
   notes,
   conversations,
@@ -72,6 +87,9 @@ export function useLocalDataController({
   dataMode,
   themeTone,
   themePalette,
+  lastViewport,
+  activeConversationId,
+  language,
   setMoments,
   setNotes,
   setConversations,
@@ -81,6 +99,8 @@ export function useLocalDataController({
   setDataMode,
   setThemeTone,
   setThemePalette,
+  setLastViewport,
+  setActiveConversationId,
   setViewingMomentId,
   setEditingMomentId,
   setRevisitNoteId,
@@ -89,6 +109,7 @@ export function useLocalDataController({
   showToast,
 }: LocalDataControllerOptions) {
   const hasReportedStorageFailureRef = useRef(false);
+  const savedDigestRef = useRef('');
   const snapshot = useMemo<AppDataSnapshot>(
     () => ({
       schemaVersion: initialData.schemaVersion,
@@ -101,6 +122,12 @@ export function useLocalDataController({
       starInboxItems,
       themeTone,
       themePalette,
+      lastViewport,
+      lastConversationId: conversations.some(
+        (conversation) => conversation.id === activeConversationId,
+      )
+        ? activeConversationId
+        : undefined,
     }),
     [
       conversations,
@@ -113,21 +140,36 @@ export function useLocalDataController({
       starInboxItems,
       themePalette,
       themeTone,
+      lastViewport,
+      activeConversationId,
     ],
   );
 
   useEffect(() => {
-    if (
-      !saveAppData(snapshot) &&
-      !hasReportedStorageFailureRef.current
-    ) {
-      hasReportedStorageFailureRef.current = true;
-      showToast(copy.feedback.storageWriteFailed, {
-        placement: 'top',
-        durationMs: 5_000,
-      });
-    }
-  }, [copy.feedback.storageWriteFailed, showToast, snapshot]);
+    if (!persistenceEnabled) return;
+    const digest = canonicalSnapshotDigest(snapshot);
+    if (digest === savedDigestRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (saveAppData(snapshot, userId)) {
+        savedDigestRef.current = digest;
+        return;
+      }
+      if (!hasReportedStorageFailureRef.current) {
+        hasReportedStorageFailureRef.current = true;
+        showToast(copy.feedback.storageWriteFailed, {
+          placement: 'top',
+          durationMs: 5_000,
+        });
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [
+    copy.feedback.storageWriteFailed,
+    persistenceEnabled,
+    showToast,
+    snapshot,
+    userId,
+  ]);
 
   useEffect(() => {
     if (initialData.loadIssue === 'corrupt-json') {
@@ -159,6 +201,17 @@ export function useLocalDataController({
       setStarInboxItems(next.starInboxItems);
       setThemeTone(next.themeTone);
       setThemePalette(next.themePalette);
+      setLastViewport(next.lastViewport);
+      const restoredConversation =
+        next.conversations.find(
+          (conversation) => conversation.id === next.lastConversationId,
+        ) ??
+        [...next.conversations]
+          .reverse()
+          .find((conversation) => conversation.kind !== 'companion');
+      setActiveConversationId(
+        restoredConversation?.id ?? createRecordId('conversation'),
+      );
       setViewingMomentId(null);
       setEditingMomentId(null);
       setRevisitNoteId(null);
@@ -177,6 +230,8 @@ export function useLocalDataController({
       setStarInboxItems,
       setThemePalette,
       setThemeTone,
+      setLastViewport,
+      setActiveConversationId,
       setViewingMomentId,
     ],
   );
@@ -195,20 +250,15 @@ export function useLocalDataController({
     [applySnapshot, copy, showToast, snapshot],
   );
 
-  const exportData = useCallback(() => {
-    const blob = new Blob([serializeAppData(snapshot)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `my-emotion-map-${new Date()
-      .toISOString()
-      .slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast(copy.feedback.dataExported);
-  }, [copy.feedback.dataExported, showToast, snapshot]);
+  const exportData = useCallback((range: DataExportRange) => {
+    const result = exportReadableData({ snapshot, range, language });
+    showToast(
+      result.recordCount
+        ? copy.feedback.dataExported
+        : copy.settings.exportEmpty,
+    );
+    return result;
+  }, [copy.feedback.dataExported, copy.settings.exportEmpty, language, showToast, snapshot]);
 
   const importData = useCallback(
     async (file: File) => {
@@ -220,15 +270,24 @@ export function useLocalDataController({
         });
         return;
       }
+      if (dataMode === 'real' && parsed.snapshot.dataMode === 'demo') {
+        showToast(copy.feedback.dataImportFailed, {
+          placement: 'top',
+          durationMs: 4_000,
+        });
+        return;
+      }
+      const preview = `${parsed.snapshot.notes.length} · ${parsed.snapshot.dataMode}`;
+      if (!window.confirm(preview)) return;
       applySnapshot(parsed.snapshot);
       showToast(copy.feedback.dataImported);
     },
-    [applySnapshot, copy.feedback, showToast],
+    [applySnapshot, copy.feedback, dataMode, showToast],
   );
 
   const deleteAllData = useCallback(() => {
     if (!window.confirm(copy.feedback.deleteAllDataConfirm)) return;
-    if (!clearAllLocalData()) {
+    if (!clearAllLocalData(userId, dataMode)) {
       showToast(copy.feedback.storageWriteFailed, {
         placement: 'top',
         durationMs: 5_000,
@@ -236,27 +295,20 @@ export function useLocalDataController({
     }
     applySnapshot(createEmptyAppData());
     showToast(copy.feedback.allDataDeleted);
-  }, [applySnapshot, copy.feedback, showToast]);
+  }, [applySnapshot, copy.feedback, dataMode, showToast, userId]);
 
   const loadDemoMode = useCallback(() => {
-    if (
-      snapshot.dataMode === 'real' &&
-      (snapshot.moments.length > 0 || snapshot.notes.length > 0) &&
-      !window.confirm(copy.feedback.loadDemoConfirm)
-    ) {
-      return false;
-    }
-    applySnapshot(createDemoAppData());
+    if (snapshot.dataMode === 'real') saveAppData(snapshot, userId);
+    applySnapshot(loadAppData(userId, 'demo'));
     showToast(copy.feedback.demoLoaded);
     return true;
-  }, [applySnapshot, copy.feedback, showToast, snapshot]);
+  }, [applySnapshot, copy.feedback, showToast, snapshot, userId]);
 
   const exitDemoMode = useCallback(() => {
-    if (!window.confirm(copy.feedback.exitDemoConfirm)) return false;
-    applySnapshot(createEmptyAppData());
+    applySnapshot(userId ? loadAppData(userId, 'real') : createEmptyAppData());
     showToast(copy.feedback.demoExited);
     return true;
-  }, [applySnapshot, copy.feedback, showToast]);
+  }, [applySnapshot, copy.feedback, showToast, userId]);
 
   return {
     applySnapshot,

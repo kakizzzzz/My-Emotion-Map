@@ -84,39 +84,6 @@
   box-shadow: var(--em-shadow-card);
 }
 
-.demo-mode-banner {
-  position: absolute;
-  z-index: calc(var(--em-layer-feedback) - 1);
-  top: calc(env(safe-area-inset-top) + 8px);
-  left: 50%;
-  display: flex;
-  max-width: min(32rem, calc(100% - 136px));
-  min-height: 44px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border: 1px solid rgba(92, 92, 92, 0.14);
-  border-radius: var(--em-radius-pill);
-  background: var(--em-chrome-surface);
-  box-shadow: var(--em-shadow-card);
-  color: var(--em-text-secondary);
-  font-size: 12px;
-  line-height: 1.25;
-  translate: -50% 0;
-  backdrop-filter: blur(14px);
-}
-
-.demo-mode-banner strong {
-  flex: 0 0 auto;
-  color: var(--em-text-primary);
-}
-
-@media (max-width: 480px) {
-  .demo-mode-banner span {
-    display: none;
-  }
-}
-
 .side-drawer__body {
   min-height: 0;
   flex: 1;

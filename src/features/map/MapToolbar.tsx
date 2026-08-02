@@ -1,7 +1,4 @@
-import type {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-} from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -41,7 +38,6 @@ export function MapToolbar({
   onRequestLocation,
   onTagMode,
   onBeginStarDrag,
-  onBeginStarMouseDrag,
   onStarClick,
   onPhotoFile,
   onSearchOpen,
@@ -62,9 +58,6 @@ export function MapToolbar({
   onTagMode: (mode: 'add' | 'remove' | null) => void;
   onBeginStarDrag: (
     event: ReactPointerEvent<HTMLButtonElement>,
-  ) => void;
-  onBeginStarMouseDrag: (
-    event: ReactMouseEvent<HTMLButtonElement>,
   ) => void;
   onStarClick: () => void;
   onPhotoFile: (file: File) => void;
@@ -188,7 +181,6 @@ export function MapToolbar({
                 starDragPreview ? 'is-active' : ''
               }`}
               onPointerDown={onBeginStarDrag}
-              onMouseDown={onBeginStarMouseDrag}
               onClick={onStarClick}
               aria-label={copy.map.addStar}
               aria-busy={locationRequestState === 'requesting'}

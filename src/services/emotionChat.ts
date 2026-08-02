@@ -10,17 +10,22 @@ export type PublicEvidence = {
 };
 
 export type EmotionChatResult = {
-  status: 'supported' | 'evidence_insufficient' | 'unsupported';
+  intent: 'lookup' | 'comparison' | 'pattern' | 'reflection' | 'unsupported';
+  retrievalStatus: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'unavailable';
+  status: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'unavailable';
   answer: string;
   evidence: PublicEvidence[];
-  confidence: 'low' | 'medium' | 'high';
+  confidence: 'none' | 'low' | 'medium' | 'high';
   limitations: string[];
+  clarificationOptions?: string[];
 };
 
 const validateResult = (value: unknown): EmotionChatResult | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
-  if (source.status !== 'supported' && source.status !== 'evidence_insufficient' && source.status !== 'unsupported') return null;
+  const statuses = new Set(['supported', 'ambiguous', 'not_found', 'evidence_insufficient', 'unavailable']);
+  const intents = new Set(['lookup', 'comparison', 'pattern', 'reflection', 'unsupported']);
+  if (!statuses.has(String(source.status)) || !statuses.has(String(source.retrievalStatus)) || !intents.has(String(source.intent))) return null;
   if (typeof source.answer !== 'string' || source.answer.length > 4_000 || !Array.isArray(source.evidence) || !Array.isArray(source.limitations)) return null;
   const evidence: PublicEvidence[] = [];
   for (const raw of source.evidence.slice(0, 6)) {
@@ -35,13 +40,21 @@ const validateResult = (value: unknown): EmotionChatResult | null => {
       matchReason: (item.matchReason as string).slice(0, 80),
     });
   }
-  const confidence = source.confidence === 'high' || source.confidence === 'medium' ? source.confidence : 'low';
+  const confidence = source.confidence === 'high' || source.confidence === 'medium' || source.confidence === 'low' ? source.confidence : 'none';
   return {
-    status: source.status,
+    intent: source.intent as EmotionChatResult['intent'],
+    retrievalStatus: source.retrievalStatus as EmotionChatResult['retrievalStatus'],
+    status: source.status as EmotionChatResult['status'],
     answer: source.answer,
     evidence,
     confidence,
     limitations: source.limitations.filter((item): item is string => typeof item === 'string').map((item) => item.slice(0, 300)).slice(0, 5),
+    clarificationOptions: Array.isArray(source.clarificationOptions)
+      ? source.clarificationOptions
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.slice(0, 100))
+          .slice(0, 3)
+      : undefined,
   };
 };
 
@@ -50,6 +63,8 @@ export const requestEmotionChat = async ({
   message,
   language,
   conversationId,
+  selectedNoteIds,
+  responseStyle = [],
   clientRevision,
   signal,
 }: {
@@ -57,6 +72,8 @@ export const requestEmotionChat = async ({
   message: string;
   language: AppLanguage;
   conversationId: string;
+  selectedNoteIds: string[];
+  responseStyle?: Array<'concise' | 'direct' | 'gentle'>;
   clientRevision: number;
   signal: AbortSignal;
 }) => {
@@ -67,7 +84,14 @@ export const requestEmotionChat = async ({
       apikey: auth.publishableKey,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ message, language, conversationId, clientRevision }),
+    body: JSON.stringify({
+      message,
+      language,
+      conversationId,
+      selectedNoteIds: selectedNoteIds.slice(0, 6),
+      responseStyle: responseStyle.slice(0, 3),
+      clientRevision,
+    }),
     signal,
   });
   const payload = await response.json().catch(() => null);

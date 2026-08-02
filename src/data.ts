@@ -413,20 +413,15 @@ export const INITIAL_CONVERSATIONS: Conversation[] = [
       {
         id: 'r1',
         role: 'assistant',
-        body: INITIAL_FOLLOW_UPS[0].prompt,
+        body: INITIAL_FOLLOW_UPS[0].prompt ?? '现在回看，这段经历有什么变化？',
         noteIds: ['note-cafeteria'],
         followUpId: INITIAL_FOLLOW_UPS[0].id,
         createdAt: INITIAL_FOLLOW_UPS[0].promptedAt,
         options: [
           {
-            id: 'positive',
-            label: '现在回看，我仍然很喜欢这段经历。',
-            responseKind: 'positive',
-          },
-          {
             id: 'better',
             label: '现在回看，感受轻了一些。',
-            responseKind: 'calm',
+            responseKind: 'lighter',
           },
           {
             id: 'more-intense',
@@ -441,7 +436,7 @@ export const INITIAL_CONVERSATIONS: Conversation[] = [
           {
             id: 'same',
             label: '和当时差不多。',
-            responseKind: 'unchanged',
+            responseKind: 'same',
           },
           {
             id: 'skip',

@@ -1,15 +1,10 @@
 import { useState } from "react";
 import { ChevronDown, Inbox, MapPin, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { EmotionStar } from "../../EmotionStar";
 import { MOTION } from "../../motion";
 import { StarMarkerGlyph } from "../../StarMarkerGlyph";
 import { useAppLanguage } from "../../i18n";
-import type { ChatOption, EmotionNote, FollowUpRecord } from "../../types";
-import {
-  getFollowUpOptions,
-  formatFollowUpTimestamp,
-} from '../../domain/followUps';
+import { formatFollowUpTimestamp } from '../../domain/followUps';
 import {
   isOutsideRestingHeartRateRange,
   describeHeartRateObservation,
@@ -22,47 +17,25 @@ import { useDialogFocus } from '../../app/useDialogFocus';
 
 export function StarInboxScreen({
   items,
-  followUps,
-  notes,
   healthPreferences,
   onReviewItem,
   onDismissItem,
-  onAnswerFollowUp,
   onClose,
 }: {
   items: StarInboxItem[];
-  followUps: FollowUpRecord[];
-  notes: EmotionNote[];
   healthPreferences: HealthPreferences;
   onReviewItem: (item: StarInboxItem) => void;
   onDismissItem: (itemId: string) => void;
-  onAnswerFollowUp: (
-    followUpId: string,
-    label: string,
-    kind: ChatOption['responseKind'],
-  ) => void;
   onClose: () => void;
 }) {
-  const { copy, language, locale } = useAppLanguage();
-  const [openedAt] = useState(() => Date.now());
-  const followUpOptions = getFollowUpOptions(language);
+  const { copy, locale } = useAppLanguage();
   const pendingItems = items.filter(
     (item) =>
       item.status === 'pending' &&
       isOutsideRestingHeartRateRange(item.heartRate, healthPreferences),
   );
-  const queuedFollowUps = followUps
-    .filter(
-      (record) =>
-        record.status === 'active' ||
-        (record.status === 'queued' && new Date(record.dueAt).getTime() <= openedAt),
-    )
-    .sort(
-      (left, right) =>
-        new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime(),
-    );
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const isEmpty = pendingItems.length === 0 && queuedFollowUps.length === 0;
+  const isEmpty = pendingItems.length === 0;
   const dialogRef = useDialogFocus<HTMLDivElement>({ onEscape: onClose });
 
   return (
@@ -107,100 +80,6 @@ export function StarInboxScreen({
             </div>
           ) : (
             <>
-              {queuedFollowUps.length ? (
-                <section
-                  className="star-inbox-group"
-                  aria-label={copy.inbox.followUps}
-                >
-                  <h2 className="star-inbox-group__title">
-                    {copy.inbox.followUps}
-                  </h2>
-                  <div className="star-inbox-list">
-                    {queuedFollowUps.map((record) => {
-                      const selectedKey = `follow-up:${record.id}`;
-                      const expanded = selectedItemId === selectedKey;
-                      const note = notes.find((item) => item.id === record.noteId);
-                      return (
-                        <article
-                          key={record.id}
-                          className={`star-inbox-entry ${expanded ? 'is-open' : ''}`}
-                        >
-                          <button
-                            className="star-inbox-card star-inbox-card--follow-up"
-                            onClick={() =>
-                              setSelectedItemId((current) =>
-                                current === selectedKey ? null : selectedKey,
-                              )
-                            }
-                            aria-expanded={expanded}
-                            aria-controls={`follow-up-decision-${record.id}`}
-                          >
-                            <span className="star-inbox-card__icon">
-                              {note ? (
-                                <EmotionStar
-                                  emotion={note.emotion}
-                                  size={34}
-                                  colorOverride={note.color}
-                                />
-                              ) : (
-                                <StarMarkerGlyph
-                                  size={34}
-                                  color="var(--em-dark)"
-                                  outline
-                                />
-                              )}
-                            </span>
-                            <span className="star-inbox-card__copy">
-                              <strong>{note?.title ?? copy.note.untitled}</strong>
-                              <small className="star-inbox-card__status">
-                                {copy.inbox.followUpAfterDays(
-                                  record.intervalDays,
-                                )}
-                              </small>
-                              <small>
-                                {formatFollowUpTimestamp(record.dueAt, locale)}
-                              </small>
-                            </span>
-                            <ChevronDown size={20} strokeWidth={2.2} />
-                          </button>
-                          <AnimatePresence initial={false}>
-                            {expanded ? (
-                              <motion.div
-                                id={`follow-up-decision-${record.id}`}
-                                className="star-inbox-decision star-inbox-follow-up-decision"
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.16 }}
-                              >
-                                <p>{record.prompt}</p>
-                                <div>
-                                  {followUpOptions.map((option) => (
-                                    <button
-                                      key={option.id}
-                                      onClick={() => {
-                                        onAnswerFollowUp(
-                                          record.id,
-                                          option.label,
-                                          option.responseKind,
-                                        );
-                                        setSelectedItemId(null);
-                                      }}
-                                    >
-                                      {option.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </motion.div>
-                            ) : null}
-                          </AnimatePresence>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-              ) : null}
-
               {pendingItems.length ? (
                 <section
                   className="star-inbox-group"

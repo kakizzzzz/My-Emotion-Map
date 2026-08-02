@@ -7,12 +7,20 @@ export const HEALTH_PREFERENCES_STORAGE_KEY =
 export const DEFAULT_HEALTH_PREFERENCES: HealthPreferences = {
   restingHeartRateMin: 60,
   restingHeartRateMax: 100,
+  rangeConfirmed: false,
+  singleSampleEnabled: false,
 };
 
-export const loadHealthPreferences = (): HealthPreferences => {
+export const healthPreferencesStorageKey = (userId: string) =>
+  `my-emotion-map.health-preferences.${userId}.v2`;
+
+export const loadHealthPreferences = (
+  userId: string | null,
+): HealthPreferences => {
   try {
+    if (!userId) return DEFAULT_HEALTH_PREFERENCES;
     const stored = window.localStorage.getItem(
-      HEALTH_PREFERENCES_STORAGE_KEY,
+      healthPreferencesStorageKey(userId),
     );
     if (!stored) return DEFAULT_HEALTH_PREFERENCES;
     const parsed = JSON.parse(stored) as Partial<HealthPreferences>;
@@ -30,9 +38,26 @@ export const loadHealthPreferences = (): HealthPreferences => {
     return {
       restingHeartRateMin: Math.round(min),
       restingHeartRateMax: Math.round(max),
+      rangeConfirmed: parsed.rangeConfirmed === true,
+      singleSampleEnabled: parsed.singleSampleEnabled === true,
     };
   } catch {
     return DEFAULT_HEALTH_PREFERENCES;
+  }
+};
+
+export const saveHealthPreferences = (
+  userId: string,
+  preferences: HealthPreferences,
+) => {
+  try {
+    window.localStorage.setItem(
+      healthPreferencesStorageKey(userId),
+      JSON.stringify(preferences),
+    );
+    return true;
+  } catch {
+    return false;
   }
 };
 

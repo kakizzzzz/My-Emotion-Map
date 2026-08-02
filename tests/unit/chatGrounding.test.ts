@@ -30,8 +30,7 @@ describe('grounded chat boundary', () => {
   it('rejects unknown-to-emotion inference and causal language', () => {
     const evidence = selectAuthorizedEvidence(snapshot, '图书馆', []);
     const draft = parseGeneratedDraft({
-      status: 'supported',
-      claims: [{ claimId: 'c1', kind: 'record_fact', text: '这说明你因为图书馆而焦虑。', evidenceKeys: ['E1'] }],
+      claims: [{ claimId: 'c1', kind: 'record_fact', text: '这说明你因为图书馆而焦虑。', evidenceKeys: ['E1'], allowedFactKeys: [] }],
       limitations: [],
     });
     const validation = validateGeneratedDraft(draft!, evidence);
@@ -42,8 +41,7 @@ describe('grounded chat boundary', () => {
   it('accepts a bounded record fact tied to one authorized key', () => {
     const evidence = selectAuthorizedEvidence(snapshot, '图书馆', []);
     const draft = parseGeneratedDraft({
-      status: 'supported',
-      claims: [{ claimId: 'c1', kind: 'record_fact', text: '这条记录写到图书馆窗边的桌子。', evidenceKeys: ['E1'] }],
+      claims: [{ claimId: 'c1', kind: 'record_fact', text: '这条记录写到图书馆窗边的桌子。', evidenceKeys: ['E1'], allowedFactKeys: [] }],
       limitations: ['情绪未填写'],
     });
     const validation = validateGeneratedDraft(draft!, evidence);
@@ -55,8 +53,7 @@ describe('grounded chat boundary', () => {
   it('rejects unsafe limitation text instead of exposing it', () => {
     const evidence = selectAuthorizedEvidence(snapshot, '图书馆', []);
     const draft = parseGeneratedDraft({
-      status: 'supported',
-      claims: [{ claimId: 'c1', kind: 'record_fact', text: '这条记录写到图书馆窗边的桌子。', evidenceKeys: ['E1'] }],
+      claims: [{ claimId: 'c1', kind: 'record_fact', text: '这条记录写到图书馆窗边的桌子。', evidenceKeys: ['E1'], allowedFactKeys: [] }],
       limitations: ['这说明你有焦虑症。'],
     });
     const validation = validateGeneratedDraft(draft!, evidence);
@@ -67,10 +64,9 @@ describe('grounded chat boundary', () => {
   it('rejects invented current-state claims and unsolicited advice', () => {
     const evidence = selectAuthorizedEvidence(snapshot, '图书馆', []);
     const draft = parseGeneratedDraft({
-      status: 'supported',
       claims: [
-        { claimId: 'c1', kind: 'record_fact', text: '你现在很平静。', evidenceKeys: ['E1'] },
-        { claimId: 'c2', kind: 'record_fact', text: '你可以试试下次早点离开图书馆。', evidenceKeys: ['E1'] },
+        { claimId: 'c1', kind: 'record_fact', text: '你现在很平静。', evidenceKeys: ['E1'], allowedFactKeys: [] },
+        { claimId: 'c2', kind: 'record_fact', text: '你可以试试下次早点离开图书馆。', evidenceKeys: ['E1'], allowedFactKeys: [] },
       ],
       limitations: [],
     });
@@ -81,7 +77,6 @@ describe('grounded chat boundary', () => {
 
   it('rejects model output that adds public evidence fields', () => {
     expect(parseGeneratedDraft({
-      status: 'supported',
       claims: [],
       limitations: [],
       evidence: [{ noteId: 'n1' }],
@@ -95,8 +90,7 @@ describe('grounded chat boundary', () => {
       emotion: null, excerpt: '晚餐', answers: [], matchReason: 'title_match',
     }));
     const draft = parseGeneratedDraft({
-      status: 'supported',
-      claims: [{ claimId: 'c1', kind: 'repeated_observation', text: '晚餐在这些记录中重复出现。', evidenceKeys: ['E1', 'E2', 'E3'] }],
+      claims: [{ claimId: 'c1', kind: 'repeated_observation', text: '晚餐在这些记录中重复出现。', evidenceKeys: ['E1', 'E2', 'E3'], allowedFactKeys: ['recordCount'] }],
       limitations: [],
     });
     expect(validateGeneratedDraft(draft!, evidence).validClaims).toHaveLength(0);
