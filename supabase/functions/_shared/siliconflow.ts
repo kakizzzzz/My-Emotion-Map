@@ -58,12 +58,17 @@ const parseJsonContent = (payload: unknown) => {
 export const requestSiliconFlowJson = async ({
   task,
   messages,
+  timeoutMs,
 }: {
   task: 'photo' | 'chat';
   messages: SiliconFlowMessage[];
+  timeoutMs?: number;
 }) => {
   const config = readProviderConfig(task);
-  const timeoutMs = task === 'photo' ? 15_000 : 20_000;
+  const maximumTimeoutMs = task === 'photo' ? 15_000 : 20_000;
+  const requestTimeoutMs = Number.isFinite(timeoutMs)
+    ? Math.max(1, Math.min(maximumTimeoutMs, Math.floor(timeoutMs as number)))
+    : maximumTimeoutMs;
   const maxTokens = task === 'photo' ? 220 : 500;
   const temperature = task === 'photo' ? 0.1 : 0.15;
   let response: Response;
@@ -82,7 +87,7 @@ export const requestSiliconFlowJson = async ({
         response_format: { type: 'json_object' },
         stream: false,
       }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(requestTimeoutMs),
     });
   } catch {
     throw new SiliconFlowFailure('provider_retryable');

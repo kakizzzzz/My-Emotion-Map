@@ -299,7 +299,7 @@ export type MapViewport = {
   zoom: number;
 };
 
-export type DataMode = 'real' | 'demo';
+export type DataMode = 'real';
 
 export type AppDataSnapshot = {
   schemaVersion: number;
@@ -312,7 +312,6 @@ export type AppDataSnapshot = {
   starInboxItems: StarInboxItem[];
   themeTone: ThemeTone;
   themePalette: ThemePalette;
-  demoAnchorDate?: string;
   lastConversationId?: string;
   lastViewport?: MapViewport;
 };

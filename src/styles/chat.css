@@ -74,40 +74,6 @@
   min-height: 100%;
 }
 
-.demo-chat-prompts {
-  width: min(100%, 420px);
-  margin: 10px auto 22px;
-}
-
-.demo-chat-prompts > p {
-  margin: 0 4px 9px;
-  color: var(--em-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.demo-chat-prompts > div {
-  display: grid;
-  gap: 6px;
-}
-
-.demo-chat-prompts button {
-  min-height: 44px;
-  padding: 8px 13px;
-  border-radius: 15px;
-  background: var(--em-soft-surface);
-  color: var(--em-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.35;
-  text-align: left;
-}
-
-.demo-chat-prompts button:focus-visible {
-  outline: 2px solid var(--em-dark);
-  outline-offset: 2px;
-}
-
 .message-end-anchor {
   height: 1px;
 }

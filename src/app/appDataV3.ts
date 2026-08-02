@@ -191,30 +191,3 @@ export const relinkLegacyInboxDrafts = (
       ? 'completed' : 'draft_created';
   }
 };
-
-export const DEMO_INBOX_ITEMS: StarInboxItem[] = [
-  {
-    id: 'inbox-library', sourceEventId: 'demo-library',
-    eventAt: '2026-08-01T18:42:00+09:00', receivedAt: '2026-08-01T18:43:00+09:00',
-    heartRate: 126, latitude: 37.5591, longitude: 127.0008,
-    status: 'pending', source: 'heart-rate', decisionReason: 'legacy_review',
-    thresholdSnapshot: { restingMin: 60, restingMax: 100 },
-    algorithmVersion: 'demo-v1', signalLevel: 'standard',
-  },
-  {
-    id: 'inbox-cafeteria', sourceEventId: 'demo-cafeteria',
-    eventAt: '2026-08-01T14:16:00+09:00', receivedAt: '2026-08-01T14:17:00+09:00',
-    heartRate: 121, latitude: 37.5587, longitude: 127.0012,
-    status: 'pending', source: 'heart-rate', decisionReason: 'legacy_review',
-    thresholdSnapshot: { restingMin: 60, restingMax: 100 },
-    algorithmVersion: 'demo-v1', signalLevel: 'standard',
-  },
-  {
-    id: 'inbox-studio', sourceEventId: 'demo-studio',
-    eventAt: '2026-07-31T21:08:00+09:00', receivedAt: '2026-07-31T21:09:00+09:00',
-    heartRate: 52, latitude: 37.5582, longitude: 126.9994,
-    status: 'pending', source: 'heart-rate', decisionReason: 'legacy_review',
-    thresholdSnapshot: { restingMin: 60, restingMax: 100 },
-    algorithmVersion: 'demo-v1', signalLevel: 'standard',
-  },
-];

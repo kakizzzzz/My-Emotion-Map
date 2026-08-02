@@ -9,17 +9,35 @@ import {
 
 const clientMock = ({
   invoke,
-  signIn,
+  setSession = validSession,
 }: {
-  invoke: unknown;
-  signIn: unknown;
+  invoke: unknown | unknown[];
+  setSession?: unknown;
 }) => ({
-  functions: { invoke: vi.fn().mockResolvedValue(invoke) },
-  auth: { signInWithPassword: vi.fn().mockResolvedValue(signIn) },
+  functions: {
+    invoke: Array.isArray(invoke)
+      ? vi.fn()
+          .mockResolvedValueOnce(invoke[0])
+          .mockResolvedValueOnce(invoke[1])
+      : vi.fn().mockResolvedValue(invoke),
+  },
+  auth: { setSession: vi.fn().mockResolvedValue(setSession) },
 }) as unknown as SupabaseClient;
 
 const validSession = {
-  data: { session: { access_token: 'test' }, user: { id: 'user-1' } },
+  data: { session: { access_token: 'test', user: { id: 'user-1' } } },
+  error: null,
+};
+
+const loginReady = {
+  data: {
+    status: 'ready',
+    session: {
+      accessToken: 'access-test',
+      refreshToken: 'refresh-test',
+      userId: 'user-1',
+    },
+  },
   error: null,
 };
 
@@ -40,8 +58,10 @@ describe('account authentication mapping', () => {
 
   it('signs in immediately after the registration function succeeds', async () => {
     const client = clientMock({
-      invoke: { data: { status: 'ready' }, error: null },
-      signIn: validSession,
+      invoke: [
+        { data: { status: 'ready' }, error: null },
+        loginReady,
+      ],
     });
 
     await expect(authenticateAccount({
@@ -59,8 +79,10 @@ describe('account authentication mapping', () => {
       headers: { 'content-type': 'application/json' },
     });
     const client = clientMock({
-      invoke: { data: null, error: { context } },
-      signIn: validSession,
+      invoke: [
+        { data: null, error: { context } },
+        loginReady,
+      ],
     });
 
     await expect(authenticateAccount({
@@ -79,7 +101,6 @@ describe('account authentication mapping', () => {
     });
     const client = clientMock({
       invoke: { data: null, error: { context } },
-      signIn: validSession,
     });
 
     await expect(authenticateAccount({
@@ -89,6 +110,40 @@ describe('account authentication mapping', () => {
       password: 'safe-pass-123',
       passwordConfirmation: 'safe-pass-123',
     })).resolves.toBe('rate_limited');
-    expect(client.auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(client.auth.setSession).not.toHaveBeenCalled();
+  });
+
+  it('activates a server-resolved legacy account session', async () => {
+    const client = clientMock({ invoke: loginReady });
+
+    await expect(authenticateAccount({
+      client,
+      mode: 'login',
+      account: 'kaki',
+      password: 'safe-pass-123',
+      passwordConfirmation: '',
+    })).resolves.toBe('signed_in');
+    expect(client.auth.setSession).toHaveBeenCalledWith({
+      access_token: 'access-test',
+      refresh_token: 'refresh-test',
+    });
+  });
+
+  it('does not activate a session when the resolved user id changes', async () => {
+    const client = clientMock({
+      invoke: loginReady,
+      setSession: {
+        data: { session: { user: { id: 'different-user' } } },
+        error: null,
+      },
+    });
+
+    await expect(authenticateAccount({
+      client,
+      mode: 'login',
+      account: 'kaki',
+      password: 'safe-pass-123',
+      passwordConfirmation: '',
+    })).resolves.toBe('unavailable');
   });
 });

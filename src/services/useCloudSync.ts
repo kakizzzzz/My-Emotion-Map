@@ -26,8 +26,7 @@ export type CloudSyncStatus =
   | 'upgrade_required'
   | 'conflict'
   | 'offline'
-  | 'error'
-  | 'demo';
+  | 'error';
 
 const hasUserRecords = (snapshot: AppDataSnapshot) =>
   snapshot.moments.length > 0 || snapshot.notes.length > 0;
@@ -259,11 +258,6 @@ export function useCloudSync({
       setUploadedSnapshot('');
       conflictRemoteRef.current = null;
       setStatus('upgrade_required');
-      setRevision(null);
-      return;
-    }
-    if (snapshot.dataMode === 'demo') {
-      setStatus('demo');
       setRevision(null);
       return;
     }

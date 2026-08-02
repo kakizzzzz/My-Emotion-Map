@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   APP_DATA_STORAGE_KEY,
   CURRENT_SCHEMA_VERSION,
-  createDemoAppData,
   createEmptyAppData,
   dismissInboxItem,
   isValidCoordinate,
@@ -13,7 +12,6 @@ import {
   removeMomentAssociations,
   saveAppData,
 } from '../../src/app/appDataRepository';
-import { DEMO_DATA_MANIFEST } from '../../src/app/demoData';
 import {
   legacyUserWorkspaceStorageKey,
   userWorkspaceStorageKey,
@@ -328,39 +326,13 @@ describe('app data repository', () => {
     expect(migrated.issues).toContain('moment-dropped');
   });
 
-  it('keeps empty real data separate from explicit demo data', () => {
+  it('creates an empty real workspace without seeded records', () => {
     const empty = createEmptyAppData();
-    const demo = createDemoAppData();
 
     expect(empty.dataMode).toBe('real');
     expect(empty.moments).toEqual([]);
     expect(empty.conversations).toEqual([]);
     expect(empty.starInboxItems).toEqual([]);
-    expect(demo.dataMode).toBe('demo');
-    expect(demo.moments.length).toBeGreaterThan(0);
-    expect(demo.moments.every((item) =>
-      item.latitude >= 37.557 && item.latitude <= 37.56 &&
-      item.longitude >= 126.998 && item.longitude <= 127.002
-    )).toBe(true);
-    expect(demo.notes.map((item) => item.place)).toEqual([
-      '东国大学中央图书馆',
-      '万海广场',
-      '惠化馆走廊',
-      '东国大学学生会馆',
-      '东国大学八正道',
-    ]);
-    expect(demo.notes.every((item) => item.emotion !== null)).toBe(true);
-    expect(DEMO_DATA_MANIFEST).toMatchObject({
-      sourceType: 'synthetic_demo',
-      sourceId: 'campus-day',
-      recordCount: 5,
-    });
-    expect(demo.notes).toHaveLength(5);
-    expect(demo.notes.every((item) =>
-      item.id.startsWith('demo:synthetic:campus-day:')
-    )).toBe(true);
-    expect(JSON.stringify(demo)).not.toMatch(/demo:mlm|my life memory|公开演示记录/i);
-    expect(demo.starInboxItems).toEqual([]);
   });
 
   it('persists inbox dismissal as data state', () => {
@@ -415,13 +387,12 @@ describe('app data repository', () => {
     expect(loadAppData('user-b').moments).toEqual([]);
   });
 
-  it('keeps the real camera snapshot intact while Demo uses its own workspace', () => {
+  it('keeps the real camera snapshot intact when reloaded', () => {
     const real = {
       ...populatedSnapshot(),
       lastViewport: { longitude: 121.49, latitude: 31.23, zoom: 13.5 },
     };
     expect(saveAppData(real, 'user-a')).toBe(true);
-    expect(saveAppData(createDemoAppData(), 'user-a')).toBe(true);
     expect(loadAppData('user-a', 'real').lastViewport).toEqual(real.lastViewport);
     expect(loadAppData('user-a', 'real').dataMode).toBe('real');
   });

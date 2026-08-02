@@ -18,7 +18,6 @@ import { renderWithLanguage } from '../renderWithLanguage';
 import { createGuidedAnswers } from '../../src/domain/notePrompts';
 import type { PhotoAssistDelivery } from '../../src/app/appTypes';
 import { FirstRunOnboarding } from '../../src/features/onboarding/FirstRunOnboarding';
-import { createDemoAppData } from '../../src/app/appDataRepository';
 import { SideDrawer } from '../../src/app/AppChrome';
 import { StarInboxScreen } from '../../src/features/inbox/StarInboxScreen';
 
@@ -363,24 +362,11 @@ describe('core component flows', () => {
     const user = userEvent.setup();
     const onComplete = vi.fn();
     renderWithLanguage(
-      <FirstRunOnboarding dataMode="real" onComplete={onComplete} />,
-    );
-    expect(screen.getByRole('dialog', { name: '留下一颗星星' })).toHaveAttribute(
-      'data-onboarding-mode',
-      'real',
+      <FirstRunOnboarding onComplete={onComplete} />,
     );
     expect(screen.getByText('第 1 页，共 3 页')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '跳过' }));
     expect(onComplete).toHaveBeenCalledTimes(1);
-
-    cleanup();
-    renderWithLanguage(
-      <FirstRunOnboarding dataMode="demo" onComplete={vi.fn()} />,
-    );
-    expect(screen.getByRole('dialog', { name: '留下一颗星星' })).toHaveAttribute(
-      'data-onboarding-mode',
-      'demo',
-    );
   });
 
   it('closes settings through a discoverable button', async () => {
@@ -586,7 +572,6 @@ describe('core component flows', () => {
         cloudAuth={null}
         cloudRevision={null}
         cloudStatus="signed_out"
-        dataMode="real"
         onBeginChat={vi.fn()}
         onCompleteChat={vi.fn()}
         onFailChat={vi.fn()}
@@ -604,45 +589,6 @@ describe('core component flows', () => {
     expect(screen.getByRole('button', { name: '新的对话' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '返回地图并打开导航' })).toBeEnabled();
     expect(onAnswer).not.toHaveBeenCalled();
-  });
-
-  it('answers Demo prompts deterministically without calling the Edge Function', async () => {
-    const user = userEvent.setup();
-    const onBeginChat = vi.fn();
-    const onCompleteChat = vi.fn();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const demo = createDemoAppData(new Date('2026-08-02T12:00:00'));
-    renderWithLanguage(
-      <ChatScreen
-        notes={demo.notes}
-        followUps={demo.followUps}
-        conversations={[]}
-        activeConversationId="demo-new-thread"
-        workspaceKey="demo"
-        onAnswerFollowUp={vi.fn()}
-        onRevisitEmotion={vi.fn()}
-        cloudAuth={null}
-        cloudRevision={null}
-        cloudStatus="signed_out"
-        dataMode="demo"
-        onBeginChat={onBeginChat}
-        onCompleteChat={onCompleteChat}
-        onFailChat={vi.fn()}
-        onNewConversation={vi.fn()}
-        onExitToMap={vi.fn()}
-        onToast={vi.fn()}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: '图书馆的记录是什么？' }));
-    await waitFor(() => expect(onCompleteChat).toHaveBeenCalledTimes(1));
-    expect(onBeginChat).toHaveBeenCalledTimes(1);
-    expect(onCompleteChat.mock.calls[0][0].assistantBody).toContain('演示回答');
-    expect(onCompleteChat.mock.calls[0][0].noteIds.every((id: string) =>
-      id.startsWith('demo:synthetic:campus-day:')
-    )).toBe(true);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
   });
 
   it('opens Chat from its primary row while disclosure only expands history', async () => {
@@ -712,7 +658,7 @@ describe('core component flows', () => {
           activeConversationId="long-thread" workspaceKey="real:user-a"
           onAnswerFollowUp={vi.fn()} onRevisitEmotion={vi.fn()}
           cloudAuth={null} cloudRevision={null} cloudStatus="signed_out"
-          dataMode="real" onBeginChat={vi.fn()} onCompleteChat={vi.fn()}
+          onBeginChat={vi.fn()} onCompleteChat={vi.fn()}
           onFailChat={vi.fn()} onNewConversation={vi.fn()}
           onExitToMap={vi.fn()} onToast={vi.fn()}
         />,

@@ -9,26 +9,23 @@ import {
 describe('first-run onboarding state', () => {
   beforeEach(() => localStorage.clear());
 
-  it('keeps Demo and each real account in separate versioned keys', () => {
-    expect(onboardingSeenKey('demo', null)).toBe(
-      'my-emotion-map.demoOnboardingSeenVersion',
-    );
-    expect(onboardingSeenKey('real', 'user-a')).toBe(
+  it('keeps each signed-in account in a separate versioned key', () => {
+    expect(onboardingSeenKey('user-a')).toBe(
       'my-emotion-map.user.user-a.onboardingSeenVersion',
     );
-    expect(onboardingSeenKey('real', 'user-b')).not.toBe(
-      onboardingSeenKey('real', 'user-a'),
+    expect(onboardingSeenKey('user-b')).not.toBe(
+      onboardingSeenKey('user-a'),
     );
   });
 
   it('replays only when the product onboarding version increases', () => {
-    expect(shouldShowFirstRunOnboarding('demo', null)).toBe(true);
-    markFirstRunOnboardingSeen('demo', null);
-    expect(shouldShowFirstRunOnboarding('demo', null)).toBe(false);
+    expect(shouldShowFirstRunOnboarding('user-a')).toBe(true);
+    markFirstRunOnboardingSeen('user-a');
+    expect(shouldShowFirstRunOnboarding('user-a')).toBe(false);
     localStorage.setItem(
-      onboardingSeenKey('demo', null),
+      onboardingSeenKey('user-a'),
       String(FIRST_RUN_ONBOARDING_VERSION - 1),
     );
-    expect(shouldShowFirstRunOnboarding('demo', null)).toBe(true);
+    expect(shouldShowFirstRunOnboarding('user-a')).toBe(true);
   });
 });

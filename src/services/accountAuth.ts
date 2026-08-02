@@ -15,6 +15,12 @@ type FunctionFailure = {
   code: string;
 };
 
+type AccountSession = {
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+};
+
 const asObject = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -32,6 +38,52 @@ const readFunctionFailure = async (error: unknown): Promise<FunctionFailure> => 
     status: response?.status ?? 0,
     code: typeof payload?.code === 'string' ? payload.code : '',
   };
+};
+
+const readAccountSession = (value: unknown): AccountSession | null => {
+  const source = asObject(value);
+  const session = asObject(source?.session);
+  if (
+    source?.status !== 'ready' ||
+    typeof session?.accessToken !== 'string' ||
+    typeof session.refreshToken !== 'string' ||
+    typeof session.userId !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    userId: session.userId,
+  };
+};
+
+const signInAccount = async (
+  client: SupabaseClient,
+  account: string,
+  password: string,
+): Promise<AuthResult> => {
+  const { data, error } = await client.functions.invoke('login-account', {
+    body: { account, password },
+  });
+  if (error) {
+    const failure = await readFunctionFailure(error);
+    if (failure.code === 'rate_limited' || failure.status === 429) return 'rate_limited';
+    if (failure.code === 'invalid_credentials' || failure.status === 401) {
+      return 'invalid_credentials';
+    }
+    return 'unavailable';
+  }
+  const session = readAccountSession(data);
+  if (!session) return 'unavailable';
+  const activated = await client.auth.setSession({
+    access_token: session.accessToken,
+    refresh_token: session.refreshToken,
+  });
+  return !activated.error &&
+      activated.data.session?.user.id === session.userId
+    ? 'signed_in'
+    : 'unavailable';
 };
 
 export const normalizeAccountId = (accountId: string) =>
@@ -88,24 +140,16 @@ export const authenticateAccount = async ({
         return 'unavailable';
       }
 
-      const existingSignIn = await client.auth.signInWithPassword({
-        email: accountIdToAuthEmail(normalizedAccount),
-        password,
-      });
-      return !existingSignIn.error
-        && existingSignIn.data.session
-        && existingSignIn.data.user
-        ? 'signed_in'
-        : 'account_exists';
+      const existingSignIn = await signInAccount(client, normalizedAccount, password);
+      return existingSignIn === 'signed_in' ? existingSignIn : 'account_exists';
     }
 
     if (asObject(data)?.status !== 'ready') return 'unavailable';
   }
 
-  const { data, error } = await client.auth.signInWithPassword({
-    email: accountIdToAuthEmail(normalizedAccount),
-    password,
-  });
-  if (!error && data.session && data.user) return 'signed_in';
-  return mode === 'register' ? 'confirmation_required' : 'invalid_credentials';
+  const signIn = await signInAccount(client, normalizedAccount, password);
+  if (signIn === 'signed_in') return signIn;
+  return mode === 'register' && signIn === 'invalid_credentials'
+    ? 'confirmation_required'
+    : signIn;
 };

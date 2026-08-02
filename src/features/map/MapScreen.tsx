@@ -9,7 +9,7 @@ import { MapMarkers } from './MapMarkers';
 import { MapAttribution } from './MapAttribution';
 import { useAppLanguage } from "../../i18n";
 import { type LocationRequestState, type ResolvedLocationRequest, type UserLocation } from "../../useLocationController";
-import type { DataMode, EmotionMoment, EmotionNote, MapViewport } from "../../types";
+import type { EmotionMoment, EmotionNote, MapViewport } from "../../types";
 import {
   MAP_STYLES,
   MAP_STYLE_STORAGE_KEY,
@@ -43,15 +43,9 @@ import {
   createLocalSearchIndex,
   rankLocalSearch,
 } from '../../domain/query/rankRecords';
-import {
-  getDemoFitPadding,
-  getMomentBounds,
-  shouldFitDemoWorkspace,
-} from './demoViewport';
 
 export type MapScreenProps = {
   workspaceKey: string;
-  dataMode: DataMode;
   savedViewport?: MapViewport;
   onViewportChange: (viewport: MapViewport) => void;
   moments: EmotionMoment[];
@@ -74,7 +68,6 @@ export type MapScreenProps = {
 
 export function MapScreen({
   workspaceKey,
-  dataMode,
   savedViewport,
   onViewportChange,
   moments,
@@ -105,7 +98,6 @@ export function MapScreen({
   const draggedMomentIdRef = useRef<string | null>(null);
   const momentPointerPressedRef = useRef(false);
   const handledLocationRequestRef = useRef(0);
-  const handledDemoWorkspaceRef = useRef<string | null>(null);
   const cloudUserIdRef = useRef(cloudAuth?.userId ?? '');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -131,8 +123,8 @@ export function MapScreen({
   const [mapLoadError, setMapLoadError] = useState(false);
   const [mapReloadKey, setMapReloadKey] = useState(0);
   const initialViewport = useMemo(
-    () => resolveInitialViewport({ dataMode, moments, savedViewport }),
-    [dataMode, moments, savedViewport],
+    () => resolveInitialViewport({ moments, savedViewport }),
+    [moments, savedViewport],
   );
   const selectedMoment = useMemo(
     () => moments.find((moment) => moment.id === selectedId) ?? null,
@@ -150,29 +142,6 @@ export function MapScreen({
       onEditMoment(addMomentAt(lng, lat));
     },
   });
-
-  useEffect(() => {
-    if (dataMode === 'real') handledDemoWorkspaceRef.current = null;
-  }, [dataMode]);
-
-  const fitDemoMoments = useCallback(() => {
-    if (!shouldFitDemoWorkspace({
-      dataMode,
-      workspaceKey,
-      handledWorkspaceKey: handledDemoWorkspaceRef.current,
-    })) return;
-    const map = mapRef.current;
-    const bounds = getMomentBounds(moments);
-    if (!map || !bounds) return;
-    const container = map.getContainer();
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    handledDemoWorkspaceRef.current = workspaceKey;
-    map.fitBounds(bounds, {
-      padding: getDemoFitPadding(container.clientWidth, container.clientHeight),
-      duration: reducedMotion ? 0 : 620,
-      maxZoom: 17,
-    });
-  }, [dataMode, mapRef, moments, workspaceKey]);
 
   const syncStarActionPosition = useCallback(() => {
     const map = mapRef.current;
@@ -675,20 +644,28 @@ export function MapScreen({
         const requestUserId = cloudAuth.userId;
         try {
           const prepared = await preparePhotoForAssist(file);
-          const result = await invokePhotoAssist({
+          const delivery = await invokePhotoAssist({
             auth: cloudAuth,
             imageDataUrl: prepared.imageDataUrl,
             language,
             localDate: metadata.date,
           });
-          if (result && cloudUserIdRef.current === requestUserId) {
+          if (delivery.status === 'ready' && cloudUserIdRef.current === requestUserId) {
             onPhotoAssistResult(momentId, {
               requestId: createRecordId('photo-assist'),
-              result,
+              result: delivery.result,
+            });
+          } else if (cloudUserIdRef.current === requestUserId) {
+            onToast(copy.feedback.photoAssistUnavailable, {
+              placement: 'bottom',
+              durationMs: 2400,
             });
           }
         } catch {
-          // The local GPS/EXIF record remains complete when image assistance fails.
+          onToast(copy.feedback.photoAssistUnavailable, {
+            placement: 'bottom',
+            durationMs: 2400,
+          });
         }
       }
     } catch {
@@ -736,7 +713,6 @@ export function MapScreen({
         attributionControl={false}
         onLoad={() => {
           setMapLoadError(false);
-          fitDemoMoments();
         }}
         onError={() => setMapLoadError(true)}
         cursor="grab"

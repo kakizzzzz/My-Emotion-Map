@@ -1,4 +1,4 @@
-import type { DataMode, EmotionMoment, MapViewport } from '../../types';
+import type { EmotionMoment, MapViewport } from '../../types';
 
 const NEUTRAL_VIEWPORT: MapViewport = {
   longitude: 0,
@@ -23,15 +23,13 @@ const fitMoments = (moments: EmotionMoment[]): MapViewport => {
 };
 
 export const resolveInitialViewport = ({
-  dataMode,
   moments,
   savedViewport,
 }: {
-  dataMode: DataMode;
   moments: EmotionMoment[];
   savedViewport?: MapViewport;
 }): MapViewport => {
-  if (dataMode === 'real' && savedViewport) return savedViewport;
+  if (savedViewport) return savedViewport;
   if (moments.length) return fitMoments(moments);
   return NEUTRAL_VIEWPORT;
 };
