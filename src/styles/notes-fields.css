@@ -118,6 +118,22 @@
   gap: 8px;
 }
 
+.prompt-skip-guide-button {
+  min-height: 44px;
+  justify-self: center;
+  padding: 0 16px;
+  border-radius: var(--em-radius-pill);
+  background: var(--em-soft-surface);
+  color: var(--em-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  transition: transform var(--em-fast);
+}
+
+.prompt-skip-guide-button:active {
+  transform: scale(0.98);
+}
+
 .prompt-delete-button,
 .prompt-add-button {
   display: grid;

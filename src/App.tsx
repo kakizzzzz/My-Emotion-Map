@@ -953,7 +953,6 @@ export function App() {
               key={editingMoment.id}
               moment={editingMoment}
               note={editingNote}
-              onClose={() => setEditingMomentId(null)}
               onSave={saveNote}
               onToast={showToast}
               photoAssistDelivery={photoAssistByMomentId[editingMoment.id] ?? null}

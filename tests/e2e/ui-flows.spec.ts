@@ -134,7 +134,7 @@ test('Demo opens only after an explicit action and remains isolated', async ({ p
   await expect(page.locator('.map-screen')).toBeVisible();
   await expect(page.locator('.map-star-button').first()).toBeVisible();
   await expect.poll(() => page.evaluate(() =>
-    window.localStorage.getItem('my-emotion-map.workspace.demo.v2') !== null,
+    window.localStorage.getItem('my-emotion-map.workspace.demo.v3') !== null,
   )).toBe(true);
   expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBeNull();
 });
@@ -183,7 +183,14 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   await expect(menu).toBeFocused();
 
   await menu.click();
-  await page.getByRole('button', { name: '交流回访' }).click();
+  const navigation = page.getByRole('dialog', { name: '页面导航' });
+  const chatDisclosure = navigation
+    .locator('.side-nav__item')
+    .filter({ hasText: '交流回访' });
+  await chatDisclosure.click();
+  await expect(chatDisclosure).toHaveAttribute('aria-expanded', 'true');
+  await expect(navigation.locator('#side-chat-history')).toBeVisible();
+  await navigation.getByRole('button', { name: '新建对话' }).click();
   await expect(page.locator('.chat-screen')).toBeVisible();
   await expect(page.locator('.message-row')).toHaveCount(0);
   await expect(page.locator('.composer-row > *')).toHaveCount(2);
@@ -337,12 +344,22 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
   await page.reload();
 
   await page.getByRole('button', { name: '打开页面导航' }).click();
-  await page.getByRole('button', { name: '交流回访' }).click();
+  const navigation = page.getByRole('dialog', { name: '页面导航' });
+  const chatDisclosure = navigation
+    .locator('.side-nav__item')
+    .filter({ hasText: '交流回访' });
+  await chatDisclosure.click();
+  await expect(navigation.locator('#side-chat-history')).toBeVisible();
+  await navigation
+    .locator('.side-ai-list')
+    .getByRole('button', { name: '交流回访' })
+    .click();
   await expect(page.locator('.chat-screen')).toBeVisible();
   const followUpOptions = page.locator('.message-options > button');
   await expect(followUpOptions).toHaveCount(5);
   await expect(followUpOptions).toHaveText(['轻了', '更强', '变了', '一样', '跳过']);
   await page.getByRole('button', { name: '轻了' }).click();
+  await expect(page.locator('.positive-confetti > i')).toHaveCount(20);
   await expect(page.locator('.message-options')).toHaveCount(0);
   await page.getByRole('button', { name: '记录现在的感受' }).click();
   await expect(
@@ -383,6 +400,9 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await startBlank(page);
   await dragNewStarToMap(page);
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toBeVisible();
+  await page
+    .getByRole('textbox', { name: '给这一刻起个名字' })
+    .fill('中途退出也保留');
   await expect(
     page.getByRole('button', { name: '关闭并保存为正式记录' }),
   ).toBeVisible();
@@ -394,6 +414,7 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
     return raw ? JSON.parse(raw) : null;
   }, STORAGE_KEY);
   expect(stored.notes[0]).toMatchObject({
+    title: '中途退出也保留',
     emotion: null,
     placeRating: null,
     isDraft: false,

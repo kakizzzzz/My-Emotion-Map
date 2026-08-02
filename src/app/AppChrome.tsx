@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Calendar, ChevronDown, ChevronRight, Inbox, Map as MapIcon, MessageCircle, PanelLeft, Settings as SettingsIcon } from "lucide-react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { MOTION } from "../motion";
 import { useAppLanguage } from "../i18n";
 import type { AppView, Conversation } from "../types";
@@ -135,20 +135,14 @@ export function SideDrawer({
                 <div key={item.key}>
                   <button
                     className={`side-nav__item ${active ? 'is-active' : ''}`}
+                    aria-expanded={isChat ? aiExpanded : undefined}
+                    aria-controls={isChat ? 'side-chat-history' : undefined}
                     onClick={() => {
-                      if (!isChat) {
-                        onNavigate(item.key);
+                      if (isChat) {
+                        setAiExpanded((current) => !current);
                         return;
                       }
-                      if (activeView !== 'chat' && companionConversation) {
-                        onOpenConversation(companionConversation.id);
-                        return;
-                      }
-                      if (!conversations.length) {
-                        onNewConversation();
-                        return;
-                      }
-                      setAiExpanded((current) => !current);
+                      onNavigate(item.key);
                     }}
                   >
                     <span className="side-nav__icon">
@@ -167,30 +161,55 @@ export function SideDrawer({
                     )}
                   </button>
 
-                  {isChat && aiExpanded ? (
-                    <div className="side-ai-accordion">
-                      <div className="side-ai-list">
-                        <p>{copy.navigation.pinned}</p>
-                        {companionConversation ? (
-                          <button key={companionConversation.id} onClick={() => onOpenConversation(companionConversation.id)}>
-                            <strong>
-                              {copy.navigation.chat}
-                            </strong>
-                            {companionConversation.badge ? <em>{companionConversation.badge}</em> : null}
+                  <AnimatePresence initial={false}>
+                    {isChat && aiExpanded ? (
+                      <motion.div
+                        id="side-chat-history"
+                        className="side-ai-accordion"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.16 }}
+                      >
+                        <div className="side-ai-list">
+                          <button
+                            className="side-ai-new"
+                            onClick={onNewConversation}
+                          >
+                            <strong>{copy.chat.createConversation}</strong>
                           </button>
-                        ) : null}
-                        {otherConversations.length ? (
-                          <p>{copy.navigation.today}</p>
-                        ) : null}
-                        {otherConversations.map((thread) => (
-                          <button key={thread.id} onClick={() => onOpenConversation(thread.id)}>
-                            <strong>{thread.title}</strong>
-                            {thread.badge ? <em>{thread.badge}</em> : null}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
+                          {companionConversation ? (
+                            <>
+                              <p>{copy.navigation.pinned}</p>
+                              <button
+                                key={companionConversation.id}
+                                onClick={() =>
+                                  onOpenConversation(companionConversation.id)
+                                }
+                              >
+                                <strong>{copy.navigation.chat}</strong>
+                                {companionConversation.badge ? (
+                                  <em>{companionConversation.badge}</em>
+                                ) : null}
+                              </button>
+                            </>
+                          ) : null}
+                          {otherConversations.length ? (
+                            <p>{copy.navigation.today}</p>
+                          ) : null}
+                          {otherConversations.map((thread) => (
+                            <button
+                              key={thread.id}
+                              onClick={() => onOpenConversation(thread.id)}
+                            >
+                              <strong>{thread.title}</strong>
+                              {thread.badge ? <em>{thread.badge}</em> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
                 </div>
               );
             })}

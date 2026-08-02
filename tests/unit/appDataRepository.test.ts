@@ -225,6 +225,16 @@ describe('app data repository', () => {
     expect(empty.starInboxItems).toEqual([]);
     expect(demo.dataMode).toBe('demo');
     expect(demo.moments.length).toBeGreaterThan(0);
+    expect(demo.moments.every((item) =>
+      item.latitude >= 37.557 && item.latitude <= 37.56 &&
+      item.longitude >= 126.998 && item.longitude <= 127.002
+    )).toBe(true);
+    expect(demo.notes.map((item) => item.place)).toEqual([
+      '东国大学中央图书馆',
+      '万海广场',
+      '惠化馆走廊',
+    ]);
+    expect(demo.notes.every((item) => item.emotion !== null)).toBe(true);
     expect(demo.starInboxItems).toEqual([]);
   });
 
