@@ -78,6 +78,11 @@ export const sanitizeStarInboxItem = (
       : undefined,
     lowSignalConfidence: source.lowSignalConfidence === true ? true : undefined,
     decisionReason:
+      source.decisionReason === 'outside_range' ||
+      source.decisionReason === 'outside_range_single_sample' ||
+      source.decisionReason === 'post_workout_review' ||
+      source.decisionReason === 'unknown_strict_review' ||
+      source.decisionReason === 'pending_test' ||
       source.decisionReason === 'outside_resting_range' ||
       source.decisionReason === 'low_signal_review' ||
       source.decisionReason === 'non_resting_review' ||
@@ -87,13 +92,40 @@ export const sanitizeStarInboxItem = (
     thresholdSnapshot:
       Number.isFinite(restingMin) && Number.isFinite(restingMax) &&
       restingMin >= 35 && restingMax <= 220 && restingMax > restingMin
-        ? { restingMin: Math.round(restingMin), restingMax: Math.round(restingMax) }
+        ? {
+            restingMin: Math.round(restingMin),
+            restingMax: Math.round(restingMax),
+            singleSampleEnabled:
+              threshold?.singleSampleEnabled === true ? true : undefined,
+            workoutPolicy:
+              threshold?.workoutPolicy === 'post_workout_review'
+                ? 'post_workout_review'
+                : threshold?.workoutPolicy === 'suppress'
+                  ? 'suppress'
+                  : undefined,
+            unknownPolicy:
+              threshold?.unknownPolicy === 'strict_review'
+                ? 'strict_review'
+                : threshold?.unknownPolicy === 'suppress'
+                  ? 'suppress'
+                  : undefined,
+            cooldownMinutes:
+              Number.isInteger(threshold?.cooldownMinutes) &&
+              Number(threshold?.cooldownMinutes) >= 5 &&
+              Number(threshold?.cooldownMinutes) <= 180
+                ? Number(threshold?.cooldownMinutes)
+                : undefined,
+          }
         : undefined,
     algorithmVersion: asString(source.algorithmVersion, 80) || 'legacy-v4',
     signalLevel:
       source.signalLevel === 'low' || source.lowSignalConfidence === true
         ? 'low'
         : 'standard',
+    repeatCount:
+      Number.isInteger(source.repeatCount) && Number(source.repeatCount) >= 1
+        ? Math.min(Number(source.repeatCount), 1_000_000)
+        : undefined,
     latitude: hasLocation ? source.latitude as number : undefined,
     longitude: hasLocation ? source.longitude as number : undefined,
     locationCapturedAt: isTimestamp(source.locationCapturedAt)

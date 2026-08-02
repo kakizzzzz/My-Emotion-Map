@@ -225,6 +225,11 @@ export type StarInboxItem = {
   samples?: Array<{ bpm: number; at: string }>;
   lowSignalConfidence?: boolean;
   decisionReason?:
+    | 'outside_range'
+    | 'outside_range_single_sample'
+    | 'post_workout_review'
+    | 'unknown_strict_review'
+    | 'pending_test'
     | 'outside_resting_range'
     | 'low_signal_review'
     | 'non_resting_review'
@@ -233,9 +238,14 @@ export type StarInboxItem = {
   thresholdSnapshot?: {
     restingMin: number;
     restingMax: number;
+    singleSampleEnabled?: boolean;
+    workoutPolicy?: 'suppress' | 'post_workout_review';
+    unknownPolicy?: 'suppress' | 'strict_review';
+    cooldownMinutes?: number;
   };
   algorithmVersion?: string;
   signalLevel?: 'standard' | 'low';
+  repeatCount?: number;
   linkedMomentId?: string;
   status: StarInboxStatus;
   seenAt?: string;
@@ -245,8 +255,11 @@ export type StarInboxItem = {
 export type HealthPreferences = {
   restingHeartRateMin: number;
   restingHeartRateMax: number;
-  rangeConfirmed?: boolean;
-  singleSampleEnabled?: boolean;
+  rangeConfirmed: boolean;
+  singleSampleEnabled: boolean;
+  workoutPolicy: 'suppress' | 'post_workout_review';
+  unknownPolicy: 'suppress' | 'strict_review';
+  cooldownMinutes: number;
 };
 
 export type ThemeTone = 'original' | 'terracotta' | 'blue' | 'mauve';

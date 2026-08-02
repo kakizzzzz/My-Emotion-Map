@@ -47,12 +47,14 @@ export function SettingsScreen({
   onConfirmInitialUpload,
   onUseRemoteVersion,
   onOverwriteRemote,
-  onCreateAutomationTest,
+  onTestShortcutPairing,
   onIssueMcpToken,
   onRevokeAllMcpTokens,
   healthPreferences,
   onHealthPreferences,
   onIssueShortcutPairing,
+  onGetShortcutConnectionStatus,
+  onRevokeShortcutTokens,
   onListMcpProposals,
   onResolveMcpProposal,
   onBack,
@@ -263,12 +265,14 @@ export function SettingsScreen({
                 <AiSettingsPanel
                   styles={aiStyles}
                   onStyles={setAiStyles}
-                  onTestAutomation={onCreateAutomationTest}
+                  onTestShortcutPairing={onTestShortcutPairing}
                   onIssueToken={onIssueMcpToken}
                   onRevokeTokens={onRevokeAllMcpTokens}
                   healthPreferences={healthPreferences}
                   onHealthPreferences={onHealthPreferences}
                   onIssueShortcutPairing={onIssueShortcutPairing}
+                  onGetShortcutConnectionStatus={onGetShortcutConnectionStatus}
+                  onRevokeShortcutTokens={onRevokeShortcutTokens}
                   onListMcpProposals={onListMcpProposals}
                   onResolveMcpProposal={onResolveMcpProposal}
                 />

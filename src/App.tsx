@@ -538,6 +538,12 @@ export function App() {
           }
         : entry,
     ));
+    if (cloudSession.client && item.id.startsWith('shortcut:')) {
+      void cloudSession.client
+        .from('shortcut_observations')
+        .update({ status: 'consumed' })
+        .eq('id', item.id.slice('shortcut:'.length));
+    }
     setViewingMomentId(null);
     setMapFocusMomentId(moment.id);
     setActiveView('map');
@@ -549,10 +555,12 @@ export function App() {
       ?.sourceEventId;
     setStarInboxItems((current) => dismissInboxItem(current, itemId));
     if (sourceEventId && cloudSession.client) {
-      void cloudSession.client
+      const query = cloudSession.client
         .from('shortcut_observations')
-        .update({ status: 'dismissed' })
-        .eq('event_id', sourceEventId);
+        .update({ status: 'dismissed' });
+      void (itemId.startsWith('shortcut:')
+        ? query.eq('id', itemId.slice('shortcut:'.length))
+        : query.eq('event_id', sourceEventId));
     }
     showToast(copy.feedback.inboxDismissed);
   };
@@ -786,39 +794,14 @@ export function App() {
                 onConfirmInitialUpload={cloudSync.confirmInitialUpload}
                 onUseRemoteVersion={cloudSync.useRemoteVersion}
                 onOverwriteRemote={cloudSync.overwriteRemoteWithLocal}
-                onCreateAutomationTest={() => {
-                  const now = new Date().toISOString();
-                  const id = createRecordId('shortcut-test');
-                  setStarInboxItems((current) => [
-                    ...current,
-                    {
-                      id,
-                      source: 'heart-rate',
-                      sourceEventId: id,
-                      eventAt: now,
-                      receivedAt: now,
-                      heartRate: 108,
-                      verification: 'test',
-                      context: 'unknown',
-                      samples: [{ bpm: 108, at: now }],
-                      lowSignalConfidence: true,
-                      decisionReason: 'test_event',
-                      thresholdSnapshot: {
-                        restingMin: healthPreferences.restingHeartRateMin,
-                        restingMax: healthPreferences.restingHeartRateMax,
-                      },
-                      algorithmVersion: 'settings-test-v1',
-                      signalLevel: 'low',
-                      status: 'pending',
-                    },
-                  ]);
-                  showToast(copy.feedback.shortcutHeartReceived);
-                }}
+                onTestShortcutPairing={externalAccess.testShortcutPairing}
                 onIssueMcpToken={externalAccess.issueMcpToken}
-                onRevokeAllMcpTokens={externalAccess.revokeAllTokens}
+                onRevokeAllMcpTokens={externalAccess.revokeAllMcpTokens}
                 healthPreferences={healthPreferences}
                 onHealthPreferences={updateHealthPreferences}
                 onIssueShortcutPairing={externalAccess.issueShortcutPairing}
+                onGetShortcutConnectionStatus={externalAccess.getShortcutConnectionStatus}
+                onRevokeShortcutTokens={externalAccess.revokeShortcutTokens}
                 onListMcpProposals={externalAccess.listMcpProposals}
                 onResolveMcpProposal={externalAccess.resolveMcpProposal}
                 onBack={() => navigate('map')}

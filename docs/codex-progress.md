@@ -118,3 +118,43 @@ Phase 2 evidence:
 - Migration `202608020002_phase2_chat_inbox.sql` is local-only until the linked
   project receives an explicit, successful migration apply. No MCP surface was
   added or expanded in this phase.
+
+## Phase 3 — Heart algorithm and near-automatic Shortcut
+
+Status: implementation complete and checkpoint-ready. The production iCloud
+share link and real-iPhone smoke remain explicitly blocked external evidence;
+the app does not show a fabricated install link or successful connection.
+
+| Finding | Status | Verification |
+| --- | --- | --- |
+| P1-HEART-024 per-sample freshness | fixed | shared evaluator validates offset, range, future/age, descending order, span and conflicting duplicates for every sample |
+| P1-HEART-025 decision/display mismatch | fixed | Edge and compatibility receiver import the same pure function; decision and rounded median use exactly the same latest-three set |
+| P1-HEART-026 context policy | fixed | workout and unknown suppress by default; opt-in strict modes and margin behavior have shared vectors |
+| P1-HEART-027 token policy snapshot | fixed | pairing persists algorithm/Shortcut versions, single-sample flag, context policies, cooldown and immutable thresholds; changed preferences require re-pairing |
+| P1-HEART-028 episode/cooldown | fixed | service-role RPC merges only same owner/token/side/context inside the saved cooldown; test observations stay separate and event ledger prevents repeat merges |
+| P1-SHORTCUT-029 delivery queue | fixed | owner RPC paginates by `(created_at,id)`, includes pending/delivered, merges by observation ID and retries idempotent acknowledgement |
+| P1-SHORTCUT-030 setup and test | fixed in code; production smoke blocked | four-step vertical wizard, current/expired/version metadata and real Edge + RLS readback; no local 108 bpm fabrication |
+| P1-MCP-038 mixed credential card | fixed | input MCP, output MCP and Shortcut pairing use separate state and separate revoke actions |
+
+Phase 3 evidence:
+
+- `npm run typecheck`, lint, architecture gates and production build pass.
+- Vitest: 29 test files / 145 tests passed, including shared heart vectors,
+  server-contract checks, 25-row cursor/ack recovery, episode in-place updates,
+  immutable pairing policy, owner readback and separate credential UI state.
+- Playwright: 9/9 Chromium Mobile and 9/9 WebKit iPhone tests passed. The
+  Shortcut choices are vertical and at least 44px; real test remains disabled
+  before a pairing code exists.
+- Secret-pattern scan found no API-key/JWT-shaped value and no local fake test
+  insertion path.
+- Linked project remains `uifgpmmlvmfrauzbbrem`. `supabase db push --dry-run`
+  succeeded and listed migrations `202608020001`–`202608020003` while explicitly
+  performing no push. The database migration and revised `shortcut-ingress`
+  Edge Function are still local-only.
+- `VITE_SHORTCUT_INSTALL_URL` is accepted only for an `icloud.com/shortcuts`
+  URL. No link is configured or claimed as verified in this repository; an
+  iPhone-created share link and version smoke are Phase 7 release gates.
+
+No LLM, diagnosis, emotion inference or new MCP surface was added to the heart
+path. Health observations remain outside grounded chat until the user creates a
+formal saved record.

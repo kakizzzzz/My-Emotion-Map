@@ -217,6 +217,30 @@ test('authenticated identity opens an empty real workspace', async ({
   await expect(page.getByRole('textbox', { name: '本地档案名称' })).toHaveValue('');
 });
 
+test('Shortcut setup stays vertical and cannot fake a test before pairing', async ({
+  page,
+}) => {
+  await startBlank(page);
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  await page.getByRole('dialog', { name: '页面导航' })
+    .getByRole('button', { name: '设置' })
+    .click();
+  await page.getByRole('button', { name: 'AI' }).click();
+
+  await expect(page.getByText('未安装')).toBeVisible();
+  await expect(page.getByText('尚未配置经过真机验证的安装链接')).toBeVisible();
+  await expect(page.getByRole('button', { name: '测试输入' })).toBeDisabled();
+  const policyButtons = [
+    page.getByRole('button', { name: '允许单次样本复核' }),
+    page.getByRole('button', { name: '允许运动后复核' }),
+    page.getByRole('button', { name: '严格复核未知情境' }),
+  ];
+  const boxes = await Promise.all(policyButtons.map((button) => button.boundingBox()));
+  expect(boxes.every(Boolean)).toBe(true);
+  expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + boxes[0]!.height - 1);
+  expect(boxes[2]!.y).toBeGreaterThan(boxes[1]!.y + boxes[1]!.height - 1);
+});
+
 test('blank new user, keyboard sheets, and accessibility smoke', async ({
   page,
 }) => {

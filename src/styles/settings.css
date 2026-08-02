@@ -605,8 +605,23 @@
   color: white;
 }
 
-.mcp-token-card code {
+.connection-token-once {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.connection-token-once small,
+.shortcut-connection-status small,
+.automation-settings > small {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.connection-token-once code {
   display: block;
+  max-width: 100%;
   overflow-wrap: anywhere;
   padding: 10px 12px;
   border-radius: 12px;
@@ -677,6 +692,39 @@
   background: var(--em-soft-surface);
   color: var(--em-text-primary);
   font: inherit;
+}
+
+.shortcut-connection-status {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+}
+
+.shortcut-connection-status strong {
+  font-size: 13px;
+}
+
+.automation-policy-options {
+  display: grid;
+  gap: 8px;
+}
+
+.automation-policy-options button {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.automation-policy-options button[aria-pressed='true'] {
+  background: var(--em-dark);
+  color: var(--em-on-dark);
 }
 
 .export-data-card > p,

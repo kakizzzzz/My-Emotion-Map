@@ -3,6 +3,11 @@ import type { LocationRequestState } from '../../useLocationController';
 import type { ToastHandler } from '../../app/appTypes';
 import type { CloudSyncStatus } from '../../services/useCloudSync';
 import type { DataExportRange, ReadableExportResult } from '../../app/exportReadableData';
+import type {
+  ShortcutConnectionStatus,
+  ShortcutPairing,
+  ShortcutTestResult,
+} from '../../domain/shortcutConnection';
 
 export type SettingsPanel =
   | 'profile'
@@ -47,17 +52,16 @@ export type SettingsScreenProps = {
   onConfirmInitialUpload: () => void;
   onUseRemoteVersion: () => void;
   onOverwriteRemote: () => void;
-  onCreateAutomationTest: () => void;
+  onTestShortcutPairing: (token: string) => Promise<ShortcutTestResult>;
   onIssueMcpToken: (
     kind: 'input' | 'output',
   ) => Promise<{ token: string; expiresAt: string } | null>;
   onRevokeAllMcpTokens: () => Promise<boolean>;
   healthPreferences: HealthPreferences;
   onHealthPreferences: (preferences: HealthPreferences) => boolean;
-  onIssueShortcutPairing: () => Promise<{
-    token: string;
-    expiresAt: string;
-  } | null>;
+  onIssueShortcutPairing: () => Promise<ShortcutPairing | null>;
+  onGetShortcutConnectionStatus: () => Promise<ShortcutConnectionStatus>;
+  onRevokeShortcutTokens: () => Promise<boolean>;
   onListMcpProposals: () => Promise<McpProposal[]>;
   onResolveMcpProposal: (
     proposal: McpProposal,

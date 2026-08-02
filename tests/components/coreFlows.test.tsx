@@ -11,6 +11,7 @@ import { ChatScreen } from '../../src/features/chat/ChatScreen';
 import { LoginScreen } from '../../src/features/auth/LoginScreen';
 import { NoteEditorSheet } from '../../src/features/notes/NoteEditorSheet';
 import { SettingsScreen } from '../../src/features/settings/SettingsScreen';
+import { AiSettingsPanel } from '../../src/features/settings/AiSettingsPanel';
 import type { EmotionMoment, EmotionNote } from '../../src/types';
 import { renderWithLanguage } from '../renderWithLanguage';
 import { createGuidedAnswers } from '../../src/domain/notePrompts';
@@ -409,7 +410,7 @@ describe('core component flows', () => {
         onConfirmInitialUpload={() => undefined}
         onUseRemoteVersion={() => undefined}
         onOverwriteRemote={() => undefined}
-        onCreateAutomationTest={() => undefined}
+        onTestShortcutPairing={async () => 'unavailable'}
         onIssueMcpToken={async () => null}
         onRevokeAllMcpTokens={async () => true}
         healthPreferences={{
@@ -417,9 +418,21 @@ describe('core component flows', () => {
           restingHeartRateMax: 100,
           rangeConfirmed: false,
           singleSampleEnabled: false,
+          workoutPolicy: 'suppress',
+          unknownPolicy: 'suppress',
+          cooldownMinutes: 30,
         }}
         onHealthPreferences={() => true}
         onIssueShortcutPairing={async () => null}
+        onGetShortcutConnectionStatus={async () => ({
+          state: 'not_installed',
+          expiresAt: null,
+          lastReceivedAt: null,
+          lastTestAt: null,
+          shortcutVersion: null,
+          algorithmVersion: null,
+        })}
+        onRevokeShortcutTokens={async () => true}
         onBack={onBack}
       />,
     );
@@ -437,6 +450,63 @@ describe('core component flows', () => {
     });
     await user.click(screen.getByRole('button', { name: '关闭' }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps MCP and Shortcut credentials separate and runs only the real test callback', async () => {
+    const user = userEvent.setup();
+    const onIssueToken = vi.fn(async (kind: 'input' | 'output') => ({
+      token: `${kind}-access-once`,
+      expiresAt: '2026-08-03T00:00:00.000Z',
+    }));
+    const onTestShortcutPairing = vi.fn().mockResolvedValue('verified');
+    renderWithLanguage(
+      <AiSettingsPanel
+        styles={[]}
+        onStyles={() => undefined}
+        onTestShortcutPairing={onTestShortcutPairing}
+        onIssueToken={onIssueToken}
+        onRevokeTokens={async () => true}
+        healthPreferences={{
+          restingHeartRateMin: 60,
+          restingHeartRateMax: 100,
+          rangeConfirmed: true,
+          singleSampleEnabled: false,
+          workoutPolicy: 'suppress',
+          unknownPolicy: 'suppress',
+          cooldownMinutes: 30,
+        }}
+        onHealthPreferences={() => true}
+        onIssueShortcutPairing={async () => ({
+          token: 'pairing-code-once',
+          expiresAt: '2026-09-01T00:00:00.000Z',
+          shortcutVersion: 'shortcut-v3',
+          algorithmVersion: 'heart-v3',
+        })}
+        onGetShortcutConnectionStatus={async () => ({
+          state: 'paired',
+          expiresAt: '2026-09-01T00:00:00.000Z',
+          lastReceivedAt: null,
+          lastTestAt: null,
+          shortcutVersion: 'shortcut-v3',
+          algorithmVersion: 'heart-v3',
+        })}
+        onRevokeShortcutTokens={async () => true}
+        onListMcpProposals={async () => []}
+        onResolveMcpProposal={async () => true}
+      />,
+    );
+
+    const createButtons = screen.getAllByRole('button', { name: '创建访问码' });
+    await user.click(createButtons[0]);
+    await user.click(createButtons[1]);
+    expect(screen.getByText('input-access-once')).toBeInTheDocument();
+    expect(screen.getByText('output-access-once')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '生成配对码' }));
+    expect(screen.getByText('pairing-code-once')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '测试输入' }));
+    expect(onTestShortcutPairing).toHaveBeenCalledWith('pairing-code-once');
+    expect(screen.getByText('已通过 Edge Function 与数据库往返验证')).toBeInTheDocument();
   });
 
   it('keeps grounded chat disabled until the user is safely signed in and synced', async () => {

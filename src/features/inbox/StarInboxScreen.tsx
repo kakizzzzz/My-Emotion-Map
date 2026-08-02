@@ -109,13 +109,18 @@ export function StarInboxScreen({
                             <span className="star-inbox-card__copy">
                               <strong>{copy.inbox.discoveredStar}</strong>
                               <small className="star-inbox-card__status">
-                                {item.decisionReason === 'outside_resting_range'
+                                {item.decisionReason === 'outside_range' ||
+                                item.decisionReason === 'outside_resting_range'
                                   ? copy.inbox.decisionOutside(item.heartRate)
-                                  : item.decisionReason === 'low_signal_review'
+                                  : item.decisionReason === 'outside_range_single_sample' ||
+                                  item.decisionReason === 'low_signal_review'
                                     ? copy.inbox.decisionLowSignal(item.heartRate)
-                                    : item.decisionReason === 'non_resting_review'
+                                    : item.decisionReason === 'post_workout_review' ||
+                                    item.decisionReason === 'unknown_strict_review' ||
+                                    item.decisionReason === 'non_resting_review'
                                       ? copy.inbox.decisionNonResting(item.heartRate)
-                                      : item.decisionReason === 'test_event'
+                                      : item.decisionReason === 'pending_test' ||
+                                      item.decisionReason === 'test_event'
                                         ? copy.inbox.decisionTest(item.heartRate)
                                         : copy.inbox.decisionLegacy(item.heartRate)}
                               </small>

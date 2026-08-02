@@ -19,6 +19,7 @@ import {
   markProposalLocallyApplied,
   stageProposalApplication,
 } from './proposalApplication';
+import { createShortcutAccessHandlers } from './shortcutAccess';
 
 const EMOTIONS = new Set<EmotionKey>([
   'calm', 'joy', 'tender', 'curious', 'energized', 'connected',
@@ -67,6 +68,12 @@ export const createExternalAccessHandlers = ({
 }) => {
   const available = Boolean(client && userId && dataMode === 'real');
   const appliedThisSession = new Set<string>();
+  const shortcutAccess = createShortcutAccessHandlers({
+    client,
+    userId,
+    available,
+    preferences: healthPreferences,
+  });
   const issueMcpToken = async (kind: 'input' | 'output') => {
     if (!client || !available) return null;
     const { data, error } = await client.rpc('issue_mcp_token', {
@@ -80,26 +87,10 @@ export const createExternalAccessHandlers = ({
       : null;
   };
 
-  const revokeAllTokens = async () => {
+  const revokeAllMcpTokens = async () => {
     if (!client || !userId) return false;
-    const [mcp, shortcut] = await Promise.all([
-      client.rpc('revoke_all_mcp_tokens'),
-      client.rpc('revoke_all_shortcut_tokens'),
-    ]);
-    return !mcp.error && !shortcut.error;
-  };
-
-  const issueShortcutPairing = async () => {
-    if (!client || !available || !healthPreferences.rangeConfirmed) return null;
-    const { data, error } = await client.rpc('issue_shortcut_pairing', {
-      p_resting_min: healthPreferences.restingHeartRateMin,
-      p_resting_max: healthPreferences.restingHeartRateMax,
-    });
-    const row = Array.isArray(data) ? data[0] : data;
-    return !error && row && typeof row.token === 'string' &&
-      typeof row.expires_at === 'string'
-      ? { token: row.token, expiresAt: row.expires_at }
-      : null;
+    const { error } = await client.rpc('revoke_all_mcp_tokens');
+    return !error;
   };
 
   const listMcpProposals = async (): Promise<McpProposal[]> => {
@@ -314,8 +305,8 @@ export const createExternalAccessHandlers = ({
 
   return {
     issueMcpToken,
-    revokeAllTokens,
-    issueShortcutPairing,
+    revokeAllMcpTokens,
+    ...shortcutAccess,
     listMcpProposals,
     resolveMcpProposal,
   };
