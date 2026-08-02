@@ -16,9 +16,11 @@ const FOCUSABLE_SELECTOR = [
 export const useDialogFocus = <T extends HTMLElement>({
   isOpen = true,
   onEscape,
+  restoreFocusId,
 }: {
   isOpen?: boolean;
   onEscape: () => void;
+  restoreFocusId?: string;
 }): RefObject<T | null> => {
   const containerRef = useRef<T | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -35,7 +37,8 @@ export const useDialogFocus = <T extends HTMLElement>({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    restoreFocusIdRef.current = restoreFocusRef.current?.id ?? '';
+    restoreFocusIdRef.current =
+      restoreFocusId ?? restoreFocusRef.current?.id ?? '';
     const frame = window.requestAnimationFrame(() => {
       const first = containerRef.current?.querySelector<HTMLElement>(
         FOCUSABLE_SELECTOR,
@@ -84,7 +87,11 @@ export const useDialogFocus = <T extends HTMLElement>({
       const restoreTarget = restoreFocusRef.current;
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
-          if (restoreTarget?.isConnected) {
+          if (
+            restoreTarget?.isConnected &&
+            restoreTarget !== document.body &&
+            restoreTarget !== document.documentElement
+          ) {
             restoreTarget.focus();
             return;
           }
@@ -95,7 +102,7 @@ export const useDialogFocus = <T extends HTMLElement>({
         });
       });
     };
-  }, [isOpen]);
+  }, [isOpen, restoreFocusId]);
 
   return containerRef;
 };

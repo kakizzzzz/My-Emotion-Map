@@ -282,6 +282,9 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
       return data.moments[0];
     }, STORAGE_KEY),
   ).not.toEqual(coordinatesBeforeDrag);
+  // Local persistence is intentionally debounced; wait for the final drag
+  // position rather than capturing an intermediate pointer-move snapshot.
+  await page.waitForTimeout(350);
   const coordinatesAfterDrag = await page.evaluate((storageKey) => {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) throw new Error('Saved app data was not found');

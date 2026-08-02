@@ -84,7 +84,10 @@ export function SideDrawer({
   const otherConversations = conversations.filter(
     (conversation) => conversation.id !== FOLLOW_UP_CONVERSATION_ID,
   );
-  const dialogRef = useDialogFocus<HTMLElement>({ onEscape: onClose });
+  const dialogRef = useDialogFocus<HTMLElement>({
+    onEscape: onClose,
+    restoreFocusId: 'global-menu-button',
+  });
   const navItems: Array<{
     key: AppView;
     label: string;
