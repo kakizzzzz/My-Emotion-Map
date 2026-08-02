@@ -167,6 +167,7 @@ export type ChatMessage = {
     | 'followup_answer'
     | 'followup_reply';
   noteIds?: string[];
+  externalEvidence?: ExternalEvidenceReference[];
   options?: ChatOption[];
   clarificationOptions?: ClarificationOption[];
   requestId?: string;
@@ -178,6 +179,15 @@ export type ChatMessage = {
   };
   followUpId?: string;
   createdAt?: string;
+};
+
+export type ExternalEvidenceReference = {
+  referenceId: string;
+  title: string;
+  date: string;
+  place: string;
+  matchReason: string;
+  source: 'my_life_memory_external';
 };
 
 export type Conversation = {

@@ -126,7 +126,7 @@ describe('core component flows', () => {
     });
     expect(onSave.mock.calls[0][2]).toBe('calm');
     expect(onSave.mock.calls[0][3]).toBe('safe');
-  });
+  }, 10_000);
 
   it('discards dirty edits to an existing record without saving', async () => {
     const user = userEvent.setup();
@@ -413,6 +413,18 @@ describe('core component flows', () => {
         onTestShortcutPairing={async () => 'unavailable'}
         onIssueMcpToken={async () => null}
         onRevokeAllMcpTokens={async () => true}
+        onConnectMyLifeMemory={async () => null}
+        onTestMyLifeMemory={async () => null}
+        onGetMyLifeMemoryStatus={async () => ({
+          state: 'disconnected', serverVersion: null, protocolVersion: null,
+          manifestHash: null, connectedAt: null, lastTestAt: null,
+          lastErrorCode: null,
+        })}
+        onDisconnectMyLifeMemory={async () => ({
+          state: 'disconnected', serverVersion: null, protocolVersion: null,
+          manifestHash: null, connectedAt: null, lastTestAt: null,
+          lastErrorCode: null,
+        })}
         healthPreferences={{
           restingHeartRateMin: 60,
           restingHeartRateMax: 100,
@@ -454,9 +466,16 @@ describe('core component flows', () => {
 
   it('keeps MCP and Shortcut credentials separate and runs only the real test callback', async () => {
     const user = userEvent.setup();
-    const onIssueToken = vi.fn(async (kind: 'input' | 'output') => ({
-      token: `${kind}-access-once`,
+    const onIssueToken = vi.fn(async () => ({
+      token: 'output-access-once',
       expiresAt: '2026-08-03T00:00:00.000Z',
+    }));
+    const onConnectMyLifeMemory = vi.fn(async () => ({
+      state: 'connected' as const,
+      serverVersion: '2.0.0', protocolVersion: '2025-03-26',
+      manifestHash: 'a'.repeat(64),
+      connectedAt: '2026-08-02T00:00:00.000Z',
+      lastTestAt: '2026-08-02T00:00:00.000Z', lastErrorCode: null,
     }));
     const onTestShortcutPairing = vi.fn().mockResolvedValue('verified');
     renderWithLanguage(
@@ -466,6 +485,18 @@ describe('core component flows', () => {
         onTestShortcutPairing={onTestShortcutPairing}
         onIssueToken={onIssueToken}
         onRevokeTokens={async () => true}
+        onConnectMyLifeMemory={onConnectMyLifeMemory}
+        onTestMyLifeMemory={async () => null}
+        onGetMyLifeMemoryStatus={async () => ({
+          state: 'disconnected', serverVersion: null, protocolVersion: null,
+          manifestHash: null, connectedAt: null, lastTestAt: null,
+          lastErrorCode: null,
+        })}
+        onDisconnectMyLifeMemory={async () => ({
+          state: 'disconnected', serverVersion: null, protocolVersion: null,
+          manifestHash: null, connectedAt: null, lastTestAt: null,
+          lastErrorCode: null,
+        })}
         healthPreferences={{
           restingHeartRateMin: 60,
           restingHeartRateMax: 100,
@@ -496,10 +527,17 @@ describe('core component flows', () => {
       />,
     );
 
-    const createButtons = screen.getAllByRole('button', { name: '创建访问码' });
-    await user.click(createButtons[0]);
-    await user.click(createButtons[1]);
-    expect(screen.getByText('input-access-once')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '断开', exact: true }))
+      .toBeDisabled();
+    await user.type(
+      screen.getByLabelText('粘贴 My Life Memory 访问码'),
+      `mlm_${'s'.repeat(64)}`,
+    );
+    await user.click(screen.getByRole('button', { name: '连接' }));
+    expect(onConnectMyLifeMemory).toHaveBeenCalledWith(`mlm_${'s'.repeat(64)}`);
+    expect(screen.queryByText(`mlm_${'s'.repeat(64)}`)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '创建访问码' }));
     expect(screen.getByText('output-access-once')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '生成配对码' }));

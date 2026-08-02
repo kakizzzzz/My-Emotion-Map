@@ -328,6 +328,7 @@ export function ChatScreen({
         requestId,
         assistantBody: result.answer,
         noteIds: result.evidence.map((item) => item.noteId),
+        externalEvidence: result.externalEvidence,
         clarificationOptions: result.clarificationOptions ?? [],
         createdAt: new Date().toISOString(),
       });
@@ -457,6 +458,20 @@ export function ChatScreen({
                           </button>
                         );
                       })}
+                    </div>
+                  ) : null}
+                  {message.externalEvidence?.length ? (
+                    <div
+                      className="message-external-evidence"
+                      aria-label={copy.settings.myLifeMemory}
+                    >
+                      {message.externalEvidence.map((item) => (
+                        <span key={`${item.referenceId}:${item.matchReason}`}>
+                          <small>{copy.settings.myLifeMemory}</small>
+                          {item.title}
+                          {item.date ? ` · ${item.date}` : ''}
+                        </span>
+                      ))}
                     </div>
                   ) : null}
                   {body ? <div className="message-bubble">{body}</div> : null}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bot, Cable, Check, Download, Upload } from 'lucide-react';
+import { Bot, Cable, Check, Link2, Upload } from 'lucide-react';
 import { useAppLanguage } from '../../i18n';
 import type { HealthPreferences } from '../../types';
 import type { McpProposal } from './settingsTypes';
@@ -8,6 +8,7 @@ import type {
   ShortcutPairing,
   ShortcutTestResult,
 } from '../../domain/shortcutConnection';
+import type { MyLifeMemoryConnectionStatus } from '../../services/myLifeMemoryConnection';
 
 const STYLES = ['concise', 'direct', 'gentle'] as const;
 
@@ -17,6 +18,10 @@ export function AiSettingsPanel({
   onTestShortcutPairing,
   onIssueToken,
   onRevokeTokens,
+  onConnectMyLifeMemory,
+  onTestMyLifeMemory,
+  onGetMyLifeMemoryStatus,
+  onDisconnectMyLifeMemory,
   healthPreferences,
   onHealthPreferences,
   onIssueShortcutPairing,
@@ -28,10 +33,12 @@ export function AiSettingsPanel({
   styles: string[];
   onStyles: (styles: string[]) => void;
   onTestShortcutPairing: (token: string) => Promise<ShortcutTestResult>;
-  onIssueToken: (
-    kind: 'input' | 'output',
-  ) => Promise<{ token: string; expiresAt: string } | null>;
+  onIssueToken: () => Promise<{ token: string; expiresAt: string } | null>;
   onRevokeTokens: () => Promise<boolean>;
+  onConnectMyLifeMemory: (token: string) => Promise<MyLifeMemoryConnectionStatus | null>;
+  onTestMyLifeMemory: () => Promise<MyLifeMemoryConnectionStatus | null>;
+  onGetMyLifeMemoryStatus: () => Promise<MyLifeMemoryConnectionStatus | null>;
+  onDisconnectMyLifeMemory: () => Promise<MyLifeMemoryConnectionStatus | null>;
   healthPreferences: HealthPreferences;
   onHealthPreferences: (preferences: HealthPreferences) => boolean;
   onIssueShortcutPairing: () => Promise<ShortcutPairing | null>;
@@ -44,10 +51,15 @@ export function AiSettingsPanel({
   ) => Promise<boolean>;
 }) {
   const { copy } = useAppLanguage();
-  const [mcpTokens, setMcpTokens] = useState<Partial<Record<
-    'input' | 'output',
-    { token: string; expiresAt: string }
-  >>>({});
+  const [outputToken, setOutputToken] = useState<{
+    token: string; expiresAt: string;
+  } | null>(null);
+  const [myLifeMemoryToken, setMyLifeMemoryToken] = useState('');
+  const [myLifeMemoryStatus, setMyLifeMemoryStatus] =
+    useState<MyLifeMemoryConnectionStatus | null>(null);
+  const [myLifeMemoryFeedback, setMyLifeMemoryFeedback] = useState<
+    'connected' | 'tested' | 'disconnected' | 'unavailable' | null
+  >(null);
   const [shortcutPairing, setShortcutPairing] = useState<ShortcutPairing | null>(null);
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutConnectionStatus | null>(null);
   const [shortcutTestResult, setShortcutTestResult] = useState<ShortcutTestResult | null>(null);
@@ -82,13 +94,19 @@ export function AiSettingsPanel({
     return () => { active = false; };
   }, [onGetShortcutConnectionStatus]);
 
-  const issue = async (kind: 'input' | 'output') => {
+  useEffect(() => {
+    let active = true;
+    void onGetMyLifeMemoryStatus().then((status) => {
+      if (active) setMyLifeMemoryStatus(status);
+    });
+    return () => { active = false; };
+  }, [onGetMyLifeMemoryStatus]);
+
+  const issue = async () => {
     if (busy) return;
     setBusy(true);
-    const issued = await onIssueToken(kind);
-    if (issued) {
-      setMcpTokens((current) => ({ ...current, [kind]: issued }));
-    }
+    const issued = await onIssueToken();
+    if (issued) setOutputToken(issued);
     setBusy(false);
   };
   return (
@@ -99,7 +117,7 @@ export function AiSettingsPanel({
             <Bot size={22} strokeWidth={2.2} />
           </span>
           <span className="connection-card__title">
-            <strong>{copy.settings.aiStyle}</strong>
+            <strong>{copy.settings.assistant}</strong>
           </span>
         </div>
         <div className="connection-card__body ai-style-options">
@@ -126,51 +144,134 @@ export function AiSettingsPanel({
         </div>
       </article>
 
-      {([
-        ['input', copy.settings.aiRead, Download],
-        ['output', copy.settings.aiOperate, Upload],
-      ] as const).map(([kind, label, Icon]) => (
-        <article key={kind} className="connection-card is-open">
-          <div className="connection-card__header">
-            <span className="connection-card__icon">
-              <Icon size={22} strokeWidth={2.2} />
-            </span>
-            <span className="connection-card__title"><strong>{label}</strong></span>
-          </div>
-          <div className="connection-card__body">
+      <article className="connection-card is-open">
+        <div className="connection-card__header">
+          <span className="connection-card__icon">
+            <Link2 size={22} strokeWidth={2.2} />
+          </span>
+          <span className="connection-card__title">
+            <strong>{copy.settings.myLifeMemory}</strong>
+            <small>{copy.settings.myLifeMemoryStatus[
+              myLifeMemoryStatus?.state ?? 'disconnected'
+            ]}</small>
+          </span>
+        </div>
+        <div className="connection-card__body my-life-memory-connection">
+          {myLifeMemoryStatus?.state !== 'connected' ? (
+            <input
+              type="password"
+              value={myLifeMemoryToken}
+              maxLength={1024}
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={copy.settings.myLifeMemoryToken}
+              placeholder={copy.settings.myLifeMemoryToken}
+              onChange={(event) => setMyLifeMemoryToken(event.target.value)}
+            />
+          ) : null}
+          <div className="connection-action-row">
+            {myLifeMemoryStatus?.state !== 'connected' ? (
+              <button
+                className="connection-check-button"
+                disabled={busy || myLifeMemoryToken.trim().length < 20}
+                onClick={async () => {
+                  const token = myLifeMemoryToken.trim();
+                  setBusy(true);
+                  setMyLifeMemoryToken('');
+                  const status = await onConnectMyLifeMemory(token);
+                  setMyLifeMemoryStatus(status);
+                  setMyLifeMemoryFeedback(status?.state === 'connected'
+                    ? 'connected' : 'unavailable');
+                  setBusy(false);
+                }}
+              >
+                {copy.settings.connect}
+              </button>
+            ) : (
+              <button
+                className="connection-check-button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  const status = await onTestMyLifeMemory();
+                  setMyLifeMemoryStatus(status);
+                  setMyLifeMemoryFeedback(status?.state === 'connected'
+                    ? 'tested' : 'unavailable');
+                  setBusy(false);
+                }}
+              >
+                {copy.settings.testConnection}
+              </button>
+            )}
             <button
               className="connection-check-button"
-              onClick={() => void issue(kind)}
-              disabled={busy}
+              disabled={busy || !myLifeMemoryStatus ||
+                myLifeMemoryStatus.state === 'disconnected'}
+              onClick={async () => {
+                setBusy(true);
+                const status = await onDisconnectMyLifeMemory();
+                setMyLifeMemoryStatus(status);
+                setMyLifeMemoryFeedback(status?.state === 'disconnected'
+                  ? 'disconnected' : 'unavailable');
+                setBusy(false);
+              }}
             >
-              {copy.settings.createAccess}
+              {copy.settings.disconnect}
             </button>
-            {mcpTokens[kind] ? (
-              <div className="connection-token-once">
-                <small>{copy.settings.accessReady}</small>
-                <code>{mcpTokens[kind]!.token}</code>
-                <button
-                  className="connection-check-button"
-                  onClick={() => void navigator.clipboard.writeText(
-                    mcpTokens[kind]!.token,
-                  )}
-                >
-                  {copy.settings.copyAccess}
-                </button>
-              </div>
-            ) : null}
           </div>
-        </article>
-      ))}
+          {myLifeMemoryFeedback ? (
+            <small role="status">
+              {copy.settings.myLifeMemoryFeedback[myLifeMemoryFeedback]}
+            </small>
+          ) : null}
+          {myLifeMemoryStatus?.lastTestAt ? (
+            <small>
+              {copy.settings.connectionLastTest}{' '}
+              {new Date(myLifeMemoryStatus.lastTestAt).toLocaleString()}
+            </small>
+          ) : null}
+        </div>
+      </article>
 
-      <button
-        className="connection-check-button"
-        onClick={async () => {
-          if (await onRevokeTokens()) setMcpTokens({});
-        }}
-      >
-        {copy.settings.revokeAccess}
-      </button>
+      <article className="connection-card is-open">
+        <div className="connection-card__header">
+          <span className="connection-card__icon">
+            <Upload size={22} strokeWidth={2.2} />
+          </span>
+          <span className="connection-card__title">
+            <strong>{copy.settings.externalAccess}</strong>
+          </span>
+        </div>
+        <div className="connection-card__body">
+          <button
+            className="connection-check-button"
+            onClick={() => void issue()}
+            disabled={busy}
+          >
+            {copy.settings.createAccess}
+          </button>
+          {outputToken ? (
+            <div className="connection-token-once">
+              <small>{copy.settings.accessReady}</small>
+              <code>{outputToken.token}</code>
+              <button
+                className="connection-check-button"
+                onClick={() => void navigator.clipboard.writeText(outputToken.token)}
+              >
+                {copy.settings.copyAccess}
+              </button>
+            </div>
+          ) : null}
+          <button
+            className="connection-check-button"
+            onClick={async () => {
+              if (await onRevokeTokens()) setOutputToken(null);
+            }}
+          >
+            {copy.settings.revokeAccess}
+          </button>
+        </div>
+      </article>
 
       {proposals.length ? (
         <article className="connection-card is-open mcp-proposal-card">

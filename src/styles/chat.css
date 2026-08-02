@@ -204,6 +204,35 @@
   white-space: nowrap;
 }
 
+.message-external-evidence {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.message-external-evidence span {
+  display: grid;
+  max-width: 100%;
+  gap: 1px;
+  overflow: hidden;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--em-focused) 36%, var(--em-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--em-focused) 9%, var(--em-active-surface));
+  color: var(--em-text-secondary);
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-external-evidence small {
+  color: var(--em-text-muted);
+  font-size: 8px;
+  font-weight: 600;
+}
+
 .message-options {
   display: grid;
   width: min(100%, 280px);

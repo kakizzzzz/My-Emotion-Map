@@ -1,5 +1,10 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
-import type { ChatDeliveryState, ClarificationOption, Conversation } from '../types';
+import type {
+  ChatDeliveryState,
+  ClarificationOption,
+  Conversation,
+  ExternalEvidenceReference,
+} from '../types';
 import {
   completeChatRequest,
   failChatRequest,
@@ -22,6 +27,7 @@ export type CompleteChatInput = {
   requestId: string;
   assistantBody: string;
   noteIds: string[];
+  externalEvidence?: ExternalEvidenceReference[];
   clarificationOptions: ClarificationOption[];
   createdAt: string;
 };

@@ -632,6 +632,28 @@
   user-select: all;
 }
 
+.my-life-memory-connection > input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  outline: 0;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
+}
+
+.my-life-memory-connection > input:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--em-icon);
+}
+
+.connection-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .mcp-proposal-list,
 .mcp-proposal-row,
 .mcp-proposal-row > p {

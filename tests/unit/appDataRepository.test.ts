@@ -158,7 +158,7 @@ describe('app data repository', () => {
 
     const loaded = loadAppData('user-a');
 
-    expect(loaded.schemaVersion).toBe(5);
+    expect(loaded.schemaVersion).toBe(6);
     expect(loaded.notes[0].id).toBe(note.id);
     expect(window.localStorage.getItem(legacyKey)).toBe(raw);
   });
@@ -239,6 +239,20 @@ describe('app data repository', () => {
     expect(JSON.stringify(future)).toBe(original);
   });
 
+  it('keeps schema-v6 external evidence without treating it as a local note', () => {
+    const snapshot = populatedSnapshot();
+    snapshot.conversations[0].messages[0].externalEvidence = [{
+      referenceId: 'mlm-note-1', title: 'Campus walk', date: '2026-08-01',
+      place: 'Dongguk University', matchReason: 'my_life_memory:research',
+      source: 'my_life_memory_external',
+    }];
+    const migrated = migrateOk(snapshot).snapshot;
+    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.conversations[0].messages[0].externalEvidence)
+      .toEqual([expect.objectContaining({ referenceId: 'mlm-note-1' })]);
+    expect(migrated.notes).toHaveLength(1);
+  });
+
   it('migrates a v4 revisit into schema v5 direction without losing its emotion', () => {
     const migrated = migrateAppData({
       ...populatedSnapshot(),
@@ -253,7 +267,7 @@ describe('app data repository', () => {
     });
     expect(migrated.status).toBe('ok');
     if (migrated.status !== 'ok') return;
-    expect(migrated.snapshot.schemaVersion).toBe(5);
+    expect(migrated.snapshot.schemaVersion).toBe(6);
     expect(migrated.snapshot.revisits[0]).toMatchObject({
       changeDirection: 'different', currentEmotion: 'joy',
     });

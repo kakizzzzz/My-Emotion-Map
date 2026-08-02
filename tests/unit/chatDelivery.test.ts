@@ -67,6 +67,30 @@ describe('canonical chat delivery', () => {
     });
   });
 
+  it('stores external evidence separately from local note ids', () => {
+    const submitted = submitChatRequest(empty, {
+      conversationId: 'conversation-1', requestId: 'chat-request-1',
+      body: '结合 My Life Memory 看这周', fallbackTitle: '新的对话',
+      createdAt: '2026-08-02T12:00:00.000Z',
+    });
+    const completed = completeChatRequest(submitted, {
+      conversationId: 'conversation-1', requestId: 'chat-request-1',
+      assistantBody: '找到一条外部记录。', noteIds: [],
+      externalEvidence: [{
+        referenceId: 'mlm-note-1', title: 'Campus walk', date: '2026-08-01',
+        place: 'Dongguk University', matchReason: 'my_life_memory:research',
+        source: 'my_life_memory_external',
+      }],
+      clarificationOptions: [], createdAt: '2026-08-02T12:00:01.000Z',
+    });
+    expect(completed[0].messages[1]).toMatchObject({
+      noteIds: [],
+      externalEvidence: [{
+        referenceId: 'mlm-note-1', source: 'my_life_memory_external',
+      }],
+    });
+  });
+
   it('does not attach an orphan response to a different request', () => {
     const submitted = submitChatRequest(empty, {
       conversationId: 'conversation-1', requestId: 'chat-request-1',

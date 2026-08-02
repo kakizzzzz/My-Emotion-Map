@@ -50,6 +50,10 @@ export function SettingsScreen({
   onTestShortcutPairing,
   onIssueMcpToken,
   onRevokeAllMcpTokens,
+  onConnectMyLifeMemory,
+  onTestMyLifeMemory,
+  onGetMyLifeMemoryStatus,
+  onDisconnectMyLifeMemory,
   healthPreferences,
   onHealthPreferences,
   onIssueShortcutPairing,
@@ -268,6 +272,10 @@ export function SettingsScreen({
                   onTestShortcutPairing={onTestShortcutPairing}
                   onIssueToken={onIssueMcpToken}
                   onRevokeTokens={onRevokeAllMcpTokens}
+                  onConnectMyLifeMemory={onConnectMyLifeMemory}
+                  onTestMyLifeMemory={onTestMyLifeMemory}
+                  onGetMyLifeMemoryStatus={onGetMyLifeMemoryStatus}
+                  onDisconnectMyLifeMemory={onDisconnectMyLifeMemory}
                   healthPreferences={healthPreferences}
                   onHealthPreferences={onHealthPreferences}
                   onIssueShortcutPairing={onIssueShortcutPairing}

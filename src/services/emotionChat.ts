@@ -10,6 +10,15 @@ export type PublicEvidence = {
   matchReason: string;
 };
 
+export type ExternalPublicEvidence = {
+  referenceId: string;
+  title: string;
+  date: string;
+  place: string;
+  matchReason: string;
+  source: 'my_life_memory_external';
+};
+
 export type EmotionChatResult = {
   requestId?: string;
   serverRevision?: number;
@@ -18,6 +27,7 @@ export type EmotionChatResult = {
   status: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'unavailable';
   answer: string;
   evidence: PublicEvidence[];
+  externalEvidence: ExternalPublicEvidence[];
   confidence: 'none' | 'low' | 'medium' | 'high';
   limitations: string[];
   clarificationOptions?: ClarificationOption[];
@@ -49,6 +59,23 @@ const validateResult = (
       matchReason: (item.matchReason as string).slice(0, 80),
     });
   }
+  const externalEvidence: ExternalPublicEvidence[] = [];
+  if (source.externalEvidence !== undefined && !Array.isArray(source.externalEvidence)) return null;
+  for (const raw of (source.externalEvidence as unknown[] | undefined ?? []).slice(0, 6)) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const item = raw as Record<string, unknown>;
+    if (!['referenceId', 'title', 'date', 'place', 'matchReason'].every(
+      (key) => typeof item[key] === 'string',
+    ) || item.source !== 'my_life_memory_external') return null;
+    externalEvidence.push({
+      referenceId: (item.referenceId as string).slice(0, 200),
+      title: (item.title as string).slice(0, 200),
+      date: (item.date as string).slice(0, 10),
+      place: (item.place as string).slice(0, 160),
+      matchReason: (item.matchReason as string).slice(0, 80),
+      source: 'my_life_memory_external',
+    });
+  }
   const confidence = source.confidence === 'high' || source.confidence === 'medium' || source.confidence === 'low' ? source.confidence : 'none';
   return {
     requestId: typeof source.requestId === 'string' ? source.requestId : undefined,
@@ -60,6 +87,7 @@ const validateResult = (
     status: source.status as EmotionChatResult['status'],
     answer: source.answer,
     evidence,
+    externalEvidence,
     confidence,
     limitations: source.limitations.filter((item): item is string => typeof item === 'string').map((item) => item.slice(0, 300)).slice(0, 5),
     clarificationOptions: Array.isArray(source.clarificationOptions)

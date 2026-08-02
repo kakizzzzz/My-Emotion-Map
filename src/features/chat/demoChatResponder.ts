@@ -119,6 +119,7 @@ export const createDemoChatResponse = ({
       note,
       language === 'zh' ? '合成示范记录' : language === 'ko' ? '합성 데모 기록' : 'Synthetic Demo record',
     )),
+    externalEvidence: [],
     confidence: selected.length ? 'high' : 'none',
     limitations: [
       language === 'zh'

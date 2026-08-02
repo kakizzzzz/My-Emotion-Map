@@ -20,6 +20,7 @@ import {
   stageProposalApplication,
 } from './proposalApplication';
 import { createShortcutAccessHandlers } from './shortcutAccess';
+import { createMyLifeMemoryConnectionHandlers } from './myLifeMemoryConnection';
 
 const EMOTIONS = new Set<EmotionKey>([
   'calm', 'joy', 'tender', 'curious', 'energized', 'connected',
@@ -74,10 +75,14 @@ export const createExternalAccessHandlers = ({
     available,
     preferences: healthPreferences,
   });
-  const issueMcpToken = async (kind: 'input' | 'output') => {
+  const myLifeMemoryConnection = createMyLifeMemoryConnectionHandlers({
+    client,
+    available,
+  });
+  const issueMcpToken = async () => {
     if (!client || !available) return null;
     const { data, error } = await client.rpc('issue_mcp_token', {
-      p_kind: kind,
+      p_kind: 'output',
       p_ttl_hours: 24,
     });
     const row = Array.isArray(data) ? data[0] : data;
@@ -306,6 +311,7 @@ export const createExternalAccessHandlers = ({
   return {
     issueMcpToken,
     revokeAllMcpTokens,
+    ...myLifeMemoryConnection,
     ...shortcutAccess,
     listMcpProposals,
     resolveMcpProposal,

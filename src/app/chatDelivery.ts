@@ -2,6 +2,7 @@ import type {
   ChatDeliveryState,
   ClarificationOption,
   Conversation,
+  ExternalEvidenceReference,
 } from '../types';
 import { FOLLOW_UP_CONVERSATION_ID } from '../domain/followUps';
 import { createRecordId } from './createRecordId';
@@ -100,6 +101,7 @@ export const completeChatRequest = (
     requestId: string;
     assistantBody: string;
     noteIds: string[];
+    externalEvidence?: ExternalEvidenceReference[];
     clarificationOptions: ClarificationOption[];
     createdAt: string;
   },
@@ -129,6 +131,7 @@ export const completeChatRequest = (
         kind: input.clarificationOptions.length ? 'clarification' : 'message',
         body: input.assistantBody,
         noteIds: input.noteIds,
+        externalEvidence: input.externalEvidence?.slice(0, 6),
         clarificationOptions: input.clarificationOptions.slice(0, 3),
         replyToRequestId: input.requestId,
         createdAt: input.createdAt,

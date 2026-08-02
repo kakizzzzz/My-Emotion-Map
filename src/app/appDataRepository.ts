@@ -26,6 +26,7 @@ import {
   sanitizeStarInboxItem,
 } from './appDataV3';
 import { migrateLegacyTemporalFields } from '../domain/time/temporal';
+import { sanitizeExternalEvidence } from './sanitizeExternalEvidence';
 import {
   LEGACY_APP_DATA_STORAGE_KEY,
   isWorkspaceWithinBudget,
@@ -42,7 +43,7 @@ import { clearInboxLocation } from './recordAssociations';
 import { sanitizeRevisits } from './appDataRevisits';
 
 export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export type AppDataLoadIssue =
   | 'storage-unavailable'
@@ -397,6 +398,7 @@ const sanitizeMessage = (
           .filter((item): item is string => typeof item === 'string')
           .slice(0, 20)
       : undefined,
+    externalEvidence: sanitizeExternalEvidence(source.externalEvidence),
     options: Array.isArray(source.options)
       ? source.options
           .map((option) => {

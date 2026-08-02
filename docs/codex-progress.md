@@ -158,3 +158,41 @@ Phase 3 evidence:
 No LLM, diagnosis, emotion inference or new MCP surface was added to the heart
 path. Health observations remain outside grounded chat until the user creates a
 formal saved record.
+
+## Phase 4 — Connect built-in AI to My Life Memory MCP
+
+Status: implementation complete and checkpoint-ready. Production connection
+smoke remains blocked until the fixed My Life Memory endpoint, canonical
+manifest SHA-256, AES-GCM credential key and a real user-generated MCP token are
+configured in the dedicated My Emotion Map project. No My Life Memory backend
+write or deployment was performed.
+
+| Finding | Status | Verification |
+| --- | --- | --- |
+| P1-MCP-IN-031 built-in input direction | fixed in code; production smoke blocked | settings now separates Assistant, My Life Memory, External Access and Shortcut; input token is one-time, Edge-encrypted and owner-scoped |
+| P1-MCP-IN-032 deterministic source routing | fixed | ordinary map queries stay local; explicit cross-memory/route/photo queries use a bounded allowlisted plan; external evidence has separate M keys and source chips |
+| My Life Memory identity and manifest | fixed in code | `initialize`, exact `my-life-memory` identity, nine read-only tools and full canonical `tools/list` SHA-256 are required before persistence |
+| External prompt injection | fixed | tool text is bounded and marked untrusted; system/developer override phrases are rejected by post-generation validation |
+| Account and disconnect isolation | fixed in code; cloud A/B smoke pending | RLS metadata policy plus every service-role read/write filter by authenticated `user_id`; disconnect deletes the encrypted credential row |
+| Future-schema preservation | fixed | external evidence persistence raises the app schema to v6, while the Phase 0 future-schema hard stop remains intact |
+
+Phase 4 evidence:
+
+- `npm run check` passes: TypeScript for the app and Edge Functions, ESLint,
+  35 Vitest files / 166 tests, import and source-size architecture gates, and
+  the production Vite build.
+- Playwright passes 9/9 Chromium Mobile and 9/9 WebKit iPhone tests, including
+  the account-only workspace, 320px layout, reduced motion and accessibility
+  smoke paths. The My Life Memory card was also inspected at 320px with no
+  horizontal overflow; connect/disconnect controls remain at least 44px.
+- Secret-pattern scans found no API-key/JWT-shaped value, credential logging or
+  browser token persistence. The My Life Memory credential field clears before
+  the network await and no endpoint is accepted from the client.
+- The linked project reference was read back as `uifgpmmlvmfrauzbbrem` before a
+  read-only `supabase db push --dry-run`. It listed migrations
+  `202608020001`–`202608020004` and explicitly performed no push.
+- The migration and `my-life-memory-connection` / revised `emotion-chat` Edge
+  Functions remain local-only. Production connect, account A/B and disconnect
+  smoke are deferred to the Phase 7 release gate because the fixed endpoint,
+  full manifest fingerprint, encryption key and real owner token are not stored
+  in this repository and must not be invented.

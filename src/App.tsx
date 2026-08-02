@@ -797,6 +797,10 @@ export function App() {
                 onTestShortcutPairing={externalAccess.testShortcutPairing}
                 onIssueMcpToken={externalAccess.issueMcpToken}
                 onRevokeAllMcpTokens={externalAccess.revokeAllMcpTokens}
+                onConnectMyLifeMemory={externalAccess.connect}
+                onTestMyLifeMemory={externalAccess.test}
+                onGetMyLifeMemoryStatus={externalAccess.status}
+                onDisconnectMyLifeMemory={externalAccess.disconnect}
                 healthPreferences={healthPreferences}
                 onHealthPreferences={updateHealthPreferences}
                 onIssueShortcutPairing={externalAccess.issueShortcutPairing}

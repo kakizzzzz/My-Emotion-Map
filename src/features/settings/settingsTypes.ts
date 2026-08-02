@@ -8,6 +8,7 @@ import type {
   ShortcutPairing,
   ShortcutTestResult,
 } from '../../domain/shortcutConnection';
+import type { MyLifeMemoryConnectionStatus } from '../../services/myLifeMemoryConnection';
 
 export type SettingsPanel =
   | 'profile'
@@ -53,10 +54,12 @@ export type SettingsScreenProps = {
   onUseRemoteVersion: () => void;
   onOverwriteRemote: () => void;
   onTestShortcutPairing: (token: string) => Promise<ShortcutTestResult>;
-  onIssueMcpToken: (
-    kind: 'input' | 'output',
-  ) => Promise<{ token: string; expiresAt: string } | null>;
+  onIssueMcpToken: () => Promise<{ token: string; expiresAt: string } | null>;
   onRevokeAllMcpTokens: () => Promise<boolean>;
+  onConnectMyLifeMemory: (token: string) => Promise<MyLifeMemoryConnectionStatus | null>;
+  onTestMyLifeMemory: () => Promise<MyLifeMemoryConnectionStatus | null>;
+  onGetMyLifeMemoryStatus: () => Promise<MyLifeMemoryConnectionStatus | null>;
+  onDisconnectMyLifeMemory: () => Promise<MyLifeMemoryConnectionStatus | null>;
   healthPreferences: HealthPreferences;
   onHealthPreferences: (preferences: HealthPreferences) => boolean;
   onIssueShortcutPairing: () => Promise<ShortcutPairing | null>;

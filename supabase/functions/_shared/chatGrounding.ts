@@ -40,6 +40,8 @@ export type AuthorizedEvidence = {
   excerpt: string;
   answers: string[];
   matchReason: string;
+  source?: 'emotion_map_local' | 'my_life_memory_external';
+  trust?: 'server_authorized_record' | 'untrusted_tool_data';
 };
 
 export type GeneratedClaim = {
@@ -120,18 +122,21 @@ export const routeIntent = (query: string): QueryIntent => {
 export const computeAllowedFacts = (
   evidence: AuthorizedEvidence[],
 ): AllowedFacts => {
-  const dates = [...new Set(evidence.map((item) => item.date).filter(Boolean))].sort();
+  const localEvidence = evidence.filter(
+    (item) => item.source !== 'my_life_memory_external',
+  );
+  const dates = [...new Set(localEvidence.map((item) => item.date).filter(Boolean))].sort();
   const first = dates[0] ? Date.parse(`${dates[0]}T12:00:00Z`) : 0;
   const last = dates.at(-1) ? Date.parse(`${dates.at(-1)}T12:00:00Z`) : first;
   const spanDays = Math.max(0, Math.round((last - first) / 86_400_000));
   return {
-    recordCount: evidence.length,
+    recordCount: localEvidence.length,
     dateCount: dates.length,
     spanDays,
     dates,
-    repeatedEligible: evidence.length >= 3 && dates.length >= 3,
+    repeatedEligible: localEvidence.length >= 3 && dates.length >= 3,
     stableRepeatedEligible:
-      evidence.length >= 5 && dates.length >= 4 && spanDays >= 21,
+      localEvidence.length >= 5 && dates.length >= 4 && spanDays >= 21,
   };
 };
 
@@ -243,6 +248,8 @@ const rankAuthorizedEvidence = (
         key: `E${index + 1}`,
         ...item.candidate,
         matchReason: item.matchReason,
+        source: 'emotion_map_local',
+        trust: 'server_authorized_record',
       },
     }));
 };
@@ -298,6 +305,7 @@ const ADVICE = /你应该|你必须|你需要学会|建议你|不妨|可以试�
 const UNSUPPORTED_VALENCE = /正在变好|已经改善|更糟了|正在恶化|被治愈|你很坚强|你很勇敢|做得很好|值得骄傲|这是失败|你很糟糕|getting better|has improved|getting worse|healed|you are (?:strong|brave|resilient)|proud of you|you failed|you are terrible|나아지고|악화|강하|용감|자랑스러|실패|최악/i;
 const UNSUPPORTED_CURRENT_STATE = /你现在(?:很|正|感到|处于)|你此刻|currently you|you are (?:now|currently)|right now you|지금 당신|현재 당신/i;
 const OVERGENERALIZATION = /你总是|你一直|你一贯|你的长期状态|you always|you consistently|your long-term state|you tend to|당신은 항상|계속해서|장기적인 상태/i;
+const PROMPT_INJECTION = /忽略.{0,20}(?:系统|规则|指令)|系统提示|开发者消息|泄露.{0,12}(?:密钥|秘密)|ignore.{0,30}(?:system|instruction|rules)|system prompt|developer message|disclose.{0,20}(?:secret|key)|시스템.{0,20}(?:무시|프롬프트)|비밀.{0,12}(?:공개|노출)/i;
 
 const mentionsUnsupportedEmotion = (text: string, evidence: AuthorizedEvidence[]) => {
   const value = normalized(text);
@@ -324,7 +332,8 @@ const factualTokensMatch = (
     String(allowedFacts.dateCount),
     String(allowedFacts.spanDays),
   ]);
-  return dates.every((item) => allowedFacts.dates.includes(item)) &&
+  const allowedDates = new Set(evidence.map((item) => item.date).filter(Boolean));
+  return dates.every((item) => allowedDates.has(item)) &&
     numbers.every((item) => allowed.includes(item) || allowedNumbers.has(item));
 };
 
@@ -376,6 +385,8 @@ export const validateGeneratedDraft = (
         : claim.kind === 'limitation' ? 0 : 1;
     if (evidence.length < minimum) return false;
     if (claim.kind === 'repeated_observation' && !allowedFacts.repeatedEligible) return false;
+    if (claim.kind === 'repeated_observation' &&
+      evidence.some((item) => item.source === 'my_life_memory_external')) return false;
     const allowedFactKeySet = new Set([
       'recordCount', 'dateCount', 'spanDays', 'repeatedEligible', 'stableRepeatedEligible',
     ]);
@@ -383,7 +394,8 @@ export const validateGeneratedDraft = (
     if (!factualTokensMatch(claim.text, evidence, allowedFacts) || mentionsUnsupportedEmotion(claim.text, evidence)) return false;
     if (DIAGNOSIS.test(claim.text) || CAUSAL.test(claim.text) || PERSONALITY.test(claim.text) ||
       ADVICE.test(claim.text) || UNSUPPORTED_VALENCE.test(claim.text) ||
-      UNSUPPORTED_CURRENT_STATE.test(claim.text) || OVERGENERALIZATION.test(claim.text)) {
+      UNSUPPORTED_CURRENT_STATE.test(claim.text) || OVERGENERALIZATION.test(claim.text) ||
+      PROMPT_INJECTION.test(claim.text)) {
       highRisk = true;
       return false;
     }
@@ -394,7 +406,8 @@ export const validateGeneratedDraft = (
     if (!text || !factualTokensMatch(text, authorized, allowedFacts) || mentionsUnsupportedEmotion(text, authorized)) return false;
     return !DIAGNOSIS.test(text) && !CAUSAL.test(text) && !PERSONALITY.test(text) &&
       !ADVICE.test(text) && !UNSUPPORTED_VALENCE.test(text) &&
-      !UNSUPPORTED_CURRENT_STATE.test(text) && !OVERGENERALIZATION.test(text);
+      !UNSUPPORTED_CURRENT_STATE.test(text) && !OVERGENERALIZATION.test(text) &&
+      !PROMPT_INJECTION.test(text);
   });
   if (validLimitations.length !== draft.limitations.length) highRisk = true;
   return {

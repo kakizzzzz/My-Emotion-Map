@@ -1,7 +1,8 @@
 # Security boundary
 
-My Emotion Map is local-first. My Life Memory is a separate product and is not
-queried, modified, deployed or used as a backend by this repository.
+My Emotion Map is local-first. My Life Memory remains a separate product and is
+never modified or deployed by this repository. Its fixed official read-only MCP
+may be queried only through the explicit connection described below.
 
 ## Secrets and provider isolation
 
@@ -33,10 +34,33 @@ the still-open editor and never replaces a user-edited title.
 ## Grounded chat
 
 The client submits only the current question, language, conversation ID and
-known cloud revision. The Edge Function authenticates the user, reads the
+known cloud revision. It cannot submit a source plan, MCP endpoint, model,
+evidence or token budget. The Edge Function authenticates the user, reads the
 owner-scoped snapshot through the same bearer token, excludes Demo, drafts,
 inbox drafts and unfinished records, and selects at most six authorized E1–E6
 records.
+
+The server computes a deterministic source plan. Ordinary map questions remain
+local. Only an explicit My Life Memory, cross-memory, route or photo request may
+activate the connected read-only MCP. The endpoint comes only from the server
+configuration and must match the fixed HTTPS Supabase Function shape. Each
+connection verifies `initialize`, the `my-life-memory` server identity and a
+full canonical `tools/list` SHA-256 fingerprint before saving anything.
+
+The user-provided My Life Memory token is submitted once to the connection Edge
+Function, encrypted with AES-GCM and stored in an owner-scoped row. Authenticated
+clients can select status metadata only; credential columns have no frontend
+grant. The raw token is not stored in app state, localStorage, sessionStorage,
+logs, error responses or build output. Disconnect deletes the encrypted row.
+The server configuration uses the secret names
+`MY_LIFE_MEMORY_MCP_URL`, `MY_LIFE_MEMORY_MCP_MANIFEST_SHA256` and
+`MY_LIFE_MEMORY_CREDENTIAL_KEY`; their values do not belong in repository
+files.
+
+External tool text is marked `untrusted_tool_data`, byte/call bounded and
+cannot override the model system policy. External evidence uses M keys and is
+returned as `my_life_memory_external`; it is rendered separately and never
+enters local repeated-pattern counts or local note ownership links.
 
 The model returns internal claims, not public evidence. The server validates
 schema, evidence keys, ownership, minimum evidence counts, record dates and
@@ -76,3 +100,5 @@ synced. Revision or target-fingerprint drift stops the operation.
 - scan source and built assets for credential patterns before GitHub upload;
 - test real JPEG/HEIC photos and Shortcut transport on an iPhone.
 - verify MCP cross-user denial, token expiry/revocation and proposal-only writes.
+- verify My Life Memory connect/test/disconnect, full manifest pinning, local-only
+  routing and external-output injection rejection.

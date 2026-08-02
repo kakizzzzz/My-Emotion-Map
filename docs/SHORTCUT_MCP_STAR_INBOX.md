@@ -73,6 +73,18 @@ offer exactly: lighter, stronger, different, same, or skip.
 
 ## MCP
 
+### My Life Memory input
+
+Built-in chat can connect to the fixed official My Life Memory read-only MCP.
+The browser accepts a user-generated token once; the connection Edge Function
+verifies the server identity and complete tool-manifest fingerprint before
+encrypting the credential in the owner row. The browser never supplies an
+endpoint. Normal Emotion Map questions stay local, while explicit cross-memory
+questions may return separately labelled external evidence. External data is
+untrusted input and cannot create, edit or delete either product's records.
+
+### Emotion Map external access
+
 `/functions/v1/emotion-map-mcp` implements JSON-RPC initialize, tools/list and
 tools/call over Streamable HTTP-compatible POST requests. Personal tokens are
 short-lived, hashed, revocable and split into read and proposal scopes.
