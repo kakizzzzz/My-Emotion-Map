@@ -41,6 +41,10 @@ import type { ToastHandler } from '../../app/appTypes';
 import { loadLocalSettings } from '../../app/profilePreferences';
 import { STAR_COLORS } from '../../domain/notePrompts';
 import { chatDraftKey } from '../../app/workspace/chatDraftStorage';
+import {
+  DEMO_SUGGESTED_PROMPTS,
+  createDemoChatResponse,
+} from './demoChatResponder';
 
 const POSITIVE_CONFETTI = Array.from({ length: 20 }, (_, index) => ({
   color: STAR_COLORS[index % 9],
@@ -154,7 +158,8 @@ export function ChatScreen({
       (conversation.id === FOLLOW_UP_CONVERSATION_ID ||
         conversation.kind === 'companion'),
   );
-  const available = Boolean(
+  const isDemo = dataMode === 'demo';
+  const available = isDemo || Boolean(
     cloudAuth &&
       cloudRevision !== null &&
       cloudStatus === 'synced' &&
@@ -167,6 +172,7 @@ export function ChatScreen({
     () => getFollowUpOptions(language),
     [language],
   );
+  const demoPrompts = DEMO_SUGGESTED_PROMPTS[language];
   const responseStyle = useMemo(
     () => {
       if (!cloudAuth) return [];
@@ -257,8 +263,6 @@ export function ChatScreen({
   const sendMessage = async (message: string) => {
     if (
       !available ||
-      !cloudAuth ||
-      cloudRevision === null ||
       !message ||
       sending ||
       message.length > 1_200
@@ -274,19 +278,22 @@ export function ChatScreen({
     abortRef.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 22_000);
     try {
-      const recentNoteIds = conversation.messages
-        .flatMap((item) => item.noteIds ?? [])
-        .slice(-6);
-      const result = await requestEmotionChat({
-        auth: cloudAuth,
-        message,
-        language,
-        conversationId: conversation.id,
-        selectedNoteIds: recentNoteIds,
-        responseStyle,
-        clientRevision: cloudRevision,
-        signal: controller.signal,
-      });
+      const result = isDemo
+        ? createDemoChatResponse({ message, language, notes })
+        : cloudAuth && cloudRevision !== null
+          ? await requestEmotionChat({
+              auth: cloudAuth,
+              message,
+              language,
+              conversationId: conversation.id,
+              selectedNoteIds: conversation.messages
+                .flatMap((item) => item.noteIds ?? [])
+                .slice(-6),
+              responseStyle,
+              clientRevision: cloudRevision,
+              signal: controller.signal,
+            })
+          : null;
       if (!result || !result.answer.trim()) throw new Error('Unavailable');
       onGroundedChat(
         conversation.id,
@@ -491,6 +498,22 @@ export function ChatScreen({
             <strong>{copy.chat.noFollowUpTitle}</strong>
             <p>{copy.chat.noFollowUpBody}</p>
           </div>
+        ) : isDemo ? (
+          <section className="demo-chat-prompts" aria-label={copy.demo.promptTitle}>
+            <p>{copy.demo.promptTitle}</p>
+            <div>
+              {demoPrompts.map((prompt) => (
+                <button
+                  key={prompt.text}
+                  type="button"
+                  onClick={() => void sendMessage(prompt.text)}
+                  disabled={sending}
+                >
+                  {prompt.text}
+                </button>
+              ))}
+            </div>
+          </section>
         ) : null}
 
         {pendingMessage ? (

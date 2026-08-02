@@ -66,6 +66,8 @@ import {
   clearChatDraftsForUser,
 } from './app/workspace/chatDraftStorage';
 import { useNoteEditorHandlers } from './app/noteEditorHandlers';
+import { useFirstRunOnboarding } from './app/firstRunOnboarding';
+import { FirstRunOnboarding } from './features/onboarding/FirstRunOnboarding';
 
 const CalendarScreen = lazy(() =>
   import('./features/calendar/CalendarScreen').then((module) => ({
@@ -149,6 +151,8 @@ export function App() {
   const [lastViewport, setLastViewport] = useState<MapViewport | undefined>(
     initialData.lastViewport,
   );
+  const { onboardingTarget, openOnboardingIfNeeded, completeOnboarding } =
+    useFirstRunOnboarding();
   const cloudSession = useSupabaseSession();
   const [healthPreferences, setHealthPreferences] = useState<HealthPreferences>(
     () => loadHealthPreferences(null),
@@ -281,12 +285,14 @@ export function App() {
     }
     activeWorkspaceUserRef.current = userId;
     setWorkspaceReady(true);
+    openOnboardingIfNeeded('real', userId);
   }, [
     applySnapshot,
     cloudSession.ready,
     cloudSession.session?.user.id,
     copy.feedback.dataUpgradeRequired,
     guestDemo,
+    openOnboardingIfNeeded,
     showToast,
     workspaceReady,
   ]);
@@ -655,6 +661,7 @@ export function App() {
                 applySnapshot(loadAppData(null, 'demo'));
                 setGuestDemo(true);
                 setWorkspaceReady(true);
+                openOnboardingIfNeeded('demo', null);
               }}
             />
           </main>
@@ -800,8 +807,12 @@ export function App() {
                 onImportData={importData}
                 onDeleteAllData={deleteAllData}
                 onLoadDemo={() => {
-                  setGuestDemo(!cloudSession.session);
-                  return loadDemoMode();
+                  const loaded = loadDemoMode();
+                  if (loaded) {
+                    setGuestDemo(!cloudSession.session);
+                    openOnboardingIfNeeded('demo', null);
+                  }
+                  return loaded;
                 }}
                 onExitDemo={() => {
                   const exited = exitDemoMode();
@@ -960,6 +971,14 @@ export function App() {
           onClose={locationController.closePermissionPrompt}
           onRequest={locationController.confirmLocationRequest}
         />
+
+        {dataMode === 'demo' ? <span className="demo-mode-badge">{copy.demo.badge}</span> : null}
+        {onboardingTarget ? (
+          <FirstRunOnboarding
+            dataMode={onboardingTarget.dataMode}
+            onComplete={completeOnboarding}
+          />
+        ) : null}
 
         <AppToast notice={toast} onDismiss={() => setToast(null)} />
         </main>

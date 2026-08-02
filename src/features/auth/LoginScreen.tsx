@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { AtSign, KeyRound, Lock } from 'lucide-react';
+import { AtSign, KeyRound, Lock, MapPinned } from 'lucide-react';
 import { LANGUAGE_OPTIONS, useAppLanguage } from '../../i18n';
 import {
   isValidAccountId,
@@ -7,6 +7,7 @@ import {
   type AuthResult,
 } from '../../services/accountAuth';
 import { LoginWaterBackground } from './LoginWaterBackground';
+import { useDialogFocus } from '../../app/useDialogFocus';
 
 export function LoginScreen({
   ready,
@@ -31,6 +32,12 @@ export function LoginScreen({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [demoConfirmationOpen, setDemoConfirmationOpen] = useState(false);
+  const demoDialogRef = useDialogFocus<HTMLDivElement>({
+    isOpen: demoConfirmationOpen,
+    onEscape: () => setDemoConfirmationOpen(false),
+    restoreFocusId: 'login-demo-button',
+  });
 
   const authenticate = async () => {
     const normalizedAccount = account.trim();
@@ -94,18 +101,30 @@ export function LoginScreen({
   return (
     <section className="login-screen" aria-label={copy.auth.loginTitle}>
       <LoginWaterBackground />
-      <div className="login-language-switch" aria-label={copy.settings.language}>
-        {LANGUAGE_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={language === option.value ? 'is-selected' : ''}
-            onClick={() => setLanguage(option.value)}
-            aria-pressed={language === option.value}
-          >
-            {option.value === 'zh' ? '中' : option.value === 'ko' ? '한' : 'EN'}
-          </button>
-        ))}
+      <div className="login-top-controls">
+        <button
+          id="login-demo-button"
+          type="button"
+          className="login-demo-icon"
+          aria-label={copy.demo.open}
+          onClick={() => setDemoConfirmationOpen(true)}
+          disabled={busy || !ready}
+        >
+          <MapPinned size={21} strokeWidth={2.15} aria-hidden="true" />
+        </button>
+        <div className="login-language-switch" aria-label={copy.settings.language}>
+          {LANGUAGE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={language === option.value ? 'is-selected' : ''}
+              onClick={() => setLanguage(option.value)}
+              aria-pressed={language === option.value}
+            >
+              {option.value === 'zh' ? '中' : option.value === 'ko' ? '한' : 'EN'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {!ready ? (
@@ -217,17 +236,44 @@ export function LoginScreen({
                   : copy.auth.register}
               </button>
             </div>
-            <button
-              type="button"
-              className="login-demo-action"
-              onClick={onOpenDemo}
-              disabled={busy}
-            >
-              {copy.demo.label}
-            </button>
           </div>
         </form>
       )}
+
+      {demoConfirmationOpen ? (
+        <div className="login-demo-confirmation-backdrop">
+          <div
+            ref={demoDialogRef}
+            className="login-demo-confirmation"
+            role="dialog"
+            aria-modal="true"
+            aria-label={copy.demo.confirmTitle}
+            tabIndex={-1}
+          >
+            <MapPinned size={24} strokeWidth={2.15} aria-hidden="true" />
+            <h2>{copy.demo.confirmTitle}</h2>
+            <p>{copy.demo.confirmBody}</p>
+            <div>
+              <button
+                type="button"
+                onClick={() => setDemoConfirmationOpen(false)}
+              >
+                {copy.common.cancel}
+              </button>
+              <button
+                type="button"
+                className="is-primary"
+                onClick={() => {
+                  setDemoConfirmationOpen(false);
+                  onOpenDemo();
+                }}
+              >
+                {copy.demo.enter}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

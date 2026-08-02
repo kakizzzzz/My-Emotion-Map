@@ -14,6 +14,7 @@ import {
   removeMomentAssociations,
   saveAppData,
 } from '../../src/app/appDataRepository';
+import { DEMO_DATA_MANIFEST } from '../../src/app/demoData';
 import { userWorkspaceStorageKey } from '../../src/app/workspace/workspaceStorage';
 import type {
   AppDataSnapshot,
@@ -295,8 +296,20 @@ describe('app data repository', () => {
       '东国大学中央图书馆',
       '万海广场',
       '惠化馆走廊',
+      '东国大学学生会馆',
+      '东国大学八正道',
     ]);
     expect(demo.notes.every((item) => item.emotion !== null)).toBe(true);
+    expect(DEMO_DATA_MANIFEST).toMatchObject({
+      sourceType: 'synthetic_demo',
+      sourceId: 'campus-day',
+      recordCount: 5,
+    });
+    expect(demo.notes).toHaveLength(5);
+    expect(demo.notes.every((item) =>
+      item.id.startsWith('demo:synthetic:campus-day:')
+    )).toBe(true);
+    expect(JSON.stringify(demo)).not.toMatch(/demo:mlm|my life memory|公开演示记录/i);
     expect(demo.starInboxItems).toEqual([]);
   });
 
@@ -350,5 +363,16 @@ describe('app data repository', () => {
     expect(saveAppData(a, 'user-a')).toBe(true);
     expect(loadAppData('user-a').moments).toHaveLength(1);
     expect(loadAppData('user-b').moments).toEqual([]);
+  });
+
+  it('keeps the real camera snapshot intact while Demo uses its own workspace', () => {
+    const real = {
+      ...populatedSnapshot(),
+      lastViewport: { longitude: 121.49, latitude: 31.23, zoom: 13.5 },
+    };
+    expect(saveAppData(real, 'user-a')).toBe(true);
+    expect(saveAppData(createDemoAppData(), 'user-a')).toBe(true);
+    expect(loadAppData('user-a', 'real').lastViewport).toEqual(real.lastViewport);
+    expect(loadAppData('user-a', 'real').dataMode).toBe('real');
   });
 });

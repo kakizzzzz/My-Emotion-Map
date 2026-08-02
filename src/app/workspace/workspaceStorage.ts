@@ -1,7 +1,7 @@
 import type { AppDataSnapshot, DataMode } from '../../types';
 
 export const LEGACY_APP_DATA_STORAGE_KEY = 'my-emotion-map.app-data.v1';
-export const DEMO_WORKSPACE_STORAGE_KEY = 'my-emotion-map.workspace.demo.v3';
+export const DEMO_WORKSPACE_STORAGE_KEY = 'my-emotion-map.workspace.demo.v4';
 export const DEVICE_PREFERENCES_STORAGE_KEY =
   'my-emotion-map.device-preferences.v2';
 export const MAX_SERIALIZED_WORKSPACE_BYTES = 3_500_000;

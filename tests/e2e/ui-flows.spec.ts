@@ -5,7 +5,11 @@ const TEST_USER_ID = '00000000-0000-4000-8000-000000000001';
 const STORAGE_KEY = `my-emotion-map.workspace.user.${TEST_USER_ID}.v4`;
 const SUPABASE_AUTH_STORAGE_KEY = 'sb-uifgpmmlvmfrauzbbrem-auth-token';
 
-async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
+async function seedAuthenticatedSession(
+  page: Page,
+  includeBlankData: boolean,
+  showOnboarding = false,
+) {
   await page.route(
     'https://uifgpmmlvmfrauzbbrem.supabase.co/rest/v1/**',
     async (route) => {
@@ -17,7 +21,7 @@ async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
       });
     },
   );
-  await page.addInitScript(({ storageKey, authStorageKey, blank, userId }) => {
+  await page.addInitScript(({ storageKey, authStorageKey, blank, userId, firstRun }) => {
     if (window.sessionStorage.getItem('e2e-storage-initialized')) return;
     window.localStorage.clear();
     window.localStorage.setItem(authStorageKey, JSON.stringify({
@@ -48,18 +52,34 @@ async function seedAuthenticatedSession(page: Page, includeBlankData: boolean) {
         starInboxItems: [],
       }));
     }
+    if (!firstRun) {
+      window.localStorage.setItem(
+        `my-emotion-map.user.${userId}.onboardingSeenVersion`,
+        '1',
+      );
+    }
     window.sessionStorage.setItem('e2e-storage-initialized', 'true');
   }, {
     storageKey: STORAGE_KEY,
     authStorageKey: SUPABASE_AUTH_STORAGE_KEY,
     blank: includeBlankData,
     userId: TEST_USER_ID,
+    firstRun: showOnboarding,
   });
 }
 
 async function startBlank(page: Page) {
   await seedAuthenticatedSession(page, true);
   await page.goto('/');
+  await expect(page.locator('.map-screen')).toBeVisible();
+}
+
+async function enterDemo(page: Page) {
+  await page.goto('/');
+  await page.getByRole('button', { name: '预览演示' }).click();
+  await page.getByRole('button', { name: '进入演示' }).click();
+  await expect(page.getByRole('dialog', { name: '留下一颗星星' })).toBeVisible();
+  await page.getByRole('button', { name: '跳过' }).click();
   await expect(page.locator('.map-screen')).toBeVisible();
 }
 
@@ -130,14 +150,73 @@ test('login uses account and password without an email field', async ({ page }) 
 test('Demo opens only after an explicit action and remains isolated', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.map-screen')).toHaveCount(0);
-  await page.getByRole('button', { name: '演示数据' }).click();
+  await page.getByLabel('账号').fill('keep_this_input');
+  const demoButton = page.getByRole('button', { name: '预览演示' });
+  await expect(demoButton).toHaveCSS('width', '44px');
+  await demoButton.click();
+  await expect(page.locator('.map-screen')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: '进入演示？' })).toBeVisible();
+  await page.getByRole('button', { name: '取消' }).click();
+  await expect(page.getByLabel('账号')).toHaveValue('keep_this_input');
+  await demoButton.click();
+  await page.getByRole('button', { name: '进入演示' }).click();
+  await expect(page.getByRole('dialog', { name: '留下一颗星星' })).toBeVisible();
+  await page.getByRole('button', { name: '继续' }).click();
+  await expect(page.getByRole('dialog', { name: '回到地点与时间' })).toBeVisible();
+  await page.getByRole('button', { name: '继续' }).click();
+  await page.getByRole('button', { name: '开始使用' }).click();
   await expect(page.locator('.map-screen')).toBeVisible();
-  await expect(page.locator('.map-star-button').first()).toBeVisible();
+  await expect(page.locator('.map-star-button')).toHaveCount(5);
+  await expect(page.locator('.demo-mode-badge')).toHaveText('演示');
   await expect.poll(() => page.evaluate(() =>
-    window.localStorage.getItem('my-emotion-map.workspace.demo.v3') !== null,
+    window.localStorage.getItem('my-emotion-map.workspace.demo.v4') !== null,
   )).toBe(true);
   expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBeNull();
 });
+
+test('first real workspace uses the shared onboarding without creating records', async ({ page }) => {
+  await seedAuthenticatedSession(page, true, true);
+  await page.goto('/');
+  const onboarding = page.getByRole('dialog', { name: '留下一颗星星' });
+  await expect(onboarding).toBeVisible();
+  await expect(onboarding).toHaveAttribute('data-onboarding-mode', 'real');
+  await page.getByRole('button', { name: '跳过' }).click();
+  await expect(page.locator('.map-star-button')).toHaveCount(0);
+  const snapshot = await page.evaluate((key) =>
+    JSON.parse(window.localStorage.getItem(key) ?? '{}'), STORAGE_KEY,
+  );
+  expect(snapshot.moments).toEqual([]);
+  expect(snapshot.notes).toEqual([]);
+});
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 320, height: 568 },
+  { width: 844, height: 390 },
+]) {
+  test(`Demo fitBounds keeps every star visible at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await enterDemo(page);
+    await page.waitForTimeout(750);
+    const mapBox = await page.locator('.map-screen').boundingBox();
+    expect(mapBox).not.toBeNull();
+    const starBoxes = await page.locator('.map-star-button').evaluateAll((stars) =>
+      stars.map((star) => {
+        const box = star.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height };
+      }),
+    );
+    expect(starBoxes).toHaveLength(5);
+    for (const box of starBoxes) {
+      const centerX = box.x + box.width / 2;
+      const centerY = box.y + box.height / 2;
+      expect(centerX).toBeGreaterThanOrEqual(mapBox!.x);
+      expect(centerX).toBeLessThanOrEqual(mapBox!.x + mapBox!.width);
+      expect(centerY).toBeGreaterThanOrEqual(mapBox!.y);
+      expect(centerY).toBeLessThanOrEqual(mapBox!.y + mapBox!.height);
+    }
+  });
+}
 
 test('authenticated identity opens an empty real workspace', async ({
   page,
@@ -145,7 +224,7 @@ test('authenticated identity opens an empty real workspace', async ({
   await seedAuthenticatedSession(page, false);
   await page.goto('/');
 
-  await expect(page.locator('.demo-mode-banner')).toHaveCount(0);
+  await expect(page.locator('.demo-mode-badge')).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(0);
 
   await page.getByRole('button', { name: '打开页面导航' }).click();
@@ -171,7 +250,7 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   await startBlank(page);
 
   await expect(page.locator('.map-star-button')).toHaveCount(0);
-  await expect(page.locator('.demo-mode-banner')).toHaveCount(0);
+  await expect(page.locator('.demo-mode-badge')).toHaveCount(0);
   await expect(page.getByRole('dialog', { name: /定位/ })).toHaveCount(0);
 
   const menu = page.getByRole('button', { name: '打开页面导航' });

@@ -1,6 +1,7 @@
 @import './styles/tokens.css';
 @import './styles/shell.css';
 @import './styles/auth.css';
+@import './styles/onboarding.css';
 @import './styles/chrome.css';
 @import './styles/map.css';
 @import './styles/calendar.css';

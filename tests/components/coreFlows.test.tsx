@@ -15,6 +15,8 @@ import type { EmotionMoment, EmotionNote } from '../../src/types';
 import { renderWithLanguage } from '../renderWithLanguage';
 import { createGuidedAnswers } from '../../src/domain/notePrompts';
 import type { PhotoAssistDelivery } from '../../src/app/appTypes';
+import { FirstRunOnboarding } from '../../src/features/onboarding/FirstRunOnboarding';
+import { createDemoAppData } from '../../src/app/appDataRepository';
 
 const draftNote: EmotionNote = {
   id: 'note-new',
@@ -340,6 +342,64 @@ describe('core component flows', () => {
     );
   });
 
+  it('keeps Demo outside the auth card and requires confirmation without clearing login input', async () => {
+    const user = userEvent.setup();
+    const onOpenDemo = vi.fn();
+    renderWithLanguage(
+      <LoginScreen
+        ready
+        configured
+        onAuthenticate={vi.fn()}
+        onOpenDemo={onOpenDemo}
+      />,
+    );
+
+    await user.type(screen.getByLabelText('账号'), 'student_01');
+    const demoButton = screen.getByRole('button', { name: '预览演示' });
+    expect(demoButton).toHaveClass('login-demo-icon');
+    expect(document.querySelector('.login-card .login-demo-icon')).toBeNull();
+
+    await user.click(demoButton);
+    expect(onOpenDemo).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: '进入演示？' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '取消' }));
+    expect(screen.getByLabelText('账号')).toHaveValue('student_01');
+    expect(onOpenDemo).not.toHaveBeenCalled();
+
+    await user.click(demoButton);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '进入演示？' })).toBeNull();
+    expect(screen.getByLabelText('账号')).toHaveValue('student_01');
+
+    await user.click(demoButton);
+    await user.click(screen.getByRole('button', { name: '进入演示' }));
+    expect(onOpenDemo).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the same three-screen onboarding shell and skips without touching records', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    renderWithLanguage(
+      <FirstRunOnboarding dataMode="real" onComplete={onComplete} />,
+    );
+    expect(screen.getByRole('dialog', { name: '留下一颗星星' })).toHaveAttribute(
+      'data-onboarding-mode',
+      'real',
+    );
+    expect(screen.getByText('第 1 页，共 3 页')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '跳过' }));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    renderWithLanguage(
+      <FirstRunOnboarding dataMode="demo" onComplete={vi.fn()} />,
+    );
+    expect(screen.getByRole('dialog', { name: '留下一颗星星' })).toHaveAttribute(
+      'data-onboarding-mode',
+      'demo',
+    );
+  });
+
   it('closes settings through a discoverable button', async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
@@ -414,6 +474,41 @@ describe('core component flows', () => {
     expect(screen.getByRole('button', { name: '新的对话' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '返回地图并打开导航' })).toBeEnabled();
     expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('answers Demo prompts deterministically without calling the Edge Function', async () => {
+    const user = userEvent.setup();
+    const onGroundedChat = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const demo = createDemoAppData(new Date('2026-08-02T12:00:00'));
+    renderWithLanguage(
+      <ChatScreen
+        notes={demo.notes}
+        followUps={demo.followUps}
+        conversations={[]}
+        activeConversationId="demo-new-thread"
+        workspaceKey="demo"
+        onAnswerFollowUp={vi.fn()}
+        onRevisitEmotion={vi.fn()}
+        cloudAuth={null}
+        cloudRevision={null}
+        cloudStatus="signed_out"
+        dataMode="demo"
+        onGroundedChat={onGroundedChat}
+        onNewConversation={vi.fn()}
+        onExitToMap={vi.fn()}
+        onToast={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '图书馆的记录是什么？' }));
+    await waitFor(() => expect(onGroundedChat).toHaveBeenCalledTimes(1));
+    expect(onGroundedChat.mock.calls[0][2]).toContain('演示回答');
+    expect(onGroundedChat.mock.calls[0][3].every((id: string) =>
+      id.startsWith('demo:synthetic:campus-day:')
+    )).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it('does not expose account A chat drafts to account B', async () => {
