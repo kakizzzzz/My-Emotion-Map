@@ -46,7 +46,9 @@ export const upsertFollowUpRevisit = (
       noteId: note.id,
       originalEmotion: note.emotion,
       changeDirection,
-      originalOccurredAt: new Date(`${note.date}T${note.time}:00`).toISOString(),
+      originalOccurredAt: note.occurredAtUtc ??
+        new Date(`${note.localDate || note.date}T${note.localTime || note.time}:00`)
+          .toISOString(),
       revisitedAt,
       sourceFollowUpId,
     },

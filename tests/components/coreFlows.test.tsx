@@ -12,6 +12,7 @@ import { LoginScreen } from '../../src/features/auth/LoginScreen';
 import { NoteEditorSheet } from '../../src/features/notes/NoteEditorSheet';
 import { SettingsScreen } from '../../src/features/settings/SettingsScreen';
 import { AiSettingsPanel } from '../../src/features/settings/AiSettingsPanel';
+import { EmotionMapMcpPanel } from '../../src/features/settings/EmotionMapMcpPanel';
 import type { EmotionMoment, EmotionNote } from '../../src/types';
 import { renderWithLanguage } from '../renderWithLanguage';
 import { createGuidedAnswers } from '../../src/domain/notePrompts';
@@ -396,8 +397,6 @@ describe('core component flows', () => {
         onThemeTone={() => undefined}
         onThemeColor={() => undefined}
         onExportData={() => undefined}
-        onImportData={async () => undefined}
-        onDeleteAllData={() => undefined}
         locationRequestState="idle"
         onRequestLocation={() => undefined}
         onToast={() => undefined}
@@ -450,16 +449,16 @@ describe('core component flows', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'student_01' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '个人' }));
-    expect(screen.getByText('ID')).toBeInTheDocument();
-    expect(document.querySelector('.profile-account-id-row strong')).toHaveTextContent(
-      'student_01',
+    expect(screen.getByRole('heading', { name: '用户student_01' })).toBeInTheDocument();
+    expect(screen.getByText('ID:student_01')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '修改信息' }));
+    expect(document.querySelector('.profile-account-id-row')).toBeNull();
+    expect(screen.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
+      '用户student_01',
     );
-    expect(screen.getByRole('textbox', { name: '本地档案名称' })).toHaveValue('');
     await user.click(screen.getByRole('button', { name: '返回' }));
     await waitFor(() => {
-      expect(screen.queryByRole('textbox', { name: '本地档案名称' })).toBeNull();
+      expect(screen.queryByRole('textbox', { name: '用户姓名' })).toBeNull();
     });
     await user.click(screen.getByRole('button', { name: '关闭' }));
     expect(onBack).toHaveBeenCalledTimes(1);
@@ -479,80 +478,100 @@ describe('core component flows', () => {
       lastTestAt: '2026-08-02T00:00:00.000Z', lastErrorCode: null,
     }));
     const onTestShortcutPairing = vi.fn().mockResolvedValue('verified');
+    const commonAiProps = {
+      styles: [] as string[],
+      userPrompt: '',
+      onStyles: () => undefined,
+      onUserPrompt: () => undefined,
+      onPanel: () => undefined,
+      onTestShortcutPairing,
+      onConnectMyLifeMemory,
+      onTestMyLifeMemory: async () => null,
+      onGetMyLifeMemoryStatus: async () => ({
+        state: 'disconnected' as const, serverVersion: null, protocolVersion: null,
+        manifestHash: null, connectedAt: null, lastTestAt: null,
+        lastErrorCode: null,
+      }),
+      onDisconnectMyLifeMemory: async () => ({
+        state: 'disconnected' as const, serverVersion: null, protocolVersion: null,
+        manifestHash: null, connectedAt: null, lastTestAt: null,
+        lastErrorCode: null,
+      }),
+      healthPreferences: {
+        restingHeartRateMin: 60,
+        restingHeartRateMax: 100,
+        rangeConfirmed: true,
+        singleSampleEnabled: false,
+        workoutPolicy: 'suppress' as const,
+        unknownPolicy: 'suppress' as const,
+        cooldownMinutes: 30,
+      },
+      onHealthPreferences: () => true,
+      onIssueShortcutPairing: async () => ({
+        token: 'pairing-code-once',
+        expiresAt: '2026-09-01T00:00:00.000Z',
+        shortcutVersion: 'shortcut-v3',
+        algorithmVersion: 'heart-v3',
+      }),
+      onGetShortcutConnectionStatus: async () => ({
+        state: 'paired' as const,
+        expiresAt: '2026-09-01T00:00:00.000Z',
+        lastReceivedAt: null,
+        lastTestAt: null,
+        shortcutVersion: 'shortcut-v3',
+        algorithmVersion: 'heart-v3',
+      }),
+      onRevokeShortcutTokens: async () => true,
+    };
     renderWithLanguage(
       <AiSettingsPanel
-        styles={[]}
-        onStyles={() => undefined}
-        onTestShortcutPairing={onTestShortcutPairing}
-        onIssueToken={onIssueToken}
-        onGetMcpOutputStatus={async () => ({
-          scope: 'records:read',
-          expiresAt: '2026-08-03T00:00:00.000Z',
-          lastUsedAt: '2026-08-02T12:00:00.000Z',
-        })}
-        onRevokeTokens={async () => true}
-        onConnectMyLifeMemory={onConnectMyLifeMemory}
-        onTestMyLifeMemory={async () => null}
-        onGetMyLifeMemoryStatus={async () => ({
-          state: 'disconnected', serverVersion: null, protocolVersion: null,
-          manifestHash: null, connectedAt: null, lastTestAt: null,
-          lastErrorCode: null,
-        })}
-        onDisconnectMyLifeMemory={async () => ({
-          state: 'disconnected', serverVersion: null, protocolVersion: null,
-          manifestHash: null, connectedAt: null, lastTestAt: null,
-          lastErrorCode: null,
-        })}
-        healthPreferences={{
-          restingHeartRateMin: 60,
-          restingHeartRateMax: 100,
-          rangeConfirmed: true,
-          singleSampleEnabled: false,
-          workoutPolicy: 'suppress',
-          unknownPolicy: 'suppress',
-          cooldownMinutes: 30,
-        }}
-        onHealthPreferences={() => true}
-        onIssueShortcutPairing={async () => ({
-          token: 'pairing-code-once',
-          expiresAt: '2026-09-01T00:00:00.000Z',
-          shortcutVersion: 'shortcut-v3',
-          algorithmVersion: 'heart-v3',
-        })}
-        onGetShortcutConnectionStatus={async () => ({
-          state: 'paired',
-          expiresAt: '2026-09-01T00:00:00.000Z',
-          lastReceivedAt: null,
-          lastTestAt: null,
-          shortcutVersion: 'shortcut-v3',
-          algorithmVersion: 'heart-v3',
-        })}
-        onRevokeShortcutTokens={async () => true}
-        onListMcpProposals={async () => []}
-        onResolveMcpProposal={async () => true}
+        {...commonAiProps}
+        mode="my-life-memory-mcp"
       />,
     );
 
     expect(screen.getByRole('button', { name: '断开', exact: true }))
       .toBeDisabled();
-    expect(await screen.findByText('只读')).toBeInTheDocument();
-    expect(screen.getByText(/最近使用/)).toBeInTheDocument();
     await user.type(
-      screen.getByLabelText('粘贴 My Life Memory 访问码'),
+      screen.getByLabelText('My Life Memory MCP Token'),
       `mlm_${'s'.repeat(64)}`,
     );
     await user.click(screen.getByRole('button', { name: '连接' }));
     expect(onConnectMyLifeMemory).toHaveBeenCalledWith(`mlm_${'s'.repeat(64)}`);
     expect(screen.queryByText(`mlm_${'s'.repeat(64)}`)).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: '创建访问码' }));
-    expect(screen.getByText('output-access-once')).toBeInTheDocument();
+    cleanup();
+    renderWithLanguage(
+      <EmotionMapMcpPanel
+        onIssueToken={onIssueToken}
+        onGetStatus={async () => ({
+          scope: 'records:read',
+          expiresAt: '2026-08-03T00:00:00.000Z',
+          lastUsedAt: '2026-08-02T12:00:00.000Z',
+        })}
+        onRevokeTokens={async () => true}
+        onListProposals={async () => []}
+        onResolveProposal={async () => true}
+      />,
+    );
+    expect(await screen.findByText(/最近使用/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '生成 MCP Token' }));
+    expect(screen.getByText('Bearer output-access-once')).toBeInTheDocument();
 
+    cleanup();
+    vi.stubEnv(
+      'VITE_SHORTCUT_INSTALL_URL',
+      'https://www.icloud.com/shortcuts/device-verified-test',
+    );
+    renderWithLanguage(
+      <AiSettingsPanel {...commonAiProps} mode="health-automation" />,
+    );
     await user.click(screen.getByRole('button', { name: '生成配对码' }));
     expect(screen.getByText('pairing-code-once')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '测试输入' }));
     expect(onTestShortcutPairing).toHaveBeenCalledWith('pairing-code-once');
     expect(screen.getByText('已通过 Edge Function 与数据库往返验证')).toBeInTheDocument();
+    vi.unstubAllEnvs();
   });
 
   it('keeps grounded chat disabled until the user is safely signed in and synced', async () => {

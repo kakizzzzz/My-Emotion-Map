@@ -179,7 +179,7 @@ export const researchEmotionContext = async ({
   now?: Date;
 }) => {
   const allRecords = formalRecords(snapshot);
-  let retrieval = retrieveAuthorizedEvidence(snapshot, query, [], false);
+  let retrieval = retrieveAuthorizedEvidence(snapshot, query);
   if (continuationToken && optionId) {
     const selectedNoteId = await resolveContinuation({
       secret: continuationSecret,
@@ -191,11 +191,15 @@ export const researchEmotionContext = async ({
       now,
     });
     retrieval = selectedNoteId
-      ? retrieveAuthorizedEvidence(snapshot, query, [selectedNoteId], true)
+      ? retrieveAuthorizedEvidence(snapshot, query, {
+          explicitNoteIds: [selectedNoteId],
+          restrictToExplicit: true,
+        })
       : {
           intent: retrieval.intent,
           retrievalStatus: 'evidence_insufficient' as const,
           evidence: [] as AuthorizedEvidence[],
+          computationSet: [] as AuthorizedEvidence[],
           allowedFacts: retrieval.allowedFacts,
         };
   }

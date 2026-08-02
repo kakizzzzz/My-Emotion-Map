@@ -38,7 +38,10 @@ import type { CloudAuth } from '../../services/supabaseClient';
 import type { CloudSyncStatus } from '../../services/useCloudSync';
 import { requestEmotionChat } from '../../services/emotionChat';
 import type { ToastHandler } from '../../app/appTypes';
-import { loadLocalSettings } from '../../app/profilePreferences';
+import {
+  loadLocalSettings,
+  toneTagsFromUserPrompt,
+} from '../../app/profilePreferences';
 import { chatDraftKey } from '../../app/workspace/chatDraftStorage';
 import { createRecordId } from '../../app/createRecordId';
 import type {
@@ -172,9 +175,13 @@ export function ChatScreen({
   const responseStyle = useMemo(
     () => {
       if (!cloudAuth) return [];
-      const allowlist = new Set(['concise', 'direct', 'gentle']);
-      return loadLocalSettings(cloudAuth.userId).aiToneTags
-        .filter((item): item is 'concise' | 'direct' | 'gentle' =>
+      const settings = loadLocalSettings(cloudAuth.userId);
+      const allowlist = new Set(['concise', 'direct', 'gentle', 'sharp']);
+      return [...new Set([
+        ...settings.aiToneTags,
+        ...toneTagsFromUserPrompt(settings.aiUserPrompt),
+      ])]
+        .filter((item): item is 'concise' | 'direct' | 'gentle' | 'sharp' =>
           allowlist.has(item),
         )
         .slice(0, 3);
@@ -313,7 +320,8 @@ export function ChatScreen({
               message,
               language,
               conversationId: conversation.id,
-              selectedNoteIds: conversation.messages
+              explicitNoteIds: [],
+              conversationAnchorNoteIds: conversation.messages
                 .flatMap((item) => item.noteIds ?? [])
                 .slice(-6),
               responseStyle,
@@ -330,6 +338,7 @@ export function ChatScreen({
         noteIds: result.evidence.map((item) => item.noteId),
         externalEvidence: result.externalEvidence,
         clarificationOptions: result.clarificationOptions ?? [],
+        retryable: result.status === 'generation_rejected',
         createdAt: new Date().toISOString(),
       });
     } catch {
@@ -529,6 +538,26 @@ export function ChatScreen({
                         message.requestId,
                         message.referenceConfirmation,
                       )}
+                    >
+                      <RotateCcw size={18} strokeWidth={2.2} />
+                    </button>
+                  ) : null}
+                  {message.role === 'assistant' && message.retryable ? (
+                    <button
+                      type="button"
+                      className="message-retry-action"
+                      aria-label={copy.common.retry}
+                      disabled={sending || !message.replyToRequestId}
+                      onClick={() => {
+                        const original = conversation.messages.find((item) =>
+                          item.requestId === message.replyToRequestId
+                        );
+                        if (original) void sendMessage(
+                          original.body,
+                          undefined,
+                          original.referenceConfirmation,
+                        );
+                      }}
                     >
                       <RotateCcw size={18} strokeWidth={2.2} />
                     </button>

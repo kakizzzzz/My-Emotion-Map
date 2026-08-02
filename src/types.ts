@@ -173,6 +173,7 @@ export type ChatMessage = {
   requestId?: string;
   replyToRequestId?: string;
   deliveryState?: ChatDeliveryState;
+  retryable?: boolean;
   referenceConfirmation?: {
     optionId: string;
     continuationToken: string;
@@ -288,6 +289,7 @@ export type LocalSettings = {
   language: import('./i18n').AppLanguage;
   aboutMe: string;
   aiToneTags: string[];
+  aiUserPrompt: string;
   chatPreferenceTags: string[];
 };
 

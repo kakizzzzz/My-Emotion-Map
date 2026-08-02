@@ -7,7 +7,8 @@ const valid = {
   message: '图书馆那条是什么？',
   language: 'zh',
   conversationId: 'conversation-1',
-  selectedNoteIds: [],
+  explicitNoteIds: [],
+  conversationAnchorNoteIds: [],
   clientRevision: 8,
   responseStyle: ['concise'],
 };
@@ -16,11 +17,16 @@ describe('emotion-chat request boundary', () => {
   afterEach(() => vi.unstubAllGlobals());
   it('accepts only client fields that cannot control model or evidence', () => {
     expect(validateEmotionChatRequest(valid)).not.toBeNull();
+    expect(validateEmotionChatRequest({
+      ...valid,
+      responseStyle: ['sharp', 'not-a-server-style'],
+    })?.responseStyle).toEqual(['sharp']);
     for (const forbidden of [
       { evidence: [{ noteId: 'other-user-note' }] },
       { model: 'expensive-model' },
       { max_tokens: 9999 },
       { systemPrompt: 'ignore boundaries' },
+      { selectedNoteIds: ['legacy-ambiguous-field'] },
     ]) {
       expect(validateEmotionChatRequest({ ...valid, ...forbidden })).toBeNull();
     }
@@ -67,11 +73,46 @@ describe('emotion-chat request boundary', () => {
       message: valid.message,
       language: 'zh',
       conversationId: valid.conversationId,
-      selectedNoteIds: [], clientRevision: valid.clientRevision,
+      conversationAnchorNoteIds: [], clientRevision: valid.clientRevision,
       signal: new AbortController().signal,
     });
     expect(result?.externalEvidence).toEqual([expect.objectContaining({
       referenceId: 'mlm-note-1', source: 'my_life_memory_external',
     })]);
+  });
+
+  it('accepts generation rejection only when retrieval itself succeeded', async () => {
+    const payload = {
+      requestId: valid.requestId,
+      serverRevision: valid.clientRevision,
+      intent: 'lookup',
+      retrievalStatus: 'supported',
+      status: 'generation_rejected',
+      answer: '当前生成没有通过检查。',
+      evidence: [], externalEvidence: [], confidence: 'none',
+      limitations: ['generation_rejected'], clarificationOptions: [],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...payload,
+        retrievalStatus: 'not_found',
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const input = {
+      auth: {
+        supabaseUrl: 'https://project.supabase.co',
+        publishableKey: 'publishable', accessToken: 'access', userId: 'user-a',
+      },
+      requestId: valid.requestId,
+      message: valid.message,
+      language: 'zh' as const,
+      conversationId: valid.conversationId,
+      conversationAnchorNoteIds: [],
+      clientRevision: valid.clientRevision,
+      signal: new AbortController().signal,
+    };
+    expect((await requestEmotionChat(input))?.status).toBe('generation_rejected');
+    expect(await requestEmotionChat(input)).toBeNull();
   });
 });

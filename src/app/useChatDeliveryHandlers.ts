@@ -29,6 +29,7 @@ export type CompleteChatInput = {
   noteIds: string[];
   externalEvidence?: ExternalEvidenceReference[];
   clarificationOptions: ClarificationOption[];
+  retryable?: boolean;
   createdAt: string;
 };
 

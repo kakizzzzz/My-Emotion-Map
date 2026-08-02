@@ -69,8 +69,8 @@ surface without rewriting the earlier checkpoint.
 | --- | --- | --- |
 | Account-only entry | fixed | login has no Demo control or guest bypass; an authenticated Supabase session is required before any workspace opens |
 | Own-data workspace | fixed | every successful session loads only `loadAppData(user.id, 'real')`; settings no longer exposes Demo loading or exit controls |
-| Account ID semantics | fixed | Supabase `account_id` is shown as a read-only ID and never used as the editable local profile-name value |
-| Legacy same-name cleanup | fixed | an old local profile name equal to the account ID is normalized to blank and saved separately from the account identity |
+| Account-name semantics | fixed | Supabase `account_id` is the signed-in account name shown as the primary identity; the internal UUID remains hidden |
+| Same-name preservation | fixed | a saved local display name equal to the account name is preserved rather than silently cleared; the optional field cannot replace the signed-in identity |
 
 Checkpoint evidence:
 
@@ -232,3 +232,45 @@ Phase 5 evidence:
 - Production protocol handshakes, token expiry/revocation, two-account denial,
   `last_used_at`, research continuation and action-confirmation smoke remain
   blocked until Phase 7 deploys the local migrations and both Edge endpoints.
+
+## Phase 6 — Grounded retrieval v3 and time correctness
+
+Status: implementation complete and checkpoint-ready. No database migration or
+Edge Function was deployed in this phase.
+
+| Finding | Status | Verification |
+| --- | --- | --- |
+| P1-AI-039 explicit selection vs history | fixed | request contract separates `explicitNoteIds` and `conversationAnchorNoteIds`; a new topic ignores weak history and current date/emotion constraints outrank record IDs |
+| P1-AI-040 intent-specific ambiguity | fixed | lookup/reflection alone use close-top ambiguity; comparison resolves two targets first and pattern uses the full eligible set |
+| P1-AI-041 complete aggregates | fixed | `computationSet` is uncapped, display evidence is at most six, default answer chips are at most two, and facts include `computedFromCount`, `scope` and 90-minute episode grouping |
+| P1-AI-042 deterministic references | fixed | server-owned recent conversation state resolves first/second/third, previous record and same place within eight messages; unresolved references request clarification |
+| P1-AI-043 shared parsing | fixed | client and Edge import one pure three-language normalization/date/intent core; impossible dates fail and count/recent/clarification have distinct intents |
+| P1-AI-044 generation state | fixed | rejected writing returns `generation_rejected` with `retrievalStatus=supported`, a shared three-claim ceiling, bounded evidence and a new-request retry action |
+| P1-AI-045 local search | fixed | prebuilt O(M+N) search documents exclude system question text, normalize Simplified/Traditional input, debounce 120 ms and cap UI results at eight |
+| P1-TIME-046 source timestamps | fixed | explicit EXIF/health offsets produce the exact UTC instant and source offset; no-offset EXIF stays wall time only; revisit provenance prefers `occurredAtUtc` |
+| Account profile semantics | fixed | the signed-in account remains the visible ID while the initial local nickname follows the My Life Memory language pattern (`用户account`, `User account`, `사용자 account`); UUIDs stay hidden |
+| AI and integration settings | fixed | assistant styles are centered, user prompt text stays local and maps only to allowlisted tone tags, input/output MCP pages are separate, and normal sync noise is hidden while conflict/upload-confirmation safety remains |
+| Apple Health setup clarity | fixed in code; production install blocked | the page is a four-step install/range/pair/device-test flow; advanced review policy is folded, all controls remain at least 44px, and pairing is disabled without a device-verified iCloud Shortcut link |
+
+Phase 6 evidence:
+
+- TypeScript for the app and Edge Functions, ESLint, import/source-size
+  architecture gates and the production Vite build pass.
+- Vitest passes 43 files / 210 tests. New contracts cover unrelated-topic
+  anchor removal, ordinal/place references, explicit-date precedence,
+  same-name lookup ambiguity, two-group comparisons, 20-record aggregates,
+  90-minute episodes, generation-state invariants, a prebuilt 5,000-record
+  search p95 below 50 ms, invalid dates and cross-zone photo/heart/revisit time.
+- Playwright passes 9/9 Chromium Mobile and 9/9 WebKit iPhone tests, including
+  account-only login, empty personal workspaces, editor/revisit flows, 320px,
+  reduced motion, accessibility, landscape, desktop and 200% zoom. The browser
+  suite also checks that the Assistant/connection modules are equal-width,
+  style choices are centered, advanced health policies remain vertical and an
+  unavailable Shortcut install path cannot fabricate pairing or test success.
+- Secret-pattern and credential-log/browser-persistence scans returned no
+  matches. Client requests still cannot choose a model, token limit, prompt or
+  evidence array.
+- The linked project reference was read back as `uifgpmmlvmfrauzbbrem`. Two
+  non-writing `supabase db push --dry-run` attempts reached only the connection
+  stage and then timed out/terminated; no SQL or remote change occurred. Phase
+  6 adds no migration, so production deployment remains a Phase 7 decision.

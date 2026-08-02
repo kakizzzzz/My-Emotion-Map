@@ -15,11 +15,12 @@ export type SettingsPanel =
   | 'profile'
   | 'theme'
   | 'ai'
+  | 'my-life-memory-mcp'
+  | 'health-automation'
   | 'data-account'
-  | 'settings'
+  | 'emotion-map-mcp'
   | 'language'
   | 'location'
-  | 'data'
   | 'export';
 
 export type McpProposal = {
@@ -38,8 +39,6 @@ export type SettingsScreenProps = {
   onThemeTone: (tone: ThemeTone) => void;
   onThemeColor: (key: keyof ThemePalette, color: string) => void;
   onExportData: (range: DataExportRange) => ReadableExportResult;
-  onImportData: (file: File) => Promise<void>;
-  onDeleteAllData: () => void;
   locationRequestState: LocationRequestState;
   onRequestLocation: () => void;
   onToast: ToastHandler;

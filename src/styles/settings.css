@@ -450,32 +450,6 @@
   outline: 0;
 }
 
-.profile-account-id-row {
-  display: grid;
-  min-height: 44px;
-  grid-template-columns: 24px auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 0 12px;
-  border-radius: 12px;
-  background: var(--em-soft-surface);
-}
-
-.profile-account-id-row span {
-  color: var(--em-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.profile-account-id-row strong {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 16px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .profile-editor-fields label > button {
   display: grid;
   width: 32px;
@@ -498,8 +472,19 @@
 
 .profile-password-row > span {
   flex: 1;
-  font-size: 17px;
-  letter-spacing: 0.16em;
+}
+
+.profile-password-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-password-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.75);
 }
 
 .profile-password-row button {
@@ -583,6 +568,7 @@
 .ai-style-options {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -603,6 +589,161 @@
 .ai-style-options button.is-selected {
   background: var(--em-dark);
   color: white;
+}
+
+.ai-user-prompt-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.ai-user-prompt-card > label {
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-user-prompt-card > textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  outline: 0;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
+  line-height: 1.45;
+}
+
+.ai-user-prompt-card > small,
+.mcp-connection-hint,
+.mcp-last-tested {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.connections-card-list > .settings-submenu.ai-settings-links {
+  width: 100%;
+  margin: 2px 0 0;
+}
+
+.mcp-access-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--em-card);
+}
+
+.mcp-access-card > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.mcp-identity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.mcp-identity-grid > div,
+.mcp-config-row > div,
+.mcp-active-token {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.mcp-identity-grid small,
+.mcp-config-row small,
+.mcp-active-token > small {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.mcp-identity-grid strong,
+.mcp-config-row strong {
+  overflow: hidden;
+  color: var(--em-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.mcp-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.mcp-config-row span,
+.mcp-active-token span {
+  overflow-wrap: anywhere;
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.mcp-config-row > button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--em-soft-surface);
+  color: var(--em-text-muted);
+}
+
+.mcp-config-row > button:disabled {
+  opacity: 0.35;
+}
+
+.mcp-feedback,
+.mcp-token-warning {
+  color: var(--em-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.mcp-active-token {
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.mcp-active-token > button {
+  min-height: 36px;
+  justify-self: end;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mcp-token-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  outline: 0;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
 }
 
 .connection-token-once {
@@ -689,70 +830,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-}
-
-.automation-settings,
-.automation-settings fieldset {
-  display: grid;
-  gap: 8px;
-}
-
-.automation-settings fieldset {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.automation-settings legend {
-  grid-column: 1 / -1;
-  padding: 0;
-  color: var(--em-text-secondary);
-  font-size: 12px;
-}
-
-.automation-settings input {
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--em-soft-surface);
-  color: var(--em-text-primary);
-  font: inherit;
-}
-
-.shortcut-connection-status {
-  display: grid;
-  gap: 3px;
-  padding: 11px 12px;
-  border-radius: 12px;
-  background: var(--em-soft-surface);
-}
-
-.shortcut-connection-status strong {
-  font-size: 13px;
-}
-
-.automation-policy-options {
-  display: grid;
-  gap: 8px;
-}
-
-.automation-policy-options button {
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 12px;
-  background: var(--em-soft-surface);
-  color: var(--em-text-primary);
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.automation-policy-options button[aria-pressed='true'] {
-  background: var(--em-dark);
-  color: var(--em-on-dark);
 }
 
 .export-data-card > p,

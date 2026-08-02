@@ -32,4 +32,19 @@ describe('follow-up revisit direction', () => {
     expect(updated[0].currentEmotion).toBe('joy');
     expect(note.emotion).toBe('calm');
   });
+
+  it('preserves the trusted original instant for cross-zone revisits', () => {
+    const [record] = upsertFollowUpRevisit(
+      [],
+      {
+        ...note,
+        occurredAtUtc: '2026-08-01T03:00:00.000Z',
+        localDate: '2026-08-01',
+        localTime: '12:00',
+      },
+      'follow-up-zone',
+      'same',
+    );
+    expect(record.originalOccurredAt).toBe('2026-08-01T03:00:00.000Z');
+  });
 });

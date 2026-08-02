@@ -2,6 +2,15 @@ import type { EventTimeSource, TemporalFields } from '../../types';
 
 const ISO_WITH_OFFSET = /(Z|[+-]\d{2}:?\d{2})$/i;
 
+const timestampOffsetMinutes = (value: string) => {
+  const match = ISO_WITH_OFFSET.exec(value)?.[1];
+  if (!match) return null;
+  if (match.toUpperCase() === 'Z') return 0;
+  const sign = match.startsWith('-') ? -1 : 1;
+  const digits = match.slice(1).replace(':', '');
+  return sign * (Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2)));
+};
+
 const safeTimeZone = () => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
@@ -39,8 +48,9 @@ export const createTemporalFields = ({
     localDate,
     localTime,
     timeZone: source === 'photo-exif' && !hasTrustedOffset ? null : timeZone,
-    utcOffsetMinutes:
-      source === 'photo-exif' && !hasTrustedOffset
+    utcOffsetMinutes: hasTrustedOffset
+      ? timestampOffsetMinutes(sourceTimestamp as string)
+      : source === 'photo-exif'
         ? null
         : currentUtcOffsetMinutes(
             occurredAtUtc ? new Date(occurredAtUtc) : new Date(),

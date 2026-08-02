@@ -103,6 +103,7 @@ export const completeChatRequest = (
     noteIds: string[];
     externalEvidence?: ExternalEvidenceReference[];
     clarificationOptions: ClarificationOption[];
+    retryable?: boolean;
     createdAt: string;
   },
 ): Conversation[] => conversations.map((conversation) => {
@@ -133,6 +134,7 @@ export const completeChatRequest = (
         noteIds: input.noteIds,
         externalEvidence: input.externalEvidence?.slice(0, 6),
         clarificationOptions: input.clarificationOptions.slice(0, 3),
+        retryable: input.retryable === true,
         replyToRequestId: input.requestId,
         createdAt: input.createdAt,
       },

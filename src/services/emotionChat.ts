@@ -22,9 +22,9 @@ export type ExternalPublicEvidence = {
 export type EmotionChatResult = {
   requestId?: string;
   serverRevision?: number;
-  intent: 'lookup' | 'comparison' | 'pattern' | 'reflection' | 'unsupported';
-  retrievalStatus: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'unavailable';
-  status: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'unavailable';
+  intent: 'lookup' | 'comparison' | 'pattern' | 'reflection' | 'count_stats' | 'recent_records' | 'clarification_required' | 'unsupported';
+  retrievalStatus: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'clarification_required' | 'unsupported' | 'unavailable';
+  status: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'clarification_required' | 'unsupported' | 'generation_rejected' | 'unavailable';
   answer: string;
   evidence: PublicEvidence[];
   externalEvidence: ExternalPublicEvidence[];
@@ -40,11 +40,13 @@ const validateResult = (
 ): EmotionChatResult | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
-  const statuses = new Set(['supported', 'ambiguous', 'not_found', 'evidence_insufficient', 'unavailable']);
-  const intents = new Set(['lookup', 'comparison', 'pattern', 'reflection', 'unsupported']);
+  const retrievalStatuses = new Set(['supported', 'ambiguous', 'not_found', 'evidence_insufficient', 'clarification_required', 'unsupported', 'unavailable']);
+  const responseStatuses = new Set([...retrievalStatuses, 'generation_rejected']);
+  const intents = new Set(['lookup', 'comparison', 'pattern', 'reflection', 'count_stats', 'recent_records', 'clarification_required', 'unsupported']);
   if (expectedRequestId && source.requestId !== expectedRequestId) return null;
   if (expectedRevision !== undefined && source.serverRevision !== expectedRevision) return null;
-  if (!statuses.has(String(source.status)) || !statuses.has(String(source.retrievalStatus)) || !intents.has(String(source.intent))) return null;
+  if (!responseStatuses.has(String(source.status)) || !retrievalStatuses.has(String(source.retrievalStatus)) || !intents.has(String(source.intent))) return null;
+  if (source.status === 'generation_rejected' && source.retrievalStatus !== 'supported') return null;
   if (typeof source.answer !== 'string' || source.answer.length > 4_000 || !Array.isArray(source.evidence) || !Array.isArray(source.limitations)) return null;
   const evidence: PublicEvidence[] = [];
   for (const raw of source.evidence.slice(0, 6)) {
@@ -115,7 +117,8 @@ export const requestEmotionChat = async ({
   message,
   language,
   conversationId,
-  selectedNoteIds,
+  explicitNoteIds = [],
+  conversationAnchorNoteIds,
   responseStyle = [],
   clientRevision,
   referenceConfirmation,
@@ -126,8 +129,9 @@ export const requestEmotionChat = async ({
   message: string;
   language: AppLanguage;
   conversationId: string;
-  selectedNoteIds: string[];
-  responseStyle?: Array<'concise' | 'direct' | 'gentle'>;
+  explicitNoteIds?: string[];
+  conversationAnchorNoteIds: string[];
+  responseStyle?: Array<'concise' | 'direct' | 'gentle' | 'sharp'>;
   clientRevision: number;
   referenceConfirmation?: {
     optionId: string;
@@ -147,7 +151,8 @@ export const requestEmotionChat = async ({
       message,
       language,
       conversationId,
-      selectedNoteIds: selectedNoteIds.slice(0, 6),
+      explicitNoteIds: explicitNoteIds.slice(0, 6),
+      conversationAnchorNoteIds: conversationAnchorNoteIds.slice(0, 6),
       responseStyle: responseStyle.slice(0, 3),
       clientRevision,
       referenceConfirmation,

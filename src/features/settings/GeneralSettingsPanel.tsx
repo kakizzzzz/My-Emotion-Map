@@ -1,10 +1,6 @@
-import { useRef } from 'react';
 import {
-  Download,
   Languages,
   MapPin,
-  Trash2,
-  Upload,
 } from 'lucide-react';
 import { LANGUAGE_OPTIONS, useAppLanguage } from '../../i18n';
 import type { LocationRequestState } from '../../useLocationController';
@@ -13,46 +9,13 @@ import type { SettingsPanel } from './settingsTypes';
 export function GeneralSettingsPanel({
   panel,
   locationRequestState,
-  onPanel,
   onRequestLocation,
-  onImportData,
-  onDeleteAllData,
 }: {
-  panel: Extract<
-    SettingsPanel,
-    'settings' | 'language' | 'location' | 'data'
-  >;
+  panel: Extract<SettingsPanel, 'language' | 'location'>;
   locationRequestState: LocationRequestState;
-  onPanel: (panel: SettingsPanel) => void;
   onRequestLocation: () => void;
-  onImportData: (file: File) => Promise<void>;
-  onDeleteAllData: () => void;
 }) {
   const { copy, language, setLanguage } = useAppLanguage();
-  const importInputRef = useRef<HTMLInputElement | null>(null);
-
-  if (panel === 'settings') {
-    return (
-      <div className="settings-submenu">
-        <button onClick={() => onPanel('language')}>
-          <Languages size={24} strokeWidth={2.2} />
-          <span>{copy.settings.language}</span>
-        </button>
-        <button onClick={() => onPanel('location')}>
-          <MapPin size={24} strokeWidth={2.2} />
-          <span>{copy.location.settingsTitle}</span>
-        </button>
-        <button onClick={() => onPanel('export')}>
-          <Download size={24} strokeWidth={2.2} />
-          <span>{copy.settings.exportData}</span>
-        </button>
-        <button onClick={() => onPanel('data')}>
-          <Download size={24} strokeWidth={2.2} />
-          <span>{copy.settings.dataManagement}</span>
-        </button>
-      </div>
-    );
-  }
 
   if (panel === 'language') {
     return (
@@ -125,36 +88,5 @@ export function GeneralSettingsPanel({
     );
   }
 
-  return (
-    <section className="copied-settings-card data-management-card">
-      <header>
-        <Download size={24} strokeWidth={2.2} />
-        <h2>{copy.settings.dataManagement}</h2>
-      </header>
-      <div className="data-management-actions">
-        <button onClick={() => importInputRef.current?.click()}>
-          <Upload size={19} strokeWidth={2.2} />
-          {copy.settings.importJson}
-        </button>
-        <input
-          ref={importInputRef}
-          className="visually-hidden"
-          type="file"
-          accept="application/json,.json"
-          onChange={async (event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = '';
-            if (file) await onImportData(file);
-          }}
-        />
-        <button
-          className="is-destructive"
-          onClick={onDeleteAllData}
-        >
-          <Trash2 size={19} strokeWidth={2.2} />
-          {copy.settings.deleteAllData}
-        </button>
-      </div>
-    </section>
-  );
+  return null;
 }

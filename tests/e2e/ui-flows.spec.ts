@@ -206,15 +206,16 @@ test('authenticated identity opens an empty real workspace', async ({
   ).toHaveCount(0);
   await drawer.getByRole('button', { name: '设置' }).click();
 
-  await expect(page.getByRole('heading', { name: 'e2e_student' })).toBeVisible();
-  await expect(page.getByText('ID: e2e_student')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '用户e2e_student' })).toBeVisible();
+  await expect(page.getByText('ID:e2e_student')).toBeVisible();
   await expect(page.getByText('00000000-0000-4000-8000-000000000001')).toHaveCount(0);
   await expect(page.getByText('Mina Park')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '退出账号' })).toBeVisible();
-  await page.getByRole('button', { name: '个人' }).click();
-  await expect(page.locator('.profile-account-id-row').getByText('ID', { exact: true })).toBeVisible();
-  await expect(page.locator('.profile-account-id-row strong')).toHaveText('e2e_student');
-  await expect(page.getByRole('textbox', { name: '本地档案名称' })).toHaveValue('');
+  await page.getByRole('button', { name: '修改信息' }).click();
+  await expect(page.locator('.profile-account-id-row')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
+    '用户e2e_student',
+  );
 });
 
 test('Shortcut setup stays vertical and cannot fake a test before pairing', async ({
@@ -225,11 +226,23 @@ test('Shortcut setup stays vertical and cannot fake a test before pairing', asyn
   await page.getByRole('dialog', { name: '页面导航' })
     .getByRole('button', { name: '设置' })
     .click();
-  await page.getByRole('button', { name: 'AI' }).click();
+  await page.getByRole('button', { name: 'AI设置' }).click();
+
+  const assistantCardBox = await page.locator('.ai-settings-panel > .connection-card')
+    .first().boundingBox();
+  const aiLinksBox = await page.locator('.ai-settings-links').boundingBox();
+  expect(aiLinksBox?.width).toBeCloseTo(assistantCardBox!.width, 0);
+  expect(await page.locator('.ai-style-options').evaluate(
+    (element) => getComputedStyle(element).justifyContent,
+  )).toBe('center');
+
+  await page.getByRole('button', { name: 'Apple健康自动化' }).click();
 
   await expect(page.getByText('未安装')).toBeVisible();
-  await expect(page.getByText('尚未配置经过真机验证的安装链接')).toBeVisible();
+  await expect(page.getByText('暂不可用：还没有经过真机验证的一键安装链接。')).toBeVisible();
+  await expect(page.getByRole('button', { name: '生成配对码' })).toBeDisabled();
   await expect(page.getByRole('button', { name: '测试输入' })).toBeDisabled();
+  await page.getByText('高级复核规则').click();
   const policyButtons = [
     page.getByRole('button', { name: '允许单次样本复核' }),
     page.getByRole('button', { name: '允许运动后复核' }),

@@ -4,8 +4,8 @@ import {
   ChevronRight,
   Bot,
   Database,
-  HardDrive,
   Palette,
+  Settings as SettingsIcon,
   UserRound,
   X,
 } from 'lucide-react';
@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { MOTION } from '../../motion';
 import { useAppLanguage } from '../../i18n';
 import {
+  buildDefaultProfileName,
   loadLocalSettings,
   saveLocalSettings,
 } from '../../app/profilePreferences';
@@ -27,6 +28,7 @@ import type {
 import { useDialogFocus } from '../../app/useDialogFocus';
 import { AiSettingsPanel } from './AiSettingsPanel';
 import { DataAccountSettingsPanel } from './DataAccountSettingsPanel';
+import { EmotionMapMcpPanel } from './EmotionMapMcpPanel';
 
 export function SettingsScreen({
   themeTone,
@@ -34,8 +36,6 @@ export function SettingsScreen({
   onThemeTone,
   onThemeColor,
   onExportData,
-  onImportData,
-  onDeleteAllData,
   locationRequestState,
   onRequestLocation,
   onToast,
@@ -69,17 +69,21 @@ export function SettingsScreen({
     () => loadLocalSettings(cloudUserId),
     [cloudUserId],
   );
-  const initialProfileName =
-    initialSettings.profileName.trim().toLocaleLowerCase() ===
-    cloudAccount?.trim().toLocaleLowerCase()
-      ? ''
-      : initialSettings.profileName;
   const [panel, setPanel] = useState<SettingsPanel | null>(null);
   const [avatarSrc, setAvatarSrc] = useState(initialSettings.avatarSrc);
   const [profileName, setProfileName] = useState(
-    initialProfileName,
+    cloudAccount && (
+      !initialSettings.profileName ||
+      initialSettings.profileName.toLocaleLowerCase() ===
+        cloudAccount.trim().toLocaleLowerCase()
+    )
+      ? buildDefaultProfileName(cloudAccount, language)
+      : initialSettings.profileName,
   );
   const [aiStyles, setAiStyles] = useState(initialSettings.aiToneTags);
+  const [aiUserPrompt, setAiUserPrompt] = useState(
+    initialSettings.aiUserPrompt,
+  );
   const rows: Array<{
     id: SettingsPanel;
     label: string;
@@ -88,7 +92,7 @@ export function SettingsScreen({
     { id: 'profile', label: copy.settings.personal, icon: Database },
     { id: 'theme', label: copy.settings.appearance, icon: Palette },
     { id: 'ai', label: copy.settings.ai, icon: Bot },
-    { id: 'data-account', label: copy.settings.dataAccount, icon: HardDrive },
+    { id: 'data-account', label: copy.settings.dataAccount, icon: SettingsIcon },
   ];
   const panelTitle =
     panel === 'profile'
@@ -97,17 +101,21 @@ export function SettingsScreen({
         ? copy.settings.theme
         : panel === 'ai'
           ? copy.settings.ai
-          : panel === 'data-account'
-            ? copy.settings.dataAccount
-            : panel === 'language'
-              ? copy.settings.language
-              : panel === 'location'
-                ? copy.location.settingsTitle
-                : panel === 'data'
-                  ? copy.settings.dataManagement
-                  : panel === 'export'
-                    ? copy.settings.exportData
-                  : copy.settings.general;
+          : panel === 'my-life-memory-mcp'
+            ? copy.settings.myLifeMemoryMcp
+            : panel === 'health-automation'
+              ? copy.settings.healthAutomation
+              : panel === 'data-account'
+                ? copy.settings.dataAccount
+                : panel === 'emotion-map-mcp'
+                  ? copy.settings.emotionMapMcp
+                  : panel === 'language'
+                    ? copy.settings.language
+                    : panel === 'location'
+                      ? copy.location.settingsTitle
+                      : panel === 'export'
+                        ? copy.settings.exportData
+                        : copy.settings.general;
 
   useEffect(() => {
     saveLocalSettings({
@@ -116,17 +124,22 @@ export function SettingsScreen({
       profileName,
       language,
       aiToneTags: aiStyles,
+      aiUserPrompt,
     }, cloudUserId);
-  }, [aiStyles, avatarSrc, cloudUserId, language, profileName]);
+  }, [aiStyles, aiUserPrompt, avatarSrc, cloudUserId, language, profileName]);
 
   const closePanel = () => {
     if (
       panel === 'language' ||
       panel === 'location' ||
-      panel === 'data' ||
-      panel === 'export'
+      panel === 'export' ||
+      panel === 'emotion-map-mcp'
     ) {
       setPanel('data-account');
+      return;
+    }
+    if (panel === 'my-life-memory-mcp' || panel === 'health-automation') {
+      setPanel('ai');
       return;
     }
     setPanel(null);
@@ -185,10 +198,8 @@ export function SettingsScreen({
             )}
           </button>
           <div>
-            <h2>
-              {profileName || cloudAccount || copy.settings.localProfileName}
-            </h2>
-            {cloudAccount ? <p>ID: {cloudAccount}</p> : null}
+            <h2>{profileName || cloudAccount || copy.settings.localProfileName}</h2>
+            {cloudAccount ? <p>ID:{cloudAccount}</p> : null}
           </div>
         </div>
 
@@ -252,7 +263,6 @@ export function SettingsScreen({
                 <ProfileSettingsPanel
                   avatarSrc={avatarSrc}
                   profileName={profileName}
-                  accountId={cloudAccount}
                   canChangePassword={Boolean(cloudUserId)}
                   onAvatarSrc={setAvatarSrc}
                   onProfileName={setProfileName}
@@ -266,14 +276,17 @@ export function SettingsScreen({
                   onThemeTone={onThemeTone}
                   onThemeColor={onThemeColor}
                 />
-              ) : panel === 'ai' ? (
+              ) : panel === 'ai' ||
+                panel === 'my-life-memory-mcp' ||
+                panel === 'health-automation' ? (
                 <AiSettingsPanel
+                  mode={panel}
                   styles={aiStyles}
+                  userPrompt={aiUserPrompt}
                   onStyles={setAiStyles}
+                  onUserPrompt={setAiUserPrompt}
+                  onPanel={setPanel}
                   onTestShortcutPairing={onTestShortcutPairing}
-                  onIssueToken={onIssueMcpToken}
-                  onGetMcpOutputStatus={onGetMcpOutputStatus}
-                  onRevokeTokens={onRevokeAllMcpTokens}
                   onConnectMyLifeMemory={onConnectMyLifeMemory}
                   onTestMyLifeMemory={onTestMyLifeMemory}
                   onGetMyLifeMemoryStatus={onGetMyLifeMemoryStatus}
@@ -283,8 +296,6 @@ export function SettingsScreen({
                   onIssueShortcutPairing={onIssueShortcutPairing}
                   onGetShortcutConnectionStatus={onGetShortcutConnectionStatus}
                   onRevokeShortcutTokens={onRevokeShortcutTokens}
-                  onListMcpProposals={onListMcpProposals}
-                  onResolveMcpProposal={onResolveMcpProposal}
                 />
               ) : panel === 'data-account' ? (
                 <DataAccountSettingsPanel
@@ -294,16 +305,21 @@ export function SettingsScreen({
                   onUseRemoteVersion={onUseRemoteVersion}
                   onOverwriteRemote={onOverwriteRemote}
                 />
+              ) : panel === 'emotion-map-mcp' ? (
+                <EmotionMapMcpPanel
+                  onIssueToken={onIssueMcpToken}
+                  onGetStatus={onGetMcpOutputStatus}
+                  onRevokeTokens={onRevokeAllMcpTokens}
+                  onListProposals={onListMcpProposals}
+                  onResolveProposal={onResolveMcpProposal}
+                />
               ) : panel === 'export' ? (
                 <ExportDataPanel onExportData={onExportData} />
               ) : (
                 <GeneralSettingsPanel
                   panel={panel}
                   locationRequestState={locationRequestState}
-                  onPanel={setPanel}
                   onRequestLocation={onRequestLocation}
-                  onImportData={onImportData}
-                  onDeleteAllData={onDeleteAllData}
                 />
               )}
             </motion.div>

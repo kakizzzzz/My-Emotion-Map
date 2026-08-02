@@ -1,3 +1,14 @@
+import {
+  extractExplicitEmotion,
+  isReferenceOnlyQuery,
+  normalizeQueryText,
+  parseComparisonTargets,
+  parseQueryConstraints,
+  routeQueryIntent,
+  tokenizeQuery,
+  type QueryIntent,
+} from '../../../src/domain/query/queryCore.ts';
+
 export type ChatLanguage = 'zh' | 'en' | 'ko';
 export type ClaimKind =
   | 'record_fact'
@@ -6,26 +17,25 @@ export type ClaimKind =
   | 'reflection'
   | 'limitation';
 
-export type QueryIntent =
-  | 'lookup'
-  | 'comparison'
-  | 'pattern'
-  | 'reflection'
-  | 'unsupported';
-
 export type RetrievalStatus =
   | 'supported'
   | 'ambiguous'
   | 'not_found'
   | 'evidence_insufficient'
+  | 'clarification_required'
+  | 'unsupported'
   | 'unavailable';
 
 export type AllowedFacts = {
   recordCount: number;
+  computedFromCount: number;
+  scope: 'all_matching_owner_records';
+  episodeCount: number;
   dateCount: number;
   spanDays: number;
   dates: string[];
   repeatedEligible: boolean;
+  possibleRepeatedEligible: boolean;
   stableRepeatedEligible: boolean;
 };
 
@@ -57,6 +67,8 @@ export type GeneratedChatDraft = {
   limitations: string[];
 };
 
+export const MAX_CHAT_CLAIMS = 3;
+
 type JsonObject = Record<string, unknown>;
 
 const asObject = (value: unknown): JsonObject | null =>
@@ -64,18 +76,9 @@ const asObject = (value: unknown): JsonObject | null =>
     ? value as JsonObject
     : null;
 
-export const normalized = (value: string) => value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
-
-export const queryTerms = (query: string) => {
-  const value = normalized(query);
-  const latin = value.match(/[a-z0-9]+/g) ?? [];
-  const hangul = value.match(/[\uac00-\ud7a3]{2,}/g) ?? [];
-  const cjk = value.match(/[\u3400-\u9fff]{2,}/g) ?? [];
-  const bigrams = [...hangul, ...cjk].flatMap((word) =>
-    Array.from({ length: Math.max(word.length - 1, 0) }, (_, index) => word.slice(index, index + 2)),
-  );
-  return [...new Set([...latin, ...bigrams])].slice(0, 30);
-};
+export const normalized = normalizeQueryText;
+export const queryTerms = tokenizeQuery;
+export const parseChatQueryConstraints = parseQueryConstraints;
 
 const EMOTION_ALIASES: Record<string, string[]> = {
   calm: ['平静', 'calm', '평온'], joy: ['开心', '快乐', 'joy', 'happy', '기쁨'],
@@ -87,37 +90,7 @@ const EMOTION_ALIASES: Record<string, string[]> = {
   unknown: ['未知', '未选择', 'unknown', 'not selected', '알 수 없음'],
 };
 
-const explicitEmotion = (query: string) => {
-  const value = normalized(query);
-  return Object.entries(EMOTION_ALIASES).find(([, aliases]) => aliases.some((alias) => value.includes(normalized(alias))))?.[0] ?? null;
-};
-
-const explicitDate = (query: string) => query.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0] ?? null;
-
-const localIsoDate = (date: Date) =>
-  `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
-
-const explicitDateRange = (query: string, now = new Date()) => {
-  const days = /最近\s*7\s*天|last\s*7\s*days|최근\s*7일/i.test(query)
-    ? 7
-    : /最近\s*30\s*天|last\s*30\s*days|최근\s*30일/i.test(query)
-      ? 30
-      : null;
-  if (!days) return null;
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12));
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - (days - 1));
-  return { start: localIsoDate(start), end: localIsoDate(end) };
-};
-
-export const routeIntent = (query: string): QueryIntent => {
-  if (/诊断|抑郁症|焦虑症|人格|潜意识|diagnos|disorder|personality|subconscious|진단|성격|무의식/i.test(query)) return 'unsupported';
-  if (/比较|相比|区别|versus|\bvs\b|compare|비교/i.test(query)) return 'comparison';
-  if (/经常|重复|规律|哪些地方|pattern|often|repeat|자주|반복/i.test(query)) return 'pattern';
-  if (/怎么看|回看|想起|reflect|looking back|돌아보/i.test(query)) return 'reflection';
-  if (explicitDate(query) || explicitDateRange(query) || explicitEmotion(query)) return 'lookup';
-  return 'reflection';
-};
+export const routeIntent = routeQueryIntent;
 
 export const computeAllowedFacts = (
   evidence: AuthorizedEvidence[],
@@ -125,18 +98,44 @@ export const computeAllowedFacts = (
   const localEvidence = evidence.filter(
     (item) => item.source !== 'my_life_memory_external',
   );
-  const dates = [...new Set(localEvidence.map((item) => item.date).filter(Boolean))].sort();
+  const ordered = [...localEvidence].sort((left, right) =>
+    `${left.date}T${left.time || '00:00'}`.localeCompare(
+      `${right.date}T${right.time || '00:00'}`,
+    )
+  );
+  const lastEpisodeByPlace = new Map<string, { at: number; date: string }>();
+  const episodes: Array<{ date: string }> = [];
+  for (const item of ordered) {
+    const placeKey = normalized(item.place) || `note:${item.noteId}`;
+    const at = Date.parse(`${item.date}T${item.time || '00:00'}:00`);
+    const previous = lastEpisodeByPlace.get(placeKey);
+    if (
+      previous && Number.isFinite(at) && at >= previous.at &&
+      at - previous.at <= 90 * 60_000
+    ) {
+      previous.at = at;
+      continue;
+    }
+    const episode = { at, date: item.date };
+    lastEpisodeByPlace.set(placeKey, episode);
+    episodes.push(episode);
+  }
+  const dates = [...new Set(episodes.map((item) => item.date).filter(Boolean))].sort();
   const first = dates[0] ? Date.parse(`${dates[0]}T12:00:00Z`) : 0;
   const last = dates.at(-1) ? Date.parse(`${dates.at(-1)}T12:00:00Z`) : first;
   const spanDays = Math.max(0, Math.round((last - first) / 86_400_000));
   return {
     recordCount: localEvidence.length,
+    computedFromCount: localEvidence.length,
+    scope: 'all_matching_owner_records',
+    episodeCount: episodes.length,
     dateCount: dates.length,
     spanDays,
     dates,
-    repeatedEligible: localEvidence.length >= 3 && dates.length >= 3,
+    possibleRepeatedEligible: episodes.length >= 2 && dates.length >= 2,
+    repeatedEligible: episodes.length >= 3 && dates.length >= 3,
     stableRepeatedEligible:
-      localEvidence.length >= 5 && dates.length >= 4 && spanDays >= 21,
+      episodes.length >= 5 && dates.length >= 4 && spanDays >= 21,
   };
 };
 
@@ -145,19 +144,39 @@ export const resolveRetrievalStatus = (
   evidence: AuthorizedEvidence[],
   scores: number[],
 ): RetrievalStatus => {
-  if (intent === 'unsupported') return 'evidence_insufficient';
+  if (intent === 'unsupported') return 'unsupported';
+  if (intent === 'clarification_required') return 'clarification_required';
   if (!evidence.length) return 'not_found';
-  if (scores.length > 1 && scores[0] - scores[1] < 8) return 'ambiguous';
   const facts = computeAllowedFacts(evidence);
   if (intent === 'comparison' && evidence.length < 2) return 'evidence_insufficient';
   if (intent === 'pattern' && !facts.repeatedEligible) return 'evidence_insufficient';
+  if (
+    (intent === 'lookup' || intent === 'reflection') &&
+    scores.length > 1 && scores[0] - scores[1] < 8
+  ) return 'ambiguous';
   return 'supported';
+};
+
+export type RetrievalOptions = {
+  explicitNoteIds?: string[];
+  conversationAnchorNoteIds?: string[];
+  restrictToExplicit?: boolean;
+  resolvedReferenceNoteIds?: string[];
+};
+
+export type AuthorizedRetrieval = {
+  intent: QueryIntent;
+  retrievalStatus: RetrievalStatus;
+  evidence: AuthorizedEvidence[];
+  computationSet: AuthorizedEvidence[];
+  allowedFacts: AllowedFacts;
 };
 
 const rankAuthorizedEvidence = (
   payload: unknown,
   query: string,
-  selectedNoteIds: string[],
+  explicitNoteIds: string[],
+  resolvedReferenceNoteIds: string[] = [],
 ): Array<{ evidence: AuthorizedEvidence; score: number }> => {
   const snapshot = asObject(payload);
   if (!snapshot || snapshot.dataMode !== 'real' || !Array.isArray(snapshot.notes) || !Array.isArray(snapshot.moments)) return [];
@@ -168,14 +187,26 @@ const rankAuthorizedEvidence = (
     if (moment.isNew === true || moment.isInboxDraft === true) continue;
     moments.set(moment.noteId, moment);
   }
-  const selected = new Set(selectedNoteIds);
+  const selected = new Set([...explicitNoteIds, ...resolvedReferenceNoteIds]);
   const normalizedQuery = normalized(query);
   const shortQuery = /^[\p{L}\p{N}]{1,2}$/u.test(normalizedQuery);
-  const terms = shortQuery ? [] : queryTerms(query);
-  const date = explicitDate(query);
-  const dateRange = explicitDateRange(query);
-  const emotion = explicitEmotion(query);
-  if (!selected.size && !date && !dateRange && !emotion && !terms.length) return [];
+  const intent = routeIntent(query);
+  const comparisonTerms = intent === 'comparison'
+    ? parseComparisonTargets(query).map(normalized)
+    : [];
+  const terms = shortQuery
+    ? []
+    : [...new Set([...queryTerms(query), ...comparisonTerms])];
+  const constraints = parseQueryConstraints(query);
+  if (constraints.invalidDate) return [];
+  const date = constraints.exactDate;
+  const dateRange = constraints.dateRange;
+  const emotion = extractExplicitEmotion(query);
+  const hasCurrentConstraint = Boolean(date || dateRange || emotion);
+  if (
+    !selected.size && !date && !dateRange && !emotion && !terms.length &&
+    !shortQuery
+  ) return [];
   return snapshot.notes
     .map(asObject)
     .filter((note): note is JsonObject => Boolean(note && note.isDraft !== true && typeof note.id === 'string' && moments.has(note.id)))
@@ -208,7 +239,7 @@ const rankAuthorizedEvidence = (
       const answerMatches = terms.filter((term) => answerText.includes(term)).length;
       const exactShortLabel = shortQuery &&
         (titleText === normalizedQuery || placeText === normalizedQuery);
-      const explicitId = selected.has(candidate.noteId);
+      const explicitId = selected.has(candidate.noteId) && !hasCurrentConstraint;
       const exactDate = Boolean(date && candidate.date === date);
       const insideDateRange = Boolean(
         dateRange &&
@@ -216,10 +247,15 @@ const rankAuthorizedEvidence = (
         candidate.date <= dateRange.end,
       );
       const exactEmotion = Boolean(emotion && (emotion === 'unknown' ? candidate.emotion === null : candidate.emotion === emotion));
-      const score = Number(explicitId) * 100 + Number(exactDate) * 40 +
+      let score = Number(explicitId) * 100 + Number(exactDate) * 40 +
         Number(insideDateRange) * 30 + Number(exactEmotion) * 28 +
         Number(exactShortLabel) * 32 +
         titleMatches * 8 + placeMatches * 7 + answerMatches * 3;
+      if (
+        score === 0 &&
+        (intent === 'recent_records' || intent === 'count_stats' ||
+          (intent === 'pattern' && /哪些地方|经常|规律|pattern|often|자주/i.test(query)))
+      ) score = 1;
       const matchReason = explicitId
         ? 'selected_record'
         : exactDate
@@ -241,7 +277,6 @@ const rankAuthorizedEvidence = (
     })
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score || right.occurredAt.localeCompare(left.occurredAt))
-    .slice(0, 6)
     .map((item, index) => ({
       score: item.score,
       evidence: {
@@ -257,42 +292,142 @@ const rankAuthorizedEvidence = (
 export const selectAuthorizedEvidence = (
   payload: unknown,
   query: string,
-  selectedNoteIds: string[],
+  explicitNoteIds: string[],
 ): AuthorizedEvidence[] =>
-  rankAuthorizedEvidence(payload, query, selectedNoteIds).map(
+  rankAuthorizedEvidence(payload, query, explicitNoteIds).slice(0, 6).map(
     (item) => item.evidence,
   );
 
 export const retrieveAuthorizedEvidence = (
   payload: unknown,
   query: string,
-  selectedNoteIds: string[],
-  restrictToSelected = false,
-) => {
-  const intent = routeIntent(query);
-  if (intent === 'unsupported') {
+  options: RetrievalOptions | string[] = {},
+  legacyRestrictToSelected = false,
+): AuthorizedRetrieval => {
+  const normalizedOptions: RetrievalOptions = Array.isArray(options)
+    ? { explicitNoteIds: options, restrictToExplicit: legacyRestrictToSelected }
+    : options;
+  const routedIntent = routeIntent(query);
+  const intent = routedIntent === 'clarification_required' &&
+      (normalizedOptions.resolvedReferenceNoteIds?.length ?? 0) > 0
+    ? 'lookup'
+    : routedIntent;
+  if (intent === 'unsupported' || intent === 'clarification_required') {
     return {
       intent,
-      retrievalStatus: 'evidence_insufficient' as const,
+      retrievalStatus: intent,
       evidence: [] as AuthorizedEvidence[],
+      computationSet: [] as AuthorizedEvidence[],
       allowedFacts: computeAllowedFacts([]),
     };
   }
-  const selected = new Set(selectedNoteIds);
-  const ranked = rankAuthorizedEvidence(payload, query, selectedNoteIds)
-    .filter((item) => !restrictToSelected || selected.has(item.evidence.noteId));
-  const evidence = ranked.map((item) => item.evidence);
+  const explicitNoteIds = normalizedOptions.explicitNoteIds ?? [];
+  const resolvedReferenceNoteIds = normalizedOptions.resolvedReferenceNoteIds ?? [];
+  const selected = new Set([...explicitNoteIds, ...resolvedReferenceNoteIds]);
+  const ranked = rankAuthorizedEvidence(
+    payload,
+    query,
+    explicitNoteIds,
+    resolvedReferenceNoteIds,
+  ).filter((item) =>
+    !normalizedOptions.restrictToExplicit || selected.has(item.evidence.noteId)
+  );
+  const computationSet = ranked.map((item) => item.evidence);
+  const evidence = computationSet.slice(0, 6).map((item, index) => ({
+    ...item,
+    key: `E${index + 1}`,
+  }));
   const retrievalStatus = resolveRetrievalStatus(
     intent,
-    evidence,
+    computationSet,
     ranked.map((item) => item.score),
   );
+  const comparisonTargets = intent === 'comparison'
+    ? parseComparisonTargets(query)
+    : [];
+  const comparisonStatus = intent === 'comparison' && comparisonTargets.length !== 2
+    ? 'clarification_required' as const
+    : intent === 'comparison' && comparisonTargets.some((target) =>
+        !computationSet.some((item) => normalized(
+          `${item.title} ${item.place} ${item.excerpt} ${item.answers.join(' ')}`,
+        ).includes(target))
+      )
+      ? 'evidence_insufficient' as const
+      : retrievalStatus;
   return {
     intent,
-    retrievalStatus,
+    retrievalStatus: comparisonStatus,
     evidence,
-    allowedFacts: computeAllowedFacts(evidence),
+    computationSet,
+    allowedFacts: computeAllowedFacts(computationSet),
   };
+};
+
+export const resolveConversationReference = (
+  payload: unknown,
+  conversationId: string,
+  query: string,
+  clientAnchorNoteIds: string[],
+) => {
+  if (!isReferenceOnlyQuery(query)) {
+    return { status: 'none' as const, noteIds: [] as string[] };
+  }
+  const snapshot = asObject(payload);
+  const conversations = Array.isArray(snapshot?.conversations)
+    ? snapshot.conversations.map(asObject)
+    : [];
+  const conversation = conversations.find((item) => item?.id === conversationId);
+  if (!conversation || !Array.isArray(conversation.messages)) {
+    return { status: 'clarification_required' as const, noteIds: [] as string[] };
+  }
+  const formalIds = new Set<string>();
+  const moments = Array.isArray(snapshot?.moments) ? snapshot.moments.map(asObject) : [];
+  for (const moment of moments) {
+    if (
+      typeof moment?.noteId === 'string' && moment.isNew !== true &&
+      moment.isInboxDraft !== true
+    ) formalIds.add(moment.noteId);
+  }
+  const clientAnchors = new Set(clientAnchorNoteIds);
+  const recent = conversation.messages.slice(-8).map(asObject).filter(Boolean);
+  const assistant = [...recent].reverse().find((message) =>
+    message?.role === 'assistant' && Array.isArray(message.noteIds)
+  );
+  const serverAnchors = Array.isArray(assistant?.noteIds)
+    ? assistant.noteIds.filter((id): id is string =>
+        typeof id === 'string' && formalIds.has(id) &&
+        (!clientAnchors.size || clientAnchors.has(id))
+      ).slice(0, 6)
+    : [];
+  if (!serverAnchors.length) {
+    return { status: 'clarification_required' as const, noteIds: [] as string[] };
+  }
+  const value = normalized(query);
+  const ordinal = /(?:第二个|the second one|두 번째)/i.test(value) ? 1
+    : /(?:第三个|the third one|세 번째)/i.test(value) ? 2
+      : /(?:第一个|the first one|첫 번째)/i.test(value) ? 0 : null;
+  if (ordinal !== null) {
+    const noteId = serverAnchors[ordinal];
+    return noteId
+      ? { status: 'resolved' as const, noteIds: [noteId] }
+      : { status: 'clarification_required' as const, noteIds: [] as string[] };
+  }
+  if (/上一条|刚才那条|previous one|이전 기록/i.test(value)) {
+    return { status: 'resolved' as const, noteIds: [serverAnchors[0]] };
+  }
+  if (/那个地方|那里|that place|그 장소/i.test(value)) {
+    const notes = Array.isArray(snapshot?.notes) ? snapshot.notes.map(asObject) : [];
+    const placeById = new Map(notes.flatMap((note) =>
+      typeof note?.id === 'string' && typeof note.place === 'string'
+        ? [[note.id, normalized(note.place)] as const]
+        : []
+    ));
+    const places = new Set(serverAnchors.map((id) => placeById.get(id)).filter(Boolean));
+    return places.size === 1
+      ? { status: 'resolved' as const, noteIds: serverAnchors }
+      : { status: 'clarification_required' as const, noteIds: [] as string[] };
+  }
+  return { status: 'clarification_required' as const, noteIds: [] as string[] };
 };
 
 const CLAIM_KINDS = new Set<ClaimKind>([
@@ -342,7 +477,7 @@ export const parseGeneratedDraft = (value: unknown): GeneratedChatDraft | null =
   if (!source) return null;
   const allowedDraftKeys = new Set(['claims', 'limitations']);
   if (Object.keys(source).some((key) => !allowedDraftKeys.has(key)) ||
-    !Array.isArray(source.claims) || source.claims.length > 8 ||
+    !Array.isArray(source.claims) || source.claims.length > MAX_CHAT_CLAIMS ||
     !Array.isArray(source.limitations) || source.limitations.length > 5 ||
     source.limitations.some((item) => typeof item !== 'string')) return null;
   const claims: GeneratedClaim[] = [];
@@ -389,6 +524,7 @@ export const validateGeneratedDraft = (
       evidence.some((item) => item.source === 'my_life_memory_external')) return false;
     const allowedFactKeySet = new Set([
       'recordCount', 'dateCount', 'spanDays', 'repeatedEligible', 'stableRepeatedEligible',
+      'computedFromCount', 'episodeCount', 'possibleRepeatedEligible', 'scope',
     ]);
     if (claim.allowedFactKeys.some((key) => !allowedFactKeySet.has(key))) return false;
     if (!factualTokensMatch(claim.text, evidence, allowedFacts) || mentionsUnsupportedEmotion(claim.text, evidence)) return false;
@@ -440,6 +576,12 @@ export const ambiguousAnswer = (language: ChatLanguage) => ({
   zh: '找到几条相近记录，请先选一条。',
   en: 'I found several similar records. Choose one first.',
   ko: '비슷한 기록을 여러 개 찾았습니다. 먼저 하나를 선택해 주세요.',
+} as const)[language];
+
+export const clarificationRequiredAnswer = (language: ChatLanguage) => ({
+  zh: '请再说明你想查看的记录、日期或地点。',
+  en: 'Please specify the record, date, or place you want to view.',
+  ko: '확인할 기록, 날짜 또는 장소를 조금 더 구체적으로 알려 주세요.',
 } as const)[language];
 
 export const recentConversationContext = (

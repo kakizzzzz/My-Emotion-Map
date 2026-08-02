@@ -39,7 +39,10 @@ import type {
   MapProvider,
 } from './coordinateTransforms';
 import { resolveInitialViewport } from './resolveInitialViewport';
-import { rankLocalRecords } from '../../domain/query/rankRecords';
+import {
+  createLocalSearchIndex,
+  rankLocalSearch,
+} from '../../domain/query/rankRecords';
 import {
   getDemoFitPadding,
   getMomentBounds,
@@ -115,6 +118,7 @@ export function MapScreen({
   const [searchOpen, setSearchOpen] = useState(false);
   const [coordinateSearch, setCoordinateSearch] = useState('');
   const [textSearch, setTextSearch] = useState('');
+  const [debouncedTextSearch, setDebouncedTextSearch] = useState('');
   const [activeSearchField, setActiveSearchField] = useState<'coordinate' | 'text'>('text');
   const [tagMode, setTagMode] = useState<'add' | 'remove' | null>(null);
   const [currentTagGroup, setCurrentTagGroup] = useState(() => Date.now());
@@ -205,6 +209,14 @@ export function MapScreen({
       // Keep the selected map style for the current session.
     }
   }, [mapStyle]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedTextSearch(textSearch),
+      120,
+    );
+    return () => window.clearTimeout(timer);
+  }, [textSearch]);
 
   useEffect(() => {
     if (!focusMomentId) return;
@@ -331,13 +343,18 @@ export function MapScreen({
     };
   }, [moments]);
 
+  const localSearchIndex = useMemo(
+    () => createLocalSearchIndex(moments, notes),
+    [moments, notes],
+  );
+
   const localSearchResults = useMemo(() => {
-    const query = textSearch.trim();
+    const query = debouncedTextSearch.trim();
     if (!query) return [];
-    return rankLocalRecords(query, moments, notes)
+    return rankLocalSearch(query, localSearchIndex)
       .map((item) => item.moment)
       .slice(0, 8);
-  }, [moments, notes, textSearch]);
+  }, [debouncedTextSearch, localSearchIndex]);
 
   const focusSearchResult = (moment: EmotionMoment) => {
     moveMapTo([moment.longitude, moment.latitude], 17, 620);

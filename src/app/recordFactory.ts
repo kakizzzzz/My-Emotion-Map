@@ -15,6 +15,7 @@ export type CreateRecordInput = {
   date?: string;
   time?: string;
   eventTimeSource?: EventTimeSource;
+  eventTimestamp?: string;
   photoTakenAt?: string;
   photoTakenAtKind?: EmotionMoment['photoTakenAtKind'];
   photoTakenAtSource?: EmotionMoment['photoTakenAtSource'];
@@ -41,7 +42,7 @@ export const createRecord = (input: CreateRecordInput): { moment: EmotionMoment;
     localDate: date,
     localTime: time,
     source: input.eventTimeSource ?? 'device-created',
-    sourceTimestamp: input.photoTakenAt,
+    sourceTimestamp: input.eventTimestamp ?? input.photoTakenAt,
   });
   const moment: EmotionMoment = {
     id: momentId, noteId, emotion: null, intensity: 0, place: input.place,

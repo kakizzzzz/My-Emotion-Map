@@ -453,6 +453,7 @@ const sanitizeMessage = (
       source.deliveryState === 'stopped'
         ? source.deliveryState
         : undefined,
+    retryable: source.retryable === true,
     referenceConfirmation: (() => {
       const reference = asObject(source.referenceConfirmation);
       const optionId = asString(reference?.optionId, 200);

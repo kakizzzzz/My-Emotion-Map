@@ -218,8 +218,6 @@ export function App() {
     applySnapshot,
     deleteMoment,
     exportData,
-    importData,
-    deleteAllData,
   } = useLocalDataController({
     initialData,
     userId: cloudSession.session?.user.id ?? null,
@@ -514,6 +512,7 @@ export function App() {
       date: wallTime?.[1],
       time: wallTime?.[2],
       eventTimeSource: 'health-sample',
+      eventTimestamp: item.eventAt,
       heartRate: item.heartRate,
       isInboxDraft: true,
       locationCapturedAt: new Date().toISOString(),
@@ -767,8 +766,6 @@ export function App() {
                   }))
                 }
                 onExportData={exportData}
-                onImportData={importData}
-                onDeleteAllData={deleteAllData}
                 locationRequestState={locationController.requestState}
                 onRequestLocation={() =>
                   locationController.openLocationRequest('settings')

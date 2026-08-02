@@ -9,7 +9,8 @@ export const validateEmotionChatRequest = (value: unknown) => {
   const body = asObject(value);
   if (!body) return null;
   const allowed = new Set([
-    'requestId', 'message', 'language', 'conversationId', 'selectedNoteIds',
+    'requestId', 'message', 'language', 'conversationId', 'explicitNoteIds',
+    'conversationAnchorNoteIds',
     'clientRevision', 'responseStyle', 'referenceConfirmation',
   ]);
   if (Object.keys(body).some((key) => !allowed.has(key))) return null;
@@ -20,16 +21,21 @@ export const validateEmotionChatRequest = (value: unknown) => {
   const conversationId = typeof body.conversationId === 'string'
     ? body.conversationId.trim()
     : '';
-  if (body.selectedNoteIds !== undefined &&
-    (!Array.isArray(body.selectedNoteIds) || body.selectedNoteIds.length > 6 ||
-      body.selectedNoteIds.some((item) =>
-        typeof item !== 'string' || !item || item.length > 200))) return null;
-  const selectedNoteIds = Array.isArray(body.selectedNoteIds)
-    ? [...new Set(body.selectedNoteIds)] as string[]
-    : [];
+  const boundedNoteIds = (value: unknown) => {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > 6 || value.some((item) =>
+      typeof item !== 'string' || !item || item.length > 200)) return null;
+    return [...new Set(value)] as string[];
+  };
+  const explicitNoteIds = boundedNoteIds(body.explicitNoteIds);
+  const conversationAnchorNoteIds = boundedNoteIds(
+    body.conversationAnchorNoteIds,
+  );
+  if (!explicitNoteIds || !conversationAnchorNoteIds) return null;
   const responseStyle = Array.isArray(body.responseStyle)
     ? [...new Set(body.responseStyle.filter((item): item is string =>
-        item === 'concise' || item === 'direct' || item === 'gentle',
+      item === 'concise' || item === 'direct' || item === 'gentle' ||
+        item === 'sharp',
       ))].slice(0, 3)
     : [];
   if (body.responseStyle !== undefined && !Array.isArray(body.responseStyle)) return null;
@@ -56,7 +62,8 @@ export const validateEmotionChatRequest = (value: unknown) => {
     !message || message.length > 1_200 || !conversationId ||
     conversationId.length > 200 || clientRevision === null) return null;
   return {
-    requestId, message, language, conversationId, selectedNoteIds,
+    requestId, message, language, conversationId, explicitNoteIds,
+    conversationAnchorNoteIds,
     clientRevision, responseStyle, referenceConfirmation,
   };
 };
