@@ -105,8 +105,11 @@ describe('core component flows', () => {
     await user.click(
       screen.getByRole('button', { name: '继续到引导问题' }),
     );
+    await screen.findByRole('heading', { name: '你去这做什么？' });
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
+    await screen.findByRole('heading', { name: '这里有什么让你注意到的？' });
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
+    await screen.findByRole('heading', { name: '你想为以后留下什么？' });
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
     await user.click(await screen.findByRole('button', { name: '点击保存' }));
 
