@@ -1,11 +1,8 @@
-export type ProfileIdentity =
-  | { kind: 'user'; userId: string; displayName: string }
-  | {
-      kind: 'demo';
-      localId: string;
-      sourceRef: string;
-      displayName: string;
-    };
+export type ProfileIdentity = {
+  kind: 'user';
+  userId: string;
+  displayName: string;
+};
 
 export type SupabaseProfileRow = {
   id: string;
@@ -21,7 +18,7 @@ export const isSupabaseProfileId = (value: unknown): value is string =>
 export const toSupabaseProfileRow = (
   identity: ProfileIdentity,
 ): SupabaseProfileRow | null =>
-  identity.kind === 'user' && isSupabaseProfileId(identity.userId)
+  isSupabaseProfileId(identity.userId)
     ? {
         id: identity.userId,
         display_name: identity.displayName,

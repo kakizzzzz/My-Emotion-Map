@@ -1,7 +1,3 @@
-import {
-  INITIAL_MOMENTS,
-  INITIAL_NOTES,
-} from '../data';
 import type {
   AppDataSnapshot,
   ChatOption,
@@ -15,7 +11,6 @@ import type {
   PlaceRating,
   StarInboxItem,
 } from '../types';
-import { createDemoAppData } from './demoData';
 import {
   DEFAULT_THEME,
   isThemePalette,
@@ -587,7 +582,6 @@ export const createEmptyAppData = (): AppDataSnapshot => ({
   themeTone: 'original',
   themePalette: DEFAULT_THEME,
 });
-export { createDemoAppData } from './demoData';
 export {
   appendRevisitRecord,
   dismissInboxItem,
@@ -596,18 +590,27 @@ export {
   upsertFollowUpRevisit,
 } from './recordAssociations';
 
-const inferLegacyDataMode = (
+const isLegacyDemoSnapshot = (
   moments: EmotionMoment[],
   notes: EmotionNote[],
-): DataMode => {
-  const seedMomentIds = new Set(INITIAL_MOMENTS.map((item) => item.id));
-  const seedNoteIds = new Set(INITIAL_NOTES.map((item) => item.id));
-  const exactSeed =
-    moments.length === seedMomentIds.size &&
-    notes.length === seedNoteIds.size &&
-    moments.every((item) => seedMomentIds.has(item.id)) &&
-    notes.every((item) => seedNoteIds.has(item.id));
-  return exactSeed ? 'demo' : 'real';
+) => {
+  const momentIds = new Set([
+    'library-noise',
+    'cafeteria-pause',
+    'studio-focus',
+    'river-calm',
+    'evening-crowd',
+  ]);
+  const noteIds = new Set([
+    'note-library',
+    'note-cafeteria',
+    'note-studio',
+    'note-river',
+    'note-crossing',
+  ]);
+  return moments.length === momentIds.size && notes.length === noteIds.size &&
+    moments.every((item) => momentIds.has(item.id)) &&
+    notes.every((item) => noteIds.has(item.id));
 };
 
 export const migrateAppData = (
@@ -738,10 +741,10 @@ export const migrateAppData = (
         )
     : [];
   relinkLegacyInboxDrafts(starInboxItems, moments, noteById);
-  const dataMode: DataMode =
-    source.dataMode === 'demo' || source.dataMode === 'real'
-      ? source.dataMode
-      : inferLegacyDataMode(moments, notes);
+  if (source.dataMode === 'demo' || isLegacyDemoSnapshot(moments, notes)) {
+    return { status: 'invalid', issues: ['demo-snapshot-rejected'] };
+  }
+  const dataMode: DataMode = 'real';
   const themeTone =
     source.themeTone === 'terracotta' ||
     source.themeTone === 'blue' ||
@@ -782,9 +785,6 @@ export const migrateAppData = (
       starInboxItems,
       themeTone,
       themePalette,
-      demoAnchorDate: isValidDate(source.demoAnchorDate)
-        ? source.demoAnchorDate
-        : undefined,
       lastConversationId: asString(source.lastConversationId, 200) || undefined,
       lastViewport:
         asObject(source.lastViewport) &&
@@ -819,26 +819,26 @@ export const loadAppData = (
         ? window.localStorage.getItem(legacyUserWorkspaceStorageKey(userId))
         : null
     );
-    if (!stored) return mode === 'demo' ? createDemoAppData() : createEmptyAppData();
+    if (!stored) return createEmptyAppData();
     try {
       const migrated = migrateAppData(JSON.parse(stored));
       if (migrated.status === 'upgrade_required') {
         return {
-          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          ...createEmptyAppData(),
           loadIssue: 'upgrade-required',
           upgradeRequiredVersion: migrated.sourceVersion,
         };
       }
       if (migrated.status === 'invalid') {
         return {
-          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          ...createEmptyAppData(),
           loadIssue: 'corrupt-json',
         };
       }
       const { snapshot, issues } = migrated;
       if (snapshot.dataMode !== mode) {
         return {
-          ...(mode === 'demo' ? createDemoAppData() : createEmptyAppData()),
+          ...createEmptyAppData(),
           loadIssue: 'corrupt-json',
         };
       }

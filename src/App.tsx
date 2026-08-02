@@ -137,6 +137,7 @@ export function App() {
   );
   const [viewingMomentId, setViewingMomentId] = useState<string | null>(null);
   const [editingMomentId, setEditingMomentId] = useState<string | null>(null);
+  const editingMomentIdRef = useRef<string | null>(null);
   const [revisitNoteId, setRevisitNoteId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [photoAssistByMomentId, setPhotoAssistByMomentId] = useState<
@@ -147,6 +148,9 @@ export function App() {
   const [themePalette, setThemePalette] = useState<ThemePalette>(
     initialData.themePalette,
   );
+  useEffect(() => {
+    editingMomentIdRef.current = editingMomentId;
+  }, [editingMomentId]);
   const [lastViewport, setLastViewport] = useState<MapViewport | undefined>(
     initialData.lastViewport,
   );
@@ -279,7 +283,7 @@ export function App() {
     }
     activeWorkspaceUserRef.current = userId;
     setWorkspaceReady(true);
-    openOnboardingIfNeeded('real', userId);
+    openOnboardingIfNeeded(userId);
   }, [
     applySnapshot,
     cloudSession.ready,
@@ -652,7 +656,6 @@ export function App() {
                 dataMode,
               ) ?? dataMode
             }
-            dataMode={dataMode}
             savedViewport={lastViewport}
             onViewportChange={setLastViewport}
             moments={moments}
@@ -670,12 +673,13 @@ export function App() {
             onRequestLocation={locationController.openLocationRequest}
             onToast={showToast}
             cloudAuth={cloudSession.cloudAuth}
-            onPhotoAssistResult={(momentId, delivery) =>
+            onPhotoAssistResult={(momentId, delivery) => {
+              if (editingMomentIdRef.current !== momentId) return;
               setPhotoAssistByMomentId((current) => ({
                 ...current,
                 [momentId]: delivery,
-              }))
-            }
+              }));
+            }}
           />
         </div>
 
@@ -718,7 +722,6 @@ export function App() {
                 cloudAuth={cloudSession.cloudAuth}
                 cloudRevision={cloudSync.revision}
                 cloudStatus={cloudSync.status}
-                dataMode={dataMode}
                 onBeginChat={chatDelivery.beginChat}
                 onCompleteChat={chatDelivery.completeChat}
                 onFailChat={chatDelivery.failChat}
@@ -904,7 +907,6 @@ export function App() {
 
         {onboardingTarget ? (
           <FirstRunOnboarding
-            dataMode={onboardingTarget.dataMode}
             onComplete={completeOnboarding}
           />
         ) : null}

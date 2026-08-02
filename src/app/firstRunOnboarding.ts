@@ -1,22 +1,16 @@
 import { useCallback, useState } from 'react';
-import type { DataMode } from '../types';
-
 export const FIRST_RUN_ONBOARDING_VERSION = 1;
 
 export const onboardingSeenKey = (
-  dataMode: DataMode,
   userId: string | null,
-) => dataMode === 'demo'
-  ? 'my-emotion-map.demoOnboardingSeenVersion'
-  : `my-emotion-map.user.${userId ?? 'signed-out'}.onboardingSeenVersion`;
+) => `my-emotion-map.user.${userId ?? 'signed-out'}.onboardingSeenVersion`;
 
 export const shouldShowFirstRunOnboarding = (
-  dataMode: DataMode,
   userId: string | null,
 ) => {
   try {
     const seenVersion = Number(
-      window.localStorage.getItem(onboardingSeenKey(dataMode, userId)) ?? 0,
+      window.localStorage.getItem(onboardingSeenKey(userId)) ?? 0,
     );
     return !Number.isFinite(seenVersion) ||
       seenVersion < FIRST_RUN_ONBOARDING_VERSION;
@@ -26,12 +20,11 @@ export const shouldShowFirstRunOnboarding = (
 };
 
 export const markFirstRunOnboardingSeen = (
-  dataMode: DataMode,
   userId: string | null,
 ) => {
   try {
     window.localStorage.setItem(
-      onboardingSeenKey(dataMode, userId),
+      onboardingSeenKey(userId),
       String(FIRST_RUN_ONBOARDING_VERSION),
     );
     return true;
@@ -40,16 +33,16 @@ export const markFirstRunOnboardingSeen = (
   }
 };
 
-export type OnboardingTarget = { dataMode: DataMode; userId: string | null };
+export type OnboardingTarget = { userId: string | null };
 
 export const useFirstRunOnboarding = () => {
   const [onboardingTarget, setOnboardingTarget] =
     useState<OnboardingTarget | null>(null);
   const openOnboardingIfNeeded = useCallback(
-    (dataMode: DataMode, userId: string | null) => {
+    (userId: string | null) => {
       setOnboardingTarget(
-        shouldShowFirstRunOnboarding(dataMode, userId)
-          ? { dataMode, userId }
+        shouldShowFirstRunOnboarding(userId)
+          ? { userId }
           : null,
       );
     },
@@ -57,7 +50,7 @@ export const useFirstRunOnboarding = () => {
   );
   const completeOnboarding = useCallback(() => {
     setOnboardingTarget((current) => {
-      if (current) markFirstRunOnboardingSeen(current.dataMode, current.userId);
+      if (current) markFirstRunOnboardingSeen(current.userId);
       return null;
     });
   }, []);

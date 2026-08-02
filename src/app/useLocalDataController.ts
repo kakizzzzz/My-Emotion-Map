@@ -274,19 +274,12 @@ export function useLocalDataController({
         );
         return;
       }
-      if (dataMode === 'real' && parsed.snapshot.dataMode === 'demo') {
-        showToast(copy.feedback.dataImportFailed, {
-          placement: 'top',
-          durationMs: 4_000,
-        });
-        return;
-      }
-      const preview = `${parsed.snapshot.notes.length} · ${parsed.snapshot.dataMode}`;
+      const preview = String(parsed.snapshot.notes.length);
       if (!window.confirm(preview)) return;
       applySnapshot(parsed.snapshot);
       showToast(copy.feedback.dataImported);
     },
-    [applySnapshot, copy.feedback, dataMode, showToast],
+    [applySnapshot, copy.feedback, showToast],
   );
 
   const deleteAllData = useCallback(() => {

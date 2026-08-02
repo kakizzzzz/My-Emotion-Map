@@ -41,12 +41,11 @@ describe('profile identity contract', () => {
     ).toBeNull();
   });
 
-  it('never maps a Demo identity into the cloud profile table', () => {
+  it('never maps a malformed user id into the cloud profile table', () => {
     expect(toSupabaseProfileRow({
-      kind: 'demo',
-      localId: 'demo-1',
-      sourceRef: 'default-record-star',
-      displayName: 'Demo',
+      kind: 'user',
+      userId: 'local-only',
+      displayName: 'Local user',
     })).toBeNull();
   });
 });

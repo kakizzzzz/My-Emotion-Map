@@ -4,13 +4,10 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useDialogFocus } from '../../app/useDialogFocus';
 import { useAppLanguage } from '../../i18n';
 import { MOTION } from '../../motion';
-import type { DataMode } from '../../types';
 
 export function FirstRunOnboarding({
-  dataMode,
   onComplete,
 }: {
-  dataMode: DataMode;
   onComplete: () => void;
 }) {
   const { copy } = useAppLanguage();
@@ -44,7 +41,6 @@ export function FirstRunOnboarding({
       <motion.section
         ref={dialogRef}
         className="first-run-onboarding"
-        data-onboarding-mode={dataMode}
         role="dialog"
         aria-modal="true"
         aria-label={current.title}
@@ -81,13 +77,7 @@ export function FirstRunOnboarding({
                   <Clock3 size={15} /> 15:10
                 </span>
               ) : null}
-              {dataMode === 'demo' ? (
-                <div className="onboarding-preview__demo-stars">
-                  <i /><i /><i />
-                </div>
-              ) : (
-                <div className="onboarding-preview__empty" />
-              )}
+              <div className="onboarding-preview__empty" />
             </div>
             <div className="onboarding-copy">
               <h2>{current.title}</h2>

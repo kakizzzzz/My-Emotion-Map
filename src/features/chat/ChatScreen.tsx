@@ -24,7 +24,6 @@ import type {
   ChatOption,
   ChatDeliveryState,
   Conversation,
-  DataMode,
   EmotionNote,
   FollowUpRecord,
 } from '../../types';
@@ -48,10 +47,6 @@ import type {
   BeginChatInput,
   CompleteChatInput,
 } from '../../app/useChatDeliveryHandlers';
-import {
-  DEMO_SUGGESTED_PROMPTS,
-  createDemoChatResponse,
-} from './demoChatResponder';
 
 function AiAvatar() {
   return (
@@ -72,7 +67,6 @@ export function ChatScreen({
   cloudAuth,
   cloudRevision,
   cloudStatus,
-  dataMode,
   onBeginChat,
   onCompleteChat,
   onFailChat,
@@ -94,7 +88,6 @@ export function ChatScreen({
   cloudAuth: CloudAuth | null;
   cloudRevision: number | null;
   cloudStatus: CloudSyncStatus;
-  dataMode: DataMode;
   onBeginChat: (input: BeginChatInput) => void;
   onCompleteChat: (input: CompleteChatInput) => void;
   onFailChat: (
@@ -157,12 +150,10 @@ export function ChatScreen({
       (conversation.id === FOLLOW_UP_CONVERSATION_ID ||
         conversation.kind === 'companion'),
   );
-  const isDemo = dataMode === 'demo';
-  const available = isDemo || Boolean(
+  const available = Boolean(
     cloudAuth &&
       cloudRevision !== null &&
-      cloudStatus === 'synced' &&
-      dataMode === 'real',
+      cloudStatus === 'synced',
   );
   const unavailableMessage = !cloudAuth
     ? copy.chat.signInRequired
@@ -171,7 +162,6 @@ export function ChatScreen({
     () => getFollowUpOptions(language),
     [language],
   );
-  const demoPrompts = DEMO_SUGGESTED_PROMPTS[language];
   const responseStyle = useMemo(
     () => {
       if (!cloudAuth) return [];
@@ -311,10 +301,8 @@ export function ChatScreen({
     abortRef.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 22_000);
     try {
-      const result = isDemo
-        ? createDemoChatResponse({ message, language, notes })
-        : cloudAuth && cloudRevision !== null
-          ? await requestEmotionChat({
+      const result = cloudAuth && cloudRevision !== null
+        ? await requestEmotionChat({
               auth: cloudAuth,
               requestId,
               message,
@@ -328,8 +316,8 @@ export function ChatScreen({
               clientRevision: cloudRevision,
               referenceConfirmation,
               signal: controller.signal,
-            })
-          : null;
+          })
+        : null;
       if (!result || !result.answer.trim()) throw new Error('Unavailable');
       onCompleteChat({
         conversationId: conversation.id,
@@ -581,22 +569,6 @@ export function ChatScreen({
             <strong>{copy.chat.noFollowUpTitle}</strong>
             <p>{copy.chat.noFollowUpBody}</p>
           </div>
-        ) : isDemo ? (
-          <section className="demo-chat-prompts" aria-label={copy.demo.promptTitle}>
-            <p>{copy.demo.promptTitle}</p>
-            <div>
-              {demoPrompts.map((prompt) => (
-                <button
-                  key={prompt.text}
-                  type="button"
-                  onClick={() => void sendMessage(prompt.text)}
-                  disabled={sending}
-                >
-                  {prompt.text}
-                </button>
-              ))}
-            </div>
-          </section>
         ) : null}
 
         {conversation.messages.some(

@@ -179,7 +179,6 @@ test('first real workspace uses the shared onboarding without creating records',
   await page.goto('/');
   const onboarding = page.getByRole('dialog', { name: '留下一颗星星' });
   await expect(onboarding).toBeVisible();
-  await expect(onboarding).toHaveAttribute('data-onboarding-mode', 'real');
   await page.getByRole('button', { name: '跳过' }).click();
   await expect(page.locator('.map-star-button')).toHaveCount(0);
   const snapshot = await page.evaluate((key) =>

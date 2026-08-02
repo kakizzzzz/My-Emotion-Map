@@ -8,15 +8,11 @@ import {
 describe('chat draft workspace isolation', () => {
   beforeEach(() => window.sessionStorage.clear());
 
-  it('separates accounts, Demo, and real workspaces', () => {
+  it('separates signed-in account workspaces', () => {
     const realA = chatWorkspaceKey('user-a', 'real');
     const realB = chatWorkspaceKey('user-b', 'real');
-    const demoA = chatWorkspaceKey('user-a', 'demo');
     expect(chatDraftKey(realA, 'thread-revisit')).not.toBe(
       chatDraftKey(realB, 'thread-revisit'),
-    );
-    expect(chatDraftKey(realA, 'thread-revisit')).not.toBe(
-      chatDraftKey(demoA, 'thread-revisit'),
     );
   });
 

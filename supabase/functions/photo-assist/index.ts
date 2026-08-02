@@ -7,6 +7,7 @@ import { jsonResponse, readJsonBody, runtime } from '../_shared/runtime.ts';
 const DATA_URL_PREFIX = 'data:image/jpeg;base64,';
 const MAX_IMAGE_BYTES = 700 * 1024;
 const MAX_DIMENSION = 672;
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const asObject = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -68,7 +69,7 @@ runtime.serve(async (request) => {
   if (request.method === 'OPTIONS') return preflight(request);
   const origin = requireAllowedOrigin(request);
   if (!origin) return jsonResponse({ status: 'unavailable', code: 'origin_not_allowed' }, 403);
-  const headers = corsHeaders(origin);
+  const headers = { ...corsHeaders(origin), 'cache-control': 'no-store' };
   if (request.method !== 'POST') return jsonResponse({ status: 'unavailable', code: 'method_not_allowed' }, 405, headers);
   const session = await authenticate(request);
   if (!session) return jsonResponse({ status: 'unavailable', code: 'unauthorized' }, 401, headers);
@@ -83,11 +84,15 @@ runtime.serve(async (request) => {
   try {
     const body = validateRequest(await readJsonBody(request, 980_000));
     if (!body) return jsonResponse({ status: 'unavailable', code: 'invalid_request' }, 400, headers);
+    const deadline = Date.now() + REQUEST_TIMEOUT_MS;
     let lastFailure: unknown = new SiliconFlowFailure('provider_invalid_json');
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs < 250) throw new SiliconFlowFailure('provider_retryable');
         const output = await requestSiliconFlowJson({
           task: 'photo',
+          timeoutMs: remainingMs,
           messages: [
             {
               role: 'system',

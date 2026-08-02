@@ -5,6 +5,10 @@ import type { CloudAuth } from '../../services/supabaseClient';
 const MAX_DIMENSION = 672;
 const MAX_BYTES = 700 * 1024;
 
+export type PhotoAssistInvocation =
+  | { status: 'ready'; result: PhotoAssistResult }
+  | { status: 'retryable' | 'unavailable'; code: string };
+
 const canvasBlob = (canvas: HTMLCanvasElement, quality: number) =>
   new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
 
@@ -71,7 +75,7 @@ export const invokePhotoAssist = async ({
   localDate?: string;
 }) => {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 17_000);
+  const timer = window.setTimeout(() => controller.abort(), 16_000);
   try {
     const response = await fetch(`${auth.supabaseUrl}/functions/v1/photo-assist`, {
       method: 'POST',
@@ -83,11 +87,31 @@ export const invokePhotoAssist = async ({
       body: JSON.stringify({ imageDataUrl, language, localDate }),
       signal: controller.signal,
     });
-    const payload = await response.json().catch(() => null) as { status?: unknown; result?: unknown } | null;
-    if (!response.ok || payload?.status !== 'ready') return null;
-    return validateResult(payload.result);
-  } catch {
-    return null;
+    const payload = await response.json().catch(() => null) as {
+      status?: unknown;
+      code?: unknown;
+      result?: unknown;
+    } | null;
+    if (response.ok && payload?.status === 'ready') {
+      const result = validateResult(payload.result);
+      return result
+        ? { status: 'ready', result } satisfies PhotoAssistInvocation
+        : { status: 'retryable', code: 'invalid_result' } satisfies PhotoAssistInvocation;
+    }
+    const status = payload?.status === 'retryable' ? 'retryable' : 'unavailable';
+    const code = typeof payload?.code === 'string'
+      ? payload.code.slice(0, 80)
+      : response.status === 429
+        ? 'rate_limited'
+        : 'request_failed';
+    return { status, code } satisfies PhotoAssistInvocation;
+  } catch (error) {
+    return {
+      status: 'retryable',
+      code: error instanceof DOMException && error.name === 'AbortError'
+        ? 'timeout'
+        : 'network_unavailable',
+    } satisfies PhotoAssistInvocation;
   } finally {
     window.clearTimeout(timer);
   }

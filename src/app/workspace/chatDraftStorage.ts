@@ -50,6 +50,5 @@ export const clearLegacyChatDrafts = () => {
 export const clearChatDraftsForUser = (userId: string) => {
   const legacyCleared = clearLegacyChatDrafts();
   const realCleared = clearChatDraftsForWorkspace(chatWorkspaceKey(userId, 'real'));
-  const demoCleared = clearChatDraftsForWorkspace(chatWorkspaceKey(userId, 'demo'));
-  return legacyCleared && realCleared && demoCleared;
+  return legacyCleared && realCleared;
 };
