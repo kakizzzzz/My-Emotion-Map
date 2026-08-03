@@ -33,6 +33,25 @@ export type EmotionChatResult = {
   clarificationOptions?: ClarificationOption[];
 };
 
+export class EmotionChatRequestError extends Error {
+  constructor(
+    readonly code: string,
+    readonly status: number,
+  ) {
+    super(code);
+    this.name = 'EmotionChatRequestError';
+  }
+}
+
+const waitForRetry = (milliseconds: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, milliseconds);
+    signal.addEventListener('abort', () => {
+      window.clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    }, { once: true });
+  });
+
 const validateResult = (
   value: unknown,
   expectedRequestId?: string,
@@ -139,27 +158,45 @@ export const requestEmotionChat = async ({
   };
   signal: AbortSignal;
 }) => {
-  const response = await fetch(`${auth.supabaseUrl}/functions/v1/emotion-chat`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${auth.accessToken}`,
-      apikey: auth.publishableKey,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      requestId,
-      message,
-      language,
-      conversationId,
-      explicitNoteIds: explicitNoteIds.slice(0, 6),
-      conversationAnchorNoteIds: conversationAnchorNoteIds.slice(0, 6),
-      responseStyle: responseStyle.slice(0, 3),
-      clientRevision,
-      referenceConfirmation,
-    }),
-    signal,
+  const body = JSON.stringify({
+    requestId,
+    message,
+    language,
+    conversationId,
+    explicitNoteIds: explicitNoteIds.slice(0, 6),
+    conversationAnchorNoteIds: conversationAnchorNoteIds.slice(0, 6),
+    responseStyle: responseStyle.slice(0, 3),
+    clientRevision,
+    referenceConfirmation,
   });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) return null;
-  return validateResult(payload, requestId, clientRevision);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const response = await fetch(`${auth.supabaseUrl}/functions/v1/emotion-chat`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        apikey: auth.publishableKey,
+        'content-type': 'application/json',
+      },
+      body,
+      signal,
+    });
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    if (response.ok) {
+      const result = validateResult(payload, requestId, clientRevision);
+      if (result) return result;
+      throw new EmotionChatRequestError('invalid_response', response.status);
+    }
+    const code = typeof payload?.code === 'string' ? payload.code : 'request_failed';
+    if (
+      response.status === 409 &&
+      code === 'request_in_progress' &&
+      attempt < 4
+    ) {
+      await waitForRetry(600 * (attempt + 1), signal);
+      continue;
+    }
+    throw new EmotionChatRequestError(code, response.status);
+  }
+  throw new EmotionChatRequestError('request_in_progress', 409);
 };

@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validateEmotionChatRequest } from '../../supabase/functions/_shared/emotionChatRequest';
-import { requestEmotionChat } from '../../src/services/emotionChat';
+import {
+  EmotionChatRequestError,
+  requestEmotionChat,
+} from '../../src/services/emotionChat';
 
 const valid = {
   requestId: 'chat-request-1',
@@ -113,6 +116,47 @@ describe('emotion-chat request boundary', () => {
       signal: new AbortController().signal,
     };
     expect((await requestEmotionChat(input))?.status).toBe('generation_rejected');
-    expect(await requestEmotionChat(input)).toBeNull();
+    await expect(requestEmotionChat(input)).rejects.toMatchObject({
+      name: EmotionChatRequestError.name,
+      code: 'invalid_response',
+    });
+  });
+
+  it('reuses the same request after a temporary idempotency in-progress response', async () => {
+    const payload = {
+      requestId: valid.requestId,
+      serverRevision: valid.clientRevision,
+      intent: 'lookup',
+      retrievalStatus: 'supported',
+      status: 'supported',
+      answer: '找到了这条记录。',
+      evidence: [],
+      externalEvidence: [],
+      confidence: 'medium',
+      limitations: [],
+      clarificationOptions: [],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        status: 'retryable', code: 'request_in_progress',
+      }), { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(requestEmotionChat({
+      auth: {
+        supabaseUrl: 'https://project.supabase.co',
+        publishableKey: 'publishable', accessToken: 'access', userId: 'user-a',
+      },
+      requestId: valid.requestId,
+      message: valid.message,
+      language: 'zh',
+      conversationId: valid.conversationId,
+      conversationAnchorNoteIds: [],
+      clientRevision: valid.clientRevision,
+      signal: new AbortController().signal,
+    })).resolves.toMatchObject({ answer: '找到了这条记录。' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(fetchMock.mock.calls[1][1]?.body);
   });
 });

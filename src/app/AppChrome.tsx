@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Calendar, ChevronDown, ChevronRight, Inbox, Map as MapIcon, MessageCircle, PanelLeft, Settings as SettingsIcon } from "lucide-react";
+import { useRef, useState } from "react";
+import { Calendar, ChevronDown, ChevronRight, Map as MapIcon, MessageCircle, PanelLeft, Settings as SettingsIcon, Trash2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { MOTION } from "../motion";
 import { useAppLanguage } from "../i18n";
@@ -32,29 +32,95 @@ export function GlobalMenuButton({
   );
 }
 
-export function GlobalInboxButton({
-  unreadCount,
-  onClick,
+function SwipeConversationRow({
+  conversation,
+  onOpen,
+  onDelete,
 }: {
-  unreadCount: number;
-  onClick: () => void;
+  conversation: Conversation;
+  onOpen: () => void;
+  onDelete: () => void;
 }) {
   const { copy } = useAppLanguage();
+  const pointerRef = useRef<{
+    id: number;
+    startX: number;
+    startY: number;
+    startOffset: number;
+    dragging: boolean;
+  } | null>(null);
+  const suppressClickUntilRef = useRef(0);
+  const [offset, setOffset] = useState(0);
+
   return (
-    <motion.button
-      className="global-inbox-button"
-      whileTap={{ scale: 0.96 }}
-      transition={MOTION.press}
-      onClick={onClick}
-      aria-label={
-        unreadCount > 0
-          ? copy.inbox.openUnread(unreadCount)
-          : copy.inbox.open
-      }
-    >
-      <Inbox size={24} strokeWidth={2.2} />
-      {unreadCount > 0 ? <span className="global-inbox-button__unread" /> : null}
-    </motion.button>
+    <div className="side-ai-swipe-row">
+      <button
+        type="button"
+        className="side-ai-delete"
+        aria-label={`${copy.common.delete} ${conversation.title}`}
+        onClick={onDelete}
+      >
+        <Trash2 size={18} strokeWidth={2.2} />
+        <span>{copy.common.delete}</span>
+      </button>
+      <button
+        type="button"
+        className="side-ai-thread"
+        style={{ transform: `translate3d(${offset}px, 0, 0)` }}
+        onClick={() => {
+          if (performance.now() < suppressClickUntilRef.current) return;
+          if (offset < 0) setOffset(0);
+          else onOpen();
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return;
+          pointerRef.current = {
+            id: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startOffset: offset,
+            dragging: false,
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const pointer = pointerRef.current;
+          if (!pointer || pointer.id !== event.pointerId) return;
+          const dx = event.clientX - pointer.startX;
+          const dy = event.clientY - pointer.startY;
+          if (!pointer.dragging && Math.hypot(dx, dy) < 10) return;
+          if (!pointer.dragging && Math.abs(dy) > Math.abs(dx)) return;
+          pointer.dragging = true;
+          event.preventDefault();
+          setOffset(Math.max(-82, Math.min(0, pointer.startOffset + dx)));
+        }}
+        onPointerUp={(event) => {
+          const pointer = pointerRef.current;
+          if (!pointer || pointer.id !== event.pointerId) return;
+          pointerRef.current = null;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+          const dx = event.clientX - pointer.startX;
+          const dy = event.clientY - pointer.startY;
+          const completedHorizontalDrag = pointer.dragging || (
+            Math.abs(dx) >= 10 && Math.abs(dx) > Math.abs(dy)
+          );
+          if (completedHorizontalDrag) {
+            event.preventDefault();
+            suppressClickUntilRef.current = performance.now() + 700;
+            setOffset(pointer.startOffset + dx <= -40 ? -82 : 0);
+          }
+        }}
+        onPointerCancel={() => {
+          pointerRef.current = null;
+          setOffset(0);
+        }}
+      >
+        <strong>{conversation.title}</strong>
+        {conversation.badge ? <em>{conversation.badge}</em> : null}
+      </button>
+    </div>
   );
 }
 
@@ -64,6 +130,7 @@ export function SideDrawer({
   onNavigate,
   onOpenConversation,
   onNewConversation,
+  onDeleteConversation,
   onClose,
 }: {
   activeView: AppView;
@@ -71,6 +138,7 @@ export function SideDrawer({
   onNavigate: (view: AppView) => void;
   onOpenConversation: (id: string) => void;
   onNewConversation: () => void;
+  onDeleteConversation: (id: string) => void;
   onClose: () => void;
 }) {
   const { copy } = useAppLanguage();
@@ -136,7 +204,12 @@ export function SideDrawer({
                   <div className="side-nav__row">
                     <button
                       className={`side-nav__item ${active ? 'is-active' : ''}`}
-                      onClick={() => onNavigate(item.key)}
+                      onClick={() => {
+                        if (isChat) setAiExpanded((current) => !current);
+                        else onNavigate(item.key);
+                      }}
+                      aria-expanded={isChat ? aiExpanded : undefined}
+                      aria-controls={isChat ? 'side-chat-history' : undefined}
                     >
                       <span className="side-nav__icon">
                         <Icon size={22} strokeWidth={2.2} />
@@ -147,28 +220,12 @@ export function SideDrawer({
                       <span>
                         <strong>{item.label}</strong>
                       </span>
-                      {!isChat ? <ChevronRight size={19} strokeWidth={2.2} /> : null}
+                      {isChat && aiExpanded ? (
+                        <ChevronDown size={19} strokeWidth={2.2} />
+                      ) : (
+                        <ChevronRight size={19} strokeWidth={2.2} />
+                      )}
                     </button>
-                    {isChat ? (
-                      <button
-                        type="button"
-                        className="side-nav__disclosure"
-                        aria-label={
-                          aiExpanded
-                            ? copy.navigation.hideChatHistory
-                            : copy.navigation.showChatHistory
-                        }
-                        aria-expanded={aiExpanded}
-                        aria-controls="side-chat-history"
-                        onClick={() => setAiExpanded((current) => !current)}
-                      >
-                        {aiExpanded ? (
-                          <ChevronDown size={19} strokeWidth={2.2} />
-                        ) : (
-                          <ChevronRight size={19} strokeWidth={2.2} />
-                        )}
-                      </button>
-                    ) : null}
                   </div>
 
                   <AnimatePresence initial={false}>
@@ -205,13 +262,12 @@ export function SideDrawer({
                             </>
                           ) : null}
                           {otherConversations.map((thread) => (
-                            <button
+                            <SwipeConversationRow
                               key={thread.id}
-                              onClick={() => onOpenConversation(thread.id)}
-                            >
-                              <strong>{thread.title}</strong>
-                              {thread.badge ? <em>{thread.badge}</em> : null}
-                            </button>
+                              conversation={thread}
+                              onOpen={() => onOpenConversation(thread.id)}
+                              onDelete={() => onDeleteConversation(thread.id)}
+                            />
                           ))}
                         </div>
                       </motion.div>

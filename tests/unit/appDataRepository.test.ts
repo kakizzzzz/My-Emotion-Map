@@ -3,7 +3,6 @@ import {
   APP_DATA_STORAGE_KEY,
   CURRENT_SCHEMA_VERSION,
   createEmptyAppData,
-  dismissInboxItem,
   isValidCoordinate,
   isValidDate,
   loadAppData,
@@ -123,7 +122,6 @@ describe('app data repository', () => {
       notes: [note],
       conversations: [],
       followUps: [],
-      starInboxItems: [],
     };
     window.localStorage.setItem(APP_DATA_STORAGE_KEY, JSON.stringify(legacy));
 
@@ -140,7 +138,7 @@ describe('app data repository', () => {
       userWorkspaceStorageKey('user-a'),
       JSON.stringify({
         moments: [moment], notes: [note], conversations: [], followUps: [],
-        revisits: [], starInboxItems: [], dataMode: 'real',
+        revisits: [], dataMode: 'real',
       }),
     );
     const loaded = loadAppData('user-a');
@@ -188,7 +186,6 @@ describe('app data repository', () => {
       conversations: [],
       followUps: [],
       revisits: [],
-      starInboxItems: [],
     });
 
     expect(migrated.snapshot.moments[0]).toMatchObject({
@@ -332,52 +329,16 @@ describe('app data repository', () => {
     expect(empty.dataMode).toBe('real');
     expect(empty.moments).toEqual([]);
     expect(empty.conversations).toEqual([]);
-    expect(empty.starInboxItems).toEqual([]);
-  });
-
-  it('persists inbox dismissal as data state', () => {
-    const items = [{
-      id: 'inbox-1', source: 'heart-rate' as const, sourceEventId: 'event-1',
-      eventAt: '2026-07-28T14:00:00.000Z', receivedAt: '2026-07-28T14:00:01.000Z',
-      heartRate: 120, status: 'pending' as const,
-    }];
-    const next = dismissInboxItem(
-      items,
-      items[0].id,
-      '2026-07-28T15:00:00.000Z',
-    );
-
-    expect(next[0].status).toBe('dismissed');
-    expect(next[0].seenAt).toBe('2026-07-28T15:00:00.000Z');
-    expect(items[0].status).toBe('pending');
   });
 
   it('deletes note, revisit, follow-up and conversation references together', () => {
-    const next = removeMomentAssociations({
-      ...populatedSnapshot(),
-      starInboxItems: [{
-        id: 'inbox-linked', source: 'heart-rate', sourceEventId: 'event-linked',
-        eventAt: '2026-07-28T14:00:00.000Z', receivedAt: '2026-07-28T14:01:00.000Z',
-        heartRate: 120, status: 'completed', linkedMomentId: moment.id,
-        latitude: 37.55, longitude: 126.95,
-        locationCapturedAt: '2026-07-28T14:02:00.000Z',
-        locationAccuracyMeters: 12, locationTimeRelation: 'confirmation',
-        confirmedAt: '2026-07-28T14:03:00.000Z',
-      }],
-    }, moment.id);
+    const next = removeMomentAssociations(populatedSnapshot(), moment.id);
 
     expect(next.moments).toEqual([]);
     expect(next.notes).toEqual([]);
     expect(next.revisits).toEqual([]);
     expect(next.followUps).toEqual([]);
     expect(next.conversations[0].messages).toEqual([]);
-    expect(next.starInboxItems[0]).toMatchObject({ status: 'pending' });
-    for (const key of [
-      'linkedMomentId', 'confirmedAt', 'latitude', 'longitude',
-      'locationCapturedAt', 'locationAccuracyMeters', 'locationTimeRelation',
-    ]) {
-      expect(next.starInboxItems[0]).not.toHaveProperty(key);
-    }
   });
 
   it('isolates account A and B storage keys', () => {

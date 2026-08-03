@@ -20,8 +20,6 @@ export type CreateRecordInput = {
   photoTakenAtKind?: EmotionMoment['photoTakenAtKind'];
   photoTakenAtSource?: EmotionMoment['photoTakenAtSource'];
   importedAt?: string;
-  heartRate?: number;
-  isInboxDraft?: boolean;
   locationCapturedAt?: string;
   locationTimeRelation?: EmotionMoment['locationTimeRelation'];
 };
@@ -51,7 +49,6 @@ export const createRecord = (input: CreateRecordInput): { moment: EmotionMoment;
     ...temporal,
     photoTakenAt: input.photoTakenAt, photoTakenAtKind: input.photoTakenAtKind,
     photoTakenAtSource: input.photoTakenAtSource, importedAt: input.importedAt,
-    heartRate: input.heartRate, isInboxDraft: input.isInboxDraft,
     locationCapturedAt: input.locationCapturedAt,
     locationTimeRelation: input.locationTimeRelation,
   };

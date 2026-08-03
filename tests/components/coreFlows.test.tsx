@@ -17,9 +17,7 @@ import type { EmotionMoment, EmotionNote } from '../../src/types';
 import { renderWithLanguage } from '../renderWithLanguage';
 import { createGuidedAnswers } from '../../src/domain/notePrompts';
 import type { PhotoAssistDelivery } from '../../src/app/appTypes';
-import { FirstRunOnboarding } from '../../src/features/onboarding/FirstRunOnboarding';
 import { SideDrawer } from '../../src/app/AppChrome';
-import { StarInboxScreen } from '../../src/features/inbox/StarInboxScreen';
 
 const draftNote: EmotionNote = {
   id: 'note-new',
@@ -70,7 +68,6 @@ const PhotoAssistHarness = () => {
         moment={{ ...draftMoment, source: 'photo' }}
         note={draftNote}
         onSave={() => undefined}
-        onSaveDraft={() => undefined}
         onDeleteDraft={() => undefined}
         onClose={() => undefined}
         onToast={() => undefined}
@@ -94,7 +91,6 @@ describe('core component flows', () => {
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
-        onSaveDraft={() => undefined}
         onDeleteDraft={() => undefined}
         onClose={() => undefined}
         onToast={() => undefined}
@@ -116,7 +112,7 @@ describe('core component flows', () => {
       screen.getByRole('button', { name: '继续到引导问题' }),
     );
     await screen.findByRole('heading', { name: '你去这做什么？' });
-    await user.click(screen.getByRole('button', { name: '跳过引导' }));
+    await user.click(screen.getByRole('button', { name: '跳过' }));
     await user.click(await screen.findByRole('button', { name: '点击保存' }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -137,7 +133,6 @@ describe('core component flows', () => {
         moment={{ ...draftMoment, isNew: false, emotion: 'mixed', placeRating: 'neutral' }}
         note={{ ...draftNote, isDraft: false, emotion: 'mixed', placeRating: 'neutral' }}
         onSave={onSave}
-        onSaveDraft={vi.fn()}
         onDeleteDraft={vi.fn()}
         onClose={onClose}
         onToast={() => undefined}
@@ -165,7 +160,6 @@ describe('core component flows', () => {
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
-        onSaveDraft={vi.fn()}
         onDeleteDraft={onDeleteDraft}
         onClose={vi.fn()}
         onToast={() => undefined}
@@ -175,22 +169,20 @@ describe('core component flows', () => {
     await user.click(
       screen.getByRole('button', { name: '关闭' }),
     );
-    await user.click(screen.getByRole('button', { name: '删除草稿' }));
+    await user.click(screen.getByRole('button', { name: '删除星星' }));
 
     expect(onSave).not.toHaveBeenCalled();
     expect(onDeleteDraft).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a new record as a draft only when explicitly selected', async () => {
+  it('saves a partially completed new record when explicitly selected', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    const onSaveDraft = vi.fn();
     renderWithLanguage(
       <NoteEditorSheet
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
-        onSaveDraft={onSaveDraft}
         onDeleteDraft={vi.fn()}
         onClose={vi.fn()}
         onToast={() => undefined}
@@ -202,13 +194,12 @@ describe('core component flows', () => {
       '还没写完',
     );
     await user.click(screen.getByRole('button', { name: '关闭' }));
-    await user.click(screen.getByRole('button', { name: '保留草稿' }));
+    await user.click(screen.getByRole('button', { name: '保存' }));
 
-    expect(onSave).not.toHaveBeenCalled();
-    expect(onSaveDraft).toHaveBeenCalledTimes(1);
-    expect(onSaveDraft.mock.calls[0][1]).toMatchObject({
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][1]).toMatchObject({
       title: '还没写完',
-      isDraft: true,
+      isDraft: false,
     });
   });
 
@@ -220,7 +211,6 @@ describe('core component flows', () => {
         moment={{ ...draftMoment, isNew: false }}
         note={{ ...draftNote, isDraft: false }}
         onSave={onSave}
-        onSaveDraft={vi.fn()}
         onDeleteDraft={vi.fn()}
         onClose={vi.fn()}
         onToast={() => undefined}
@@ -244,7 +234,6 @@ describe('core component flows', () => {
         moment={{ ...draftMoment, isNew: false }}
         note={{ ...draftNote, isDraft: false }}
         onSave={onSave}
-        onSaveDraft={vi.fn()}
         onDeleteDraft={vi.fn()}
         onClose={vi.fn()}
         onToast={() => undefined}
@@ -358,17 +347,6 @@ describe('core component flows', () => {
     expect(screen.queryByRole('dialog', { name: '进入演示？' })).toBeNull();
   });
 
-  it('uses the same three-screen onboarding shell and skips without touching records', async () => {
-    const user = userEvent.setup();
-    const onComplete = vi.fn();
-    renderWithLanguage(
-      <FirstRunOnboarding onComplete={onComplete} />,
-    );
-    expect(screen.getByText('第 1 页，共 3 页')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '跳过' }));
-    expect(onComplete).toHaveBeenCalledTimes(1);
-  });
-
   it('closes settings through a discoverable button', async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
@@ -395,7 +373,6 @@ describe('core component flows', () => {
         onConfirmInitialUpload={() => undefined}
         onUseRemoteVersion={() => undefined}
         onOverwriteRemote={() => undefined}
-        onTestShortcutPairing={async () => 'unavailable'}
         onIssueMcpToken={async () => null}
         onGetMcpOutputStatus={async () => null}
         onRevokeAllMcpTokens={async () => true}
@@ -411,26 +388,8 @@ describe('core component flows', () => {
           manifestHash: null, connectedAt: null, lastTestAt: null,
           lastErrorCode: null,
         })}
-        healthPreferences={{
-          restingHeartRateMin: 60,
-          restingHeartRateMax: 100,
-          rangeConfirmed: false,
-          singleSampleEnabled: false,
-          workoutPolicy: 'suppress',
-          unknownPolicy: 'suppress',
-          cooldownMinutes: 30,
-        }}
-        onHealthPreferences={() => true}
-        onIssueShortcutPairing={async () => null}
-        onGetShortcutConnectionStatus={async () => ({
-          state: 'not_installed',
-          expiresAt: null,
-          lastReceivedAt: null,
-          lastTestAt: null,
-          shortcutVersion: null,
-          algorithmVersion: null,
-        })}
-        onRevokeShortcutTokens={async () => true}
+        onListMcpProposals={async () => []}
+        onResolveMcpProposal={async () => true}
         onBack={onBack}
       />,
     );
@@ -450,7 +409,7 @@ describe('core component flows', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps MCP and Shortcut credentials separate and runs only the real test callback', async () => {
+  it('keeps My Life Memory and Emotion Map MCP credentials separate', async () => {
     const user = userEvent.setup();
     const onIssueToken = vi.fn(async () => ({
       token: 'output-access-once',
@@ -463,14 +422,12 @@ describe('core component flows', () => {
       connectedAt: '2026-08-02T00:00:00.000Z',
       lastTestAt: '2026-08-02T00:00:00.000Z', lastErrorCode: null,
     }));
-    const onTestShortcutPairing = vi.fn().mockResolvedValue('verified');
     const commonAiProps = {
       styles: [] as string[],
       userPrompt: '',
       onStyles: () => undefined,
       onUserPrompt: () => undefined,
       onPanel: () => undefined,
-      onTestShortcutPairing,
       onConnectMyLifeMemory,
       onTestMyLifeMemory: async () => null,
       onGetMyLifeMemoryStatus: async () => ({
@@ -483,31 +440,6 @@ describe('core component flows', () => {
         manifestHash: null, connectedAt: null, lastTestAt: null,
         lastErrorCode: null,
       }),
-      healthPreferences: {
-        restingHeartRateMin: 60,
-        restingHeartRateMax: 100,
-        rangeConfirmed: true,
-        singleSampleEnabled: false,
-        workoutPolicy: 'suppress' as const,
-        unknownPolicy: 'suppress' as const,
-        cooldownMinutes: 30,
-      },
-      onHealthPreferences: () => true,
-      onIssueShortcutPairing: async () => ({
-        token: 'pairing-code-once',
-        expiresAt: '2026-09-01T00:00:00.000Z',
-        shortcutVersion: 'shortcut-v3',
-        algorithmVersion: 'heart-v3',
-      }),
-      onGetShortcutConnectionStatus: async () => ({
-        state: 'paired' as const,
-        expiresAt: '2026-09-01T00:00:00.000Z',
-        lastReceivedAt: null,
-        lastTestAt: null,
-        shortcutVersion: 'shortcut-v3',
-        algorithmVersion: 'heart-v3',
-      }),
-      onRevokeShortcutTokens: async () => true,
     };
     renderWithLanguage(
       <AiSettingsPanel
@@ -543,21 +475,6 @@ describe('core component flows', () => {
     expect(await screen.findByText(/最近使用/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '生成 MCP Token' }));
     expect(screen.getByText('Bearer output-access-once')).toBeInTheDocument();
-
-    cleanup();
-    vi.stubEnv(
-      'VITE_SHORTCUT_INSTALL_URL',
-      'https://www.icloud.com/shortcuts/device-verified-test',
-    );
-    renderWithLanguage(
-      <AiSettingsPanel {...commonAiProps} mode="health-automation" />,
-    );
-    await user.click(screen.getByRole('button', { name: '生成配对码' }));
-    expect(screen.getByText('pairing-code-once')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '测试输入' }));
-    expect(onTestShortcutPairing).toHaveBeenCalledWith('pairing-code-once');
-    expect(screen.getByText('已通过 Edge Function 与数据库往返验证')).toBeInTheDocument();
-    vi.unstubAllEnvs();
   });
 
   it('keeps grounded chat disabled until the user is safely signed in and synced', async () => {
@@ -591,52 +508,19 @@ describe('core component flows', () => {
     expect(onAnswer).not.toHaveBeenCalled();
   });
 
-  it('opens Chat from its primary row while disclosure only expands history', async () => {
+  it('expands chat history from the primary row without opening a new chat', async () => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
     renderWithLanguage(
       <SideDrawer activeView="map" conversations={[]} onNavigate={onNavigate}
-        onOpenConversation={vi.fn()} onNewConversation={vi.fn()} onClose={vi.fn()} />,
+        onOpenConversation={vi.fn()} onNewConversation={vi.fn()}
+        onDeleteConversation={vi.fn()} onClose={vi.fn()} />,
     );
     await user.click(screen.getByRole('button', { name: '交流回访' }));
-    expect(onNavigate).toHaveBeenCalledWith('chat');
-    cleanup();
-    renderWithLanguage(
-      <SideDrawer activeView="map" conversations={[]} onNavigate={onNavigate}
-        onOpenConversation={vi.fn()} onNewConversation={vi.fn()} onClose={vi.fn()} />,
-    );
-    await user.click(screen.getByRole('button', { name: '展开交流回访历史' }));
     await waitFor(() => expect(
       screen.getByRole('button', { name: '新建对话' }),
     ).toBeVisible());
-    expect(onNavigate).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows every pending inbox item and marks only the expanded item seen', async () => {
-    const user = userEvent.setup();
-    const onMarkSeen = vi.fn();
-    renderWithLanguage(
-      <StarInboxScreen
-        items={[
-          { id: 'inbox-1', source: 'heart-rate', sourceEventId: 'event-1',
-            eventAt: '2026-08-02T10:00:00.000Z', receivedAt: '2026-08-02T10:01:00.000Z',
-            heartRate: 75, status: 'pending', decisionReason: 'low_signal_review',
-            thresholdSnapshot: { restingMin: 60, restingMax: 100 },
-            algorithmVersion: 'shortcut-heart-v2', signalLevel: 'low' },
-          { id: 'inbox-2', source: 'heart-rate', sourceEventId: 'event-2',
-            eventAt: '2026-08-02T11:00:00.000Z', receivedAt: '2026-08-02T11:01:00.000Z',
-            heartRate: 76, status: 'pending', decisionReason: 'test_event',
-            thresholdSnapshot: { restingMin: 60, restingMax: 100 },
-            algorithmVersion: 'shortcut-heart-v2', signalLevel: 'standard' },
-        ]}
-        onReviewItem={vi.fn()} onDismissItem={vi.fn()}
-        onMarkSeen={onMarkSeen} onClose={vi.fn()}
-      />,
-    );
-    expect(screen.getAllByText('新发现一颗星')).toHaveLength(2);
-    await user.click(document.querySelectorAll('.star-inbox-card')[0] as HTMLElement);
-    expect(onMarkSeen).toHaveBeenCalledWith('inbox-1');
-    expect(onMarkSeen).toHaveBeenCalledTimes(1);
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 
   it('scrolls a long existing conversation exactly once on entry', async () => {

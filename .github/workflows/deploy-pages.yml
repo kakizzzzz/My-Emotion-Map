@@ -34,7 +34,6 @@ jobs:
           VITE_APP_BASE_PATH: /My-Emotion-Map/
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SHORTCUT_INSTALL_URL: ${{ secrets.VITE_SHORTCUT_INSTALL_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

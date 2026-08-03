@@ -68,8 +68,10 @@ const toUserLocation = (position: GeolocationPosition): UserLocation => ({
 
 export const useLocationController = ({
   isMapActive,
+  isEnabled,
 }: {
   isMapActive: boolean;
+  isEnabled: boolean;
 }) => {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [requestState, setRequestState] =
@@ -88,6 +90,7 @@ export const useLocationController = ({
   const requestInFlightRef = useRef(false);
   const requestSequenceRef = useRef(0);
   const pendingIntentRef = useRef<LocationRequestIntent>('center');
+  const hasRequestedEntryLocationRef = useRef(false);
 
   const stopWatch = useCallback(() => {
     if (
@@ -206,6 +209,20 @@ export const useLocationController = ({
   }, [clearLocationSession, requestState]);
 
   useEffect(() => {
+    if (!isEnabled) {
+      hasRequestedEntryLocationRef.current = false;
+      return;
+    }
+    if (!isMapActive || hasRequestedEntryLocationRef.current) return;
+    hasRequestedEntryLocationRef.current = true;
+    pendingIntentRef.current = 'center';
+    if (!hasGrantedLocationAccess && requestState !== 'ready') {
+      setRequestState('idle');
+      setIsPermissionPromptOpen(true);
+    }
+  }, [hasGrantedLocationAccess, isEnabled, isMapActive, requestState]);
+
+  useEffect(() => {
     const onVisibilityChange = () => {
       setIsDocumentVisible(document.visibilityState !== 'hidden');
     };
@@ -216,6 +233,7 @@ export const useLocationController = ({
 
   useEffect(() => {
     const shouldWatch =
+      isEnabled &&
       isWatching &&
       hasGrantedLocationAccess &&
       isMapActive &&
@@ -246,6 +264,7 @@ export const useLocationController = ({
     return stopWatch;
   }, [
     hasGrantedLocationAccess,
+    isEnabled,
     isDocumentVisible,
     isMapActive,
     isWatching,

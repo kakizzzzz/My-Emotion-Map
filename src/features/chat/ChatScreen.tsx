@@ -299,7 +299,7 @@ export function ChatScreen({
     window.requestAnimationFrame(() => scrollToEnd('smooth'));
     const controller = new AbortController();
     abortRef.current = controller;
-    const timer = window.setTimeout(() => controller.abort(), 22_000);
+    const timer = window.setTimeout(() => controller.abort(), 55_000);
     try {
       const result = cloudAuth && cloudRevision !== null
         ? await requestEmotionChat({

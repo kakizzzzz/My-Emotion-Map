@@ -9,16 +9,6 @@
   height: 48px;
 }
 
-.global-inbox-button {
-  position: absolute;
-  z-index: calc(var(--em-layer-sheet) + 5);
-  right: 16px;
-  bottom: var(--em-chrome-bottom);
-  width: 48px;
-  height: 48px;
-}
-
-.global-inbox-button__unread,
 .global-menu-button__unread {
   position: absolute;
   top: 8px;
@@ -101,8 +91,7 @@
 }
 
 .side-nav__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: block;
   align-items: stretch;
 }
 
@@ -121,21 +110,6 @@
     background var(--em-local),
     transform var(--em-fast);
   width: 100%;
-}
-
-.side-nav__disclosure {
-  display: grid;
-  width: 44px;
-  min-height: 44px;
-  place-items: center;
-  align-self: center;
-  border-radius: 50%;
-  color: var(--em-text-secondary);
-}
-
-.side-nav__disclosure:focus-visible {
-  outline: 2px solid var(--em-dark);
-  outline-offset: 2px;
 }
 
 .side-nav__item:active {
@@ -236,6 +210,46 @@
   margin-bottom: 2px;
   background: var(--em-soft-surface);
   text-align: center;
+}
+
+.side-ai-swipe-row {
+  position: relative;
+  min-height: 44px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #b84c43;
+}
+
+.side-ai-swipe-row > button {
+  border: 0;
+}
+
+.side-ai-delete {
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 0 auto;
+  display: grid;
+  width: 82px;
+  place-content: center;
+  gap: 2px;
+  background: #b84c43;
+  color: #fff;
+  font-size: 10px;
+}
+
+.side-ai-thread {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 15px;
+  background: var(--em-page);
+  text-align: left;
+  touch-action: pan-y;
 }
 
 .side-ai-list > button.side-ai-new strong {

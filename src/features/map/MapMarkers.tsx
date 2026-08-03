@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Layer, Marker, Source } from 'react-map-gl/maplibre';
 import { motion } from 'motion/react';
 import { EmotionStar } from '../../EmotionStar';
@@ -14,13 +15,17 @@ import { MAP_STYLES } from './mapPreferences';
 function SavedMomentMarker({
   moment,
   selected,
+  isTagging,
   onSelectMoment,
 }: {
   moment: EmotionMoment;
   selected: boolean;
+  isTagging: boolean;
   onSelectMoment: (momentId: string) => void;
 }) {
   const { copy, language } = useAppLanguage();
+  const touchRef = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  const suppressClickUntilRef = useRef(0);
 
   return (
     <Marker
@@ -37,27 +42,58 @@ function SavedMomentMarker({
           transition={moment.isNew ? MOTION.placement : MOTION.press}
           onClick={(event) => {
             event.stopPropagation();
+            if (performance.now() < suppressClickUntilRef.current) return;
             onSelectMoment(moment.id);
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType === 'mouse' || !event.isPrimary) return;
+            touchRef.current = {
+              id: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              moved: false,
+            };
+            if (isTagging) event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            const touch = touchRef.current;
+            if (!touch || touch.id !== event.pointerId) return;
+            if (Math.hypot(event.clientX - touch.x, event.clientY - touch.y) >= 16) {
+              touch.moved = true;
+            }
+          }}
+          onPointerUp={(event) => {
+            const touch = touchRef.current;
+            if (!touch || touch.id !== event.pointerId) return;
+            touchRef.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+            suppressClickUntilRef.current = performance.now() + 700;
+            if (!touch.moved) {
+              event.stopPropagation();
+              onSelectMoment(moment.id);
+            }
+          }}
+          onPointerCancel={(event) => {
+            touchRef.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
           }}
           aria-label={
             moment.isNew
-              ? typeof moment.heartRate === 'number'
-                ? copy.map.newHeartRateStar(moment.heartRate)
-                : copy.map.newStar
+              ? copy.map.newStar
               : `${moment.place}, ${getEmotionLabel(moment.emotion, language)}`
           }
         >
-          {moment.isNew ? (
-            <StarMarkerGlyph size={36} color="#EDC727" />
-          ) : (
-            <EmotionStar
-              emotion={moment.emotion}
-              size={36}
-              order={moment.tagOrder}
-              selected={selected}
-              colorOverride={moment.color}
-            />
-          )}
+          <EmotionStar
+            emotion={moment.emotion}
+            size={36}
+            order={moment.tagOrder}
+            selected={selected}
+            colorOverride={moment.color}
+          />
         </motion.button>
       </div>
     </Marker>
@@ -69,6 +105,7 @@ export function MapMarkers({
   selectedId,
   mapStyle,
   tagLine,
+  isTagging,
   userLocation,
   starDragPreview,
   onSelectMoment,
@@ -77,6 +114,7 @@ export function MapMarkers({
   selectedId: string | null;
   mapStyle: keyof typeof MAP_STYLES;
   tagLine: object;
+  isTagging: boolean;
   userLocation: UserLocation | null;
   starDragPreview: CoordinatePair | null;
   onSelectMoment: (momentId: string) => void;
@@ -144,6 +182,7 @@ export function MapMarkers({
           key={moment.id}
           moment={moment}
           selected={selectedId === moment.id}
+          isTagging={isTagging}
           onSelectMoment={onSelectMoment}
         />
       ))}

@@ -44,7 +44,6 @@ export function NoteEditorSheet({
   moment,
   note,
   onSave,
-  onSaveDraft,
   onDeleteDraft,
   onClose,
   onToast,
@@ -53,7 +52,6 @@ export function NoteEditorSheet({
   moment: EmotionMoment;
   note: EmotionNote;
   onSave: SaveNoteHandler;
-  onSaveDraft: SaveNoteHandler;
   onDeleteDraft: (momentId: string) => void;
   onClose: () => void;
   onToast: ToastHandler;
@@ -121,7 +119,7 @@ export function NoteEditorSheet({
     const next = reduceEditorExit(exitState, action);
     dispatchExit(action);
     if (next.outcome === 'save') save();
-    if (next.outcome === 'keep_draft') saveDraft();
+    if (next.outcome === 'keep_draft') save();
     if (next.outcome === 'delete_draft') onDeleteDraft(moment.id);
     if (next.outcome === 'close' || next.outcome === 'discard') onClose();
   };
@@ -386,18 +384,6 @@ export function NoteEditorSheet({
     );
   }
 
-  function saveDraft() {
-    const { savedPlace, savedNote } = buildNote(true);
-    onSaveDraft(
-      moment.id,
-      savedNote,
-      emotion,
-      placeRating,
-      starColor,
-      savedPlace,
-    );
-  }
-
   return (
     <motion.div
       className="overlay-layer note-editor-overlay"
@@ -425,9 +411,6 @@ export function NoteEditorSheet({
         <header className="sheet-header note-editor-header">
           <small>
             {moment.date} · {moment.time}
-            {typeof moment.heartRate === 'number'
-              ? ` · ${copy.health.heartRate} ${moment.heartRate} bpm`
-              : ''}
           </small>
           <div className="note-editor-header-actions">
             <button
@@ -851,7 +834,7 @@ export function NoteEditorSheet({
                       className="is-primary"
                       onClick={() => applyExitAction({ type: 'keep_draft' })}
                     >
-                      {copy.note.keepDraft}
+                      {copy.common.save}
                     </button>
                     <button onClick={() => applyExitAction({ type: 'delete_draft' })}>
                       {copy.note.deleteDraft}

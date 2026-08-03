@@ -79,13 +79,12 @@ conflicts pause upload after local and remote recovery copies are stored.
 `claim_ai_quota` atomically enforces five photo requests and ten chat requests
 per authenticated user per hour. Direct table access is revoked.
 
-MCP and Shortcut use different random personal tokens. Only SHA-256 hashes are
-stored. Tokens expire, can be revoked, and never appear in browser persistence,
+MCP uses random personal tokens. Only SHA-256 hashes are stored. Tokens expire,
+can be revoked, and never appear in browser persistence,
 README examples, fixtures, function logs or error responses. The default
 Emotion Map MCP is read-only and has no proposal or deep-link tool. Proposal
 tools require a separate `action` token and endpoint plus in-app confirmation.
-The current read manifest exposes no coordinate, health or image tool. Shortcut
-observations are owner-scoped pending inputs, not formal records or AI evidence.
+The current read manifest exposes no coordinate, health or image tool.
 Proposal confirmation is recoverable and idempotent: the server claims an
 operation as `accepting`, the client journals the exact transition, and the
 server moves it to `applied` only after the resulting workspace revision is
@@ -100,7 +99,7 @@ synced. Revision or target-fingerprint drift stops the operation.
 - verify provider unavailable, balance, rate-limit, timeout and invalid-JSON
   responses without exposing provider bodies;
 - scan source and built assets for credential patterns before GitHub upload;
-- test real JPEG/HEIC photos and Shortcut transport on an iPhone.
+- test real JPEG/HEIC photos on an iPhone.
 - verify MCP cross-user denial, token expiry/revocation and proposal-only writes.
 - verify MCP protocol negotiation, notifications, bounded batch handling,
   output-schema validation and `last_used_at` updates.

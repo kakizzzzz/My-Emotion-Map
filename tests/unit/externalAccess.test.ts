@@ -22,15 +22,6 @@ const makeHandlers = ({ rpc, from, applySnapshot = vi.fn() }: {
     client: { rpc, ...(from ? { from } : {}) } as never,
     userId: 'user-a',
     dataMode: 'real',
-    healthPreferences: {
-      restingHeartRateMin: 50,
-      restingHeartRateMax: 100,
-      rangeConfirmed: true,
-      singleSampleEnabled: false,
-      workoutPolicy: 'suppress',
-      unknownPolicy: 'suppress',
-      cooldownMinutes: 30,
-    },
     userLocation: { lng: 127, lat: 37.558, timestamp: Date.now() },
     language: 'zh',
     snapshot: createEmptyAppData(),
@@ -95,75 +86,6 @@ describe('external proposal application', () => {
       p_proposal_id: 'proposal-a',
       p_operation_id: 'operation-a',
       p_failure_code: 'local_apply_failed',
-    });
-  });
-
-  it('tests Shortcut pairing through the Edge Function and owner-scoped database readback', async () => {
-    vi.stubEnv('VITE_SUPABASE_URL', 'https://project-ref.supabase.co');
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      status: 'accepted',
-    }), { status: 202, headers: { 'content-type': 'application/json' } }));
-    vi.stubGlobal('fetch', fetchMock);
-    const limit = vi.fn().mockResolvedValue({
-      data: [{ id: 'observation-a', event_id: 'test-event' }], error: null,
-    });
-    const eq = vi.fn(() => ({ limit }));
-    const select = vi.fn(() => ({ eq }));
-    const from = vi.fn(() => ({ select }));
-    const handlers = createExternalAccessHandlers({
-      client: { rpc: vi.fn(), from } as never,
-      userId: 'user-a',
-      dataMode: 'real',
-      healthPreferences: {
-        restingHeartRateMin: 60,
-        restingHeartRateMax: 100,
-        rangeConfirmed: true,
-        singleSampleEnabled: false,
-        workoutPolicy: 'suppress',
-        unknownPolicy: 'suppress',
-        cooldownMinutes: 30,
-      },
-      userLocation: null,
-      language: 'zh',
-      snapshot: createEmptyAppData(),
-      cloudRevision: 1,
-      applySnapshot: vi.fn(),
-      onDraftCreated: vi.fn(),
-      onRequireLocation: vi.fn(),
-    });
-
-    expect(await handlers.testShortcutPairing(`mes_${'a'.repeat(64)}`)).toBe('verified');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://project-ref.supabase.co/functions/v1/shortcut-ingress',
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
-      version: 3,
-      context: 'unknown',
-      test: true,
-    });
-    expect(from).toHaveBeenCalledWith('shortcut_observations');
-  });
-
-  it('includes the complete immutable heart-v3 policy when pairing', async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: [{
-        token: `mes_${'b'.repeat(64)}`,
-        expires_at: '2026-09-01T00:00:00.000Z',
-        shortcut_version: 'shortcut-v3',
-        algorithm_version: 'heart-v3',
-      }],
-      error: null,
-    });
-    const { handlers } = makeHandlers({ rpc });
-    await handlers.issueShortcutPairing();
-    expect(rpc).toHaveBeenCalledWith('issue_shortcut_pairing', {
-      p_resting_min: 50,
-      p_resting_max: 100,
-      p_single_sample_enabled: false,
-      p_workout_policy: 'suppress',
-      p_unknown_policy: 'suppress',
-      p_cooldown_minutes: 30,
     });
   });
 
