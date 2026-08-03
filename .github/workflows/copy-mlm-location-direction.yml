@@ -1,0 +1,656 @@
+name: copy My Life Memory location direction
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  copy-and-verify:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Copy location copy and direction handling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file_path = Path(path)
+              source = file_path.read_text(encoding='utf-8')
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one replacement, found {count}')
+              file_path.write_text(source.replace(old, new, 1), encoding='utf-8')
+
+          def replace_count(path: str, old: str, new: str, expected: int) -> None:
+              file_path = Path(path)
+              source = file_path.read_text(encoding='utf-8')
+              count = source.count(old)
+              if count != expected:
+                  raise SystemExit(f'{path}: expected {expected} replacements, found {count}')
+              file_path.write_text(source.replace(old, new), encoding='utf-8')
+
+          Path('src/lib/sensorUtils.ts').write_text("""export type DeviceOrientationEventWithCompass = DeviceOrientationEvent & {
+            webkitCompassHeading?: number;
+            webkitCompassAccuracy?: number;
+          };
+
+          export type DeviceOrientationEventConstructorWithPermission = typeof DeviceOrientationEvent & {
+            requestPermission?: (absolute?: boolean) => Promise<PermissionState>;
+          };
+
+          export const getCompassHeading = (event: DeviceOrientationEventWithCompass) => {
+            if (
+              typeof event.webkitCompassHeading === 'number' &&
+              Number.isFinite(event.webkitCompassHeading)
+            ) {
+              return (event.webkitCompassHeading + 360) % 360;
+            }
+
+            if (typeof event.alpha === 'number' && Number.isFinite(event.alpha)) {
+              return (360 - event.alpha + 360) % 360;
+            }
+
+            return null;
+          };
+          """.replace('          ', ''), encoding='utf-8')
+
+          replace_count(
+              'src/i18n/zh.ts',
+              '用于地图定位和在当前位置放置星星。',
+              '用于地图定位和路线记录。',
+              2,
+          )
+          replace_count(
+              'src/i18n/en.ts',
+              'Used to locate you on the map and place stars at your current location.',
+              'Used for map location and route recording.',
+              2,
+          )
+          replace_count(
+              'src/i18n/ko.ts',
+              '지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다.',
+              '지도 위치와 경로 기록에 사용합니다.',
+              2,
+          )
+
+          controller = 'src/useLocationController.ts'
+          replace_once(
+              controller,
+              "import { useCallback, useEffect, useRef, useState } from 'react';\n",
+              """import { useCallback, useEffect, useRef, useState } from 'react';
+          import {
+            getCompassHeading,
+            type DeviceOrientationEventConstructorWithPermission,
+            type DeviceOrientationEventWithCompass,
+          } from './lib/sensorUtils';
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """const getFailureState = (error: GeolocationPositionError): LocationRequestState => {
+            if (error.code === error.PERMISSION_DENIED) return 'denied';
+            if (error.code === error.TIMEOUT) return 'timeout';
+            return 'unavailable';
+          };
+
+          """.replace('          ', ''),
+              """const getFailureState = (error: GeolocationPositionError): LocationRequestState => {
+            if (error.code === error.PERMISSION_DENIED) return 'denied';
+            if (error.code === error.TIMEOUT) return 'timeout';
+            return 'unavailable';
+          };
+
+          const getDistanceBetweenPoints = (
+            from: [number, number],
+            to: [number, number],
+          ) => {
+            const earthRadiusMeters = 6_371_000;
+            const fromLat = (from[0] * Math.PI) / 180;
+            const toLat = (to[0] * Math.PI) / 180;
+            const deltaLat = ((to[0] - from[0]) * Math.PI) / 180;
+            const deltaLng = ((to[1] - from[1]) * Math.PI) / 180;
+            const a =
+              Math.sin(deltaLat / 2) ** 2 +
+              Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) ** 2;
+            return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          };
+
+          const getBearingBetweenPoints = (
+            from: [number, number],
+            to: [number, number],
+          ) => {
+            const fromLat = (from[0] * Math.PI) / 180;
+            const toLat = (to[0] * Math.PI) / 180;
+            const deltaLng = ((to[1] - from[1]) * Math.PI) / 180;
+            const y = Math.sin(deltaLng) * Math.cos(toLat);
+            const x =
+              Math.cos(fromLat) * Math.sin(toLat) -
+              Math.sin(fromLat) * Math.cos(toLat) * Math.cos(deltaLng);
+            return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+          };
+
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """  const hasRequestedEntryLocationRef = useRef(false);
+            const hasSeenEntryLocationPromptRef = useRef(false);
+          """.replace('          ', ''),
+              """  const hasRequestedEntryLocationRef = useRef(false);
+            const hasSeenEntryLocationPromptRef = useRef(false);
+            const headingWatchCleanupRef = useRef<(() => void) | null>(null);
+            const lastGpsLocationRef = useRef<[number, number] | null>(null);
+            const deviceHeadingRef = useRef<number | null>(null);
+            const lastCompassHeadingAtRef = useRef(0);
+            const isRequestingHeadingPermissionRef = useRef(false);
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """  const stopWatch = useCallback(() => {
+            if (
+              watchIdRef.current !== null &&
+              typeof navigator !== 'undefined' &&
+              navigator.geolocation
+            ) {
+              navigator.geolocation.clearWatch(watchIdRef.current);
+            }
+            watchIdRef.current = null;
+          }, []);
+
+          """.replace('          ', ''),
+              """  const stopWatch = useCallback(() => {
+            if (
+              watchIdRef.current !== null &&
+              typeof navigator !== 'undefined' &&
+              navigator.geolocation
+            ) {
+              navigator.geolocation.clearWatch(watchIdRef.current);
+            }
+            watchIdRef.current = null;
+          }, []);
+
+            const stopHeadingWatch = useCallback(() => {
+              headingWatchCleanupRef.current?.();
+              headingWatchCleanupRef.current = null;
+            }, []);
+
+            const startHeadingWatch = useCallback(async (requestPermission = true) => {
+              if (headingWatchCleanupRef.current || typeof window === 'undefined') return;
+              if (isRequestingHeadingPermissionRef.current) return;
+
+              const orientationEvent = window.DeviceOrientationEvent as
+                | DeviceOrientationEventConstructorWithPermission
+                | undefined;
+              if (!orientationEvent) return;
+
+              isRequestingHeadingPermissionRef.current = true;
+              try {
+                if (typeof orientationEvent.requestPermission === 'function') {
+                  if (!requestPermission) return;
+                  const permission = await orientationEvent.requestPermission(true);
+                  if (permission !== 'granted') return;
+                }
+              } catch {
+                return;
+              } finally {
+                isRequestingHeadingPermissionRef.current = false;
+              }
+
+              const handleOrientation = (event: Event) => {
+                const heading = getCompassHeading(
+                  event as DeviceOrientationEventWithCompass,
+                );
+                if (heading === null) return;
+                deviceHeadingRef.current = heading;
+                lastCompassHeadingAtRef.current = Date.now();
+                setUserLocation((current) =>
+                  current ? { ...current, heading } : current,
+                );
+              };
+
+              window.addEventListener(
+                'deviceorientationabsolute',
+                handleOrientation,
+                true,
+              );
+              window.addEventListener('deviceorientation', handleOrientation, true);
+              headingWatchCleanupRef.current = () => {
+                window.removeEventListener(
+                  'deviceorientationabsolute',
+                  handleOrientation,
+                  true,
+                );
+                window.removeEventListener(
+                  'deviceorientation',
+                  handleOrientation,
+                  true,
+                );
+              };
+            }, []);
+
+            const applyGpsPosition = useCallback((position: GeolocationPosition) => {
+              const baseLocation = toUserLocation(position);
+              const coordinates: [number, number] = [
+                baseLocation.lat,
+                baseLocation.lng,
+              ];
+              const previousLocation = lastGpsLocationRef.current;
+              const hasRecentCompassHeading =
+                Date.now() - lastCompassHeadingAtRef.current < 2_500;
+              let heading = deviceHeadingRef.current;
+
+              if (!hasRecentCompassHeading) {
+                const gpsHeading =
+                  typeof position.coords.heading === 'number' &&
+                  Number.isFinite(position.coords.heading) &&
+                  typeof position.coords.speed === 'number' &&
+                  position.coords.speed > 0.5
+                    ? (position.coords.heading + 360) % 360
+                    : null;
+                if (gpsHeading !== null) {
+                  heading = gpsHeading;
+                } else if (
+                  previousLocation &&
+                  getDistanceBetweenPoints(previousLocation, coordinates) >= 1
+                ) {
+                  heading = getBearingBetweenPoints(previousLocation, coordinates);
+                }
+              }
+
+              deviceHeadingRef.current = heading;
+              lastGpsLocationRef.current = coordinates;
+              const location = { ...baseLocation, heading };
+              setUserLocation(location);
+              return location;
+            }, []);
+
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """  const clearLocationSession = useCallback(() => {
+            cancelPendingRequest();
+            stopWatch();
+            setIsWatching(false);
+            setHasGrantedLocationAccess(false);
+            setUserLocation(null);
+            setResolvedRequest(null);
+          }, [cancelPendingRequest, stopWatch]);
+          """.replace('          ', ''),
+              """  const clearLocationSession = useCallback(() => {
+            cancelPendingRequest();
+            stopWatch();
+            stopHeadingWatch();
+            lastGpsLocationRef.current = null;
+            deviceHeadingRef.current = null;
+            lastCompassHeadingAtRef.current = 0;
+            setIsWatching(false);
+            setHasGrantedLocationAccess(false);
+            setUserLocation(null);
+            setResolvedRequest(null);
+          }, [cancelPendingRequest, stopHeadingWatch, stopWatch]);
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """            const location = toUserLocation(position);
+                        requestSequenceRef.current += 1;
+                        setUserLocation(location);
+          """.replace('          ', ''),
+              """            const location = applyGpsPosition(position);
+                        requestSequenceRef.current += 1;
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """            setIsPermissionPromptOpen(true);
+                        resolve(false);
+          """.replace('          ', ''),
+              """            stopHeadingWatch();
+                        setIsPermissionPromptOpen(true);
+                        resolve(false);
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """    [stopWatch],
+            );
+          """.replace('          ', ''),
+              """    [applyGpsPosition, stopHeadingWatch, stopWatch],
+            );
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """      if (hasGrantedLocationAccess) {
+                    if (intent === 'place' && userLocation) {
+          """.replace('          ', ''),
+              """      if (hasGrantedLocationAccess) {
+                    void startHeadingWatch(true);
+                    if (intent === 'place' && userLocation) {
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """    [hasGrantedLocationAccess, requestPosition, requestState, userLocation],
+            );
+          """.replace('          ', ''),
+              """    [
+                  hasGrantedLocationAccess,
+                  requestPosition,
+                  requestState,
+                  startHeadingWatch,
+                  userLocation,
+                ],
+            );
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """  const confirmLocationRequest = useCallback(() => {
+            if (requestState === 'requesting') return;
+            hasSeenEntryLocationPromptRef.current = true;
+            void requestPosition(pendingIntentRef.current);
+          }, [requestPosition, requestState]);
+          """.replace('          ', ''),
+              """  const confirmLocationRequest = useCallback(() => {
+            if (requestState === 'requesting') return;
+            hasSeenEntryLocationPromptRef.current = true;
+            void startHeadingWatch(true);
+            void requestPosition(pendingIntentRef.current);
+          }, [requestPosition, requestState, startHeadingWatch]);
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """    if (!shouldWatch) {
+                stopWatch();
+                return;
+              }
+
+              stopWatch();
+          """.replace('          ', ''),
+              """    if (!shouldWatch) {
+                stopWatch();
+                stopHeadingWatch();
+                return;
+              }
+
+              void startHeadingWatch(false);
+              stopWatch();
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """      (position) => {
+                    setUserLocation(toUserLocation(position));
+                    setRequestState('ready');
+                  },
+          """.replace('          ', ''),
+              """      (position) => {
+                    applyGpsPosition(position);
+                    setRequestState('ready');
+                  },
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """        setIsWatching(false);
+                    stopWatch();
+                  },
+          """.replace('          ', ''),
+              """        setIsWatching(false);
+                    stopWatch();
+                    stopHeadingWatch();
+                  },
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """    return stopWatch;
+            }, [
+              hasGrantedLocationAccess,
+              isEnabled,
+              isDocumentVisible,
+              isMapActive,
+              isWatching,
+              stopWatch,
+            ]);
+          """.replace('          ', ''),
+              """    return () => {
+                stopWatch();
+                stopHeadingWatch();
+              };
+            }, [
+              applyGpsPosition,
+              hasGrantedLocationAccess,
+              isEnabled,
+              isDocumentVisible,
+              isMapActive,
+              isWatching,
+              startHeadingWatch,
+              stopHeadingWatch,
+              stopWatch,
+            ]);
+          """.replace('          ', ''),
+          )
+
+          replace_once(
+              controller,
+              """      cancelPendingRequest();
+                  stopWatch();
+                },
+                [cancelPendingRequest, stopWatch],
+          """.replace('          ', ''),
+              """      cancelPendingRequest();
+                  stopWatch();
+                  stopHeadingWatch();
+                },
+                [cancelPendingRequest, stopHeadingWatch, stopWatch],
+          """.replace('          ', ''),
+          )
+
+          visual_test = Path('tests/unit/mapVisualContracts.test.ts')
+          visual_source = visual_test.read_text(encoding='utf-8')
+          visual_source = visual_source.replace(
+              '用于地图定位和在当前位置放置星星。',
+              '用于地图定位和路线记录。',
+          ).replace(
+              'Used to locate you on the map and place stars at your current location\\.',
+              'Used for map location and route recording\\.',
+          ).replace(
+              '지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다\\.',
+              '지도 위치와 경로 기록에 사용합니다\\.',
+          )
+          visual_test.write_text(visual_source, encoding='utf-8')
+
+          Path('tests/components/locationHeading.test.tsx').write_text("""import { act, renderHook, waitFor } from '@testing-library/react';
+          import { afterEach, describe, expect, it, vi } from 'vitest';
+          import {
+            getCompassHeading,
+            type DeviceOrientationEventWithCompass,
+          } from '../../src/lib/sensorUtils';
+          import { useLocationController } from '../../src/useLocationController';
+
+          const originalOrientationDescriptor = Object.getOwnPropertyDescriptor(
+            window,
+            'DeviceOrientationEvent',
+          );
+
+          const makePosition = ({
+            latitude = 37.558,
+            longitude = 126.998,
+            heading = null,
+            speed = null,
+          }: {
+            latitude?: number;
+            longitude?: number;
+            heading?: number | null;
+            speed?: number | null;
+          } = {}) => ({
+            coords: {
+              latitude,
+              longitude,
+              accuracy: 12,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading,
+              speed,
+            },
+            timestamp: Date.now(),
+          }) satisfies GeolocationPosition;
+
+          const installOrientationPermission = () => {
+            const requestPermission = vi.fn(async () => 'granted' as PermissionState);
+            const OrientationEvent = Object.assign(function OrientationEvent() {}, {
+              requestPermission,
+            });
+            Object.defineProperty(window, 'DeviceOrientationEvent', {
+              configurable: true,
+              value: OrientationEvent,
+            });
+            return requestPermission;
+          };
+
+          afterEach(() => {
+            vi.restoreAllMocks();
+            if (originalOrientationDescriptor) {
+              Object.defineProperty(
+                window,
+                'DeviceOrientationEvent',
+                originalOrientationDescriptor,
+              );
+            } else {
+              delete (window as typeof window & {
+                DeviceOrientationEvent?: unknown;
+              }).DeviceOrientationEvent;
+            }
+          });
+
+          describe('location heading parity with My Life Memory', () => {
+            it('uses the same compass heading fallbacks', () => {
+              expect(
+                getCompassHeading({
+                  webkitCompassHeading: -10,
+                } as DeviceOrientationEventWithCompass),
+              ).toBe(350);
+              expect(
+                getCompassHeading({
+                  alpha: 90,
+                } as DeviceOrientationEventWithCompass),
+              ).toBe(270);
+            });
+
+            it('requests iOS direction permission from Allow and keeps compass heading through GPS updates', async () => {
+              const requestPermission = installOrientationPermission();
+              let watchSuccess: PositionCallback | null = null;
+              const getCurrentPosition = vi.fn((success: PositionCallback) => {
+                success(makePosition());
+              });
+              const watchPosition = vi.fn((success: PositionCallback) => {
+                watchSuccess = success;
+                return 1;
+              });
+              const clearWatch = vi.fn();
+              Object.defineProperty(window, 'isSecureContext', {
+                configurable: true,
+                value: true,
+              });
+              Object.defineProperty(navigator, 'geolocation', {
+                configurable: true,
+                value: { getCurrentPosition, watchPosition, clearWatch },
+              });
+              Object.defineProperty(document, 'visibilityState', {
+                configurable: true,
+                value: 'visible',
+              });
+              const addEventListener = vi.spyOn(window, 'addEventListener');
+
+              const { result, unmount } = renderHook(() =>
+                useLocationController({ isMapActive: true, isEnabled: true }),
+              );
+              await waitFor(() =>
+                expect(result.current.isPermissionPromptOpen).toBe(true),
+              );
+
+              act(() => result.current.confirmLocationRequest());
+              await waitFor(() =>
+                expect(requestPermission).toHaveBeenCalledWith(true),
+              );
+              await waitFor(() => expect(result.current.requestState).toBe('ready'));
+              await waitFor(() =>
+                expect(addEventListener).toHaveBeenCalledWith(
+                  'deviceorientation',
+                  expect.any(Function),
+                  true,
+                ),
+              );
+
+              const orientation = new Event('deviceorientation');
+              Object.defineProperty(orientation, 'webkitCompassHeading', {
+                value: 137,
+              });
+              act(() => window.dispatchEvent(orientation));
+              await waitFor(() =>
+                expect(result.current.userLocation?.heading).toBe(137),
+              );
+
+              await waitFor(() => expect(watchSuccess).not.toBeNull());
+              act(() => {
+                watchSuccess?.(
+                  makePosition({
+                    latitude: 37.55801,
+                    longitude: 126.99801,
+                  }),
+                );
+              });
+              await waitFor(() =>
+                expect(result.current.userLocation?.heading).toBe(137),
+              );
+              unmount();
+            });
+          });
+          """.replace('          ', ''), encoding='utf-8')
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run check:all
+        env:
+          VITE_SUPABASE_URL: https://uifgpmmlvmfrauzbbrem.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: e2e-public-placeholder
+      - name: Commit verified parity fix
+        run: |
+          rm .github/workflows/copy-mlm-location-direction.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: copy My Life Memory location direction"
+          git push origin HEAD:${{ github.head_ref }}
