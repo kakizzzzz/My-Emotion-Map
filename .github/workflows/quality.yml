@@ -6,79 +6,33 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  split-and-verify:
-    if: github.event_name == 'pull_request'
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - name: Apply byte-preserving settings split
-        run: |
-          python - <<'PY'
-          from hashlib import sha256
-          from pathlib import Path
-
-          source_path = Path('src/styles/settings.css')
-          ai_path = Path('src/styles/settings-ai.css')
-          imports_path = Path('src/styles.css')
-          exception_path = Path('scripts/source-size-exceptions.json')
-          marker = '.ai-user-prompt-card {'
-          generated_header = '/* AI, MCP, and export settings */\n\n'
-
-          source = source_path.read_text(encoding='utf-8')
-          if source.count(marker) != 1:
-              raise SystemExit(f'expected one split marker, found {source.count(marker)}')
-
-          base, ai_tail = source.split(marker, 1)
-          ai = generated_header + marker + ai_tail
-          reconstructed = base + ai.removeprefix(generated_header)
-          if reconstructed != source:
-              raise SystemExit('split files do not reconstruct the original stylesheet')
-          if sha256(reconstructed.encode()).digest() != sha256(source.encode()).digest():
-              raise SystemExit('split hash verification failed')
-
-          base_output = base.rstrip() + '\n'
-          source_path.write_text(base_output, encoding='utf-8')
-          ai_path.write_text(ai, encoding='utf-8')
-
-          imports = imports_path.read_text(encoding='utf-8')
-          import_line = "@import './styles/settings.css';"
-          replacement = import_line + "\n@import './styles/settings-ai.css';"
-          if imports.count(import_line) != 1:
-              raise SystemExit('settings import is missing or duplicated')
-          imports_path.write_text(imports.replace(import_line, replacement, 1), encoding='utf-8')
-          exception_path.write_text('{}\n', encoding='utf-8')
-
-          base_lines = len(base_output.splitlines())
-          ai_lines = len(ai.splitlines())
-          if base_lines > 700 or ai_lines > 700:
-              raise SystemExit(f'split remains oversized: base={base_lines}, ai={ai_lines}')
-          print(f'original_sha256={sha256(source.encode()).hexdigest()}')
-          print(f'base_lines={base_lines}')
-          print(f'ai_lines={ai_lines}')
-          PY
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run check
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
         env:
           VITE_SUPABASE_URL: https://uifgpmmlvmfrauzbbrem.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: e2e-public-placeholder
-      - name: Commit verified split
-        run: |
-          git diff --check
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add scripts/source-size-exceptions.json src/styles.css src/styles/settings.css src/styles/settings-ai.css
-          git commit -m "refactor: split settings styles"
-          git push origin HEAD:${{ github.head_ref }}
