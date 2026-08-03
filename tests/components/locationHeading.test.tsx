@@ -6,6 +6,7 @@ import {
 } from '../../src/lib/sensorUtils';
 import { useLocationController } from '../../src/useLocationController';
 
+// Preserve the same user-gesture permission and compass precedence as My Life Memory.
 const originalOrientationDescriptor = Object.getOwnPropertyDescriptor(
   window,
   'DeviceOrientationEvent',
