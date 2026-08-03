@@ -523,7 +523,9 @@ test('regular conversation rows reveal a real delete action on left swipe', asyn
   await page.getByRole('button', { name: '打开页面导航' }).click();
   const navigation = page.getByRole('dialog', { name: '页面导航' });
   await navigation.getByRole('button', { name: '交流回访', exact: true }).click();
+  await expect(navigation.locator('#side-chat-history')).toHaveCSS('opacity', '1');
   const row = navigation.locator('.side-ai-thread', { hasText: '可删除对话' });
+  await expect(row).toBeVisible();
   const box = await row.boundingBox();
   if (!box) throw new Error('Conversation row is not visible');
   await page.mouse.move(box.x + box.width - 12, box.y + box.height / 2);

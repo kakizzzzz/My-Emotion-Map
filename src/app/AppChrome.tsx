@@ -46,6 +46,8 @@ function SwipeConversationRow({
     id: number;
     startX: number;
     startY: number;
+    lastX: number;
+    lastY: number;
     startOffset: number;
     dragging: boolean;
   } | null>(null);
@@ -78,6 +80,8 @@ function SwipeConversationRow({
             id: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
             startOffset: offset,
             dragging: false,
           };
@@ -86,6 +90,8 @@ function SwipeConversationRow({
         onPointerMove={(event) => {
           const pointer = pointerRef.current;
           if (!pointer || pointer.id !== event.pointerId) return;
+          pointer.lastX = event.clientX;
+          pointer.lastY = event.clientY;
           const dx = event.clientX - pointer.startX;
           const dy = event.clientY - pointer.startY;
           if (!pointer.dragging && Math.hypot(dx, dy) < 10) return;
@@ -101,8 +107,8 @@ function SwipeConversationRow({
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
-          const dx = event.clientX - pointer.startX;
-          const dy = event.clientY - pointer.startY;
+          const dx = pointer.lastX - pointer.startX;
+          const dy = pointer.lastY - pointer.startY;
           const completedHorizontalDrag = pointer.dragging || (
             Math.abs(dx) >= 10 && Math.abs(dx) > Math.abs(dy)
           );
