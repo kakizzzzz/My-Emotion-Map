@@ -1,9 +1,1 @@
-{
-  "src/styles/settings.css": {
-    "max": 1100,
-    "target": 700,
-    "reason": "PR #8 settings and AI integration styles remain visually coupled; split the stylesheet after the competition release without changing the approved UI.",
-    "owner": "kakizzzzz",
-    "removeBy": "2026-08-10"
-  }
-}
+{}
