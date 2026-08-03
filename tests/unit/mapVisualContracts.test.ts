@@ -50,19 +50,19 @@ describe('map visual geometry contracts', () => {
     expect(orderBadge).toContain('border-radius: 50%;');
   });
 
-  it('uses concise and equivalent location descriptions in all languages', async () => {
+  it('copies the My Life Memory location descriptions in all languages', async () => {
     const [zh, en, ko] = await Promise.all([
       readSource('src/i18n/zh.ts'),
       readSource('src/i18n/en.ts'),
       readSource('src/i18n/ko.ts'),
     ]);
 
-    expect(zh.match(/用于地图定位和在当前位置放置星星。/g)).toHaveLength(2);
+    expect(zh.match(/用于地图定位和路线记录。/g)).toHaveLength(2);
     expect(
-      en.match(/Used to locate you on the map and place stars at your current location\./g),
+      en.match(/Used for map location and route recording\./g),
     ).toHaveLength(2);
     expect(
-      ko.match(/지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다\./g),
+      ko.match(/지도 위치와 경로 기록에 사용합니다\./g),
     ).toHaveLength(2);
   });
 });

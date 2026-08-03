@@ -378,9 +378,9 @@ export const koCopy: AppCopy = {
   location: {
     settingsTitle: '위치',
     settingsHint: '지도에서 현재 위치를 사용하는 방식을 관리합니다.',
-    settingsBody: '지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다.',
+    settingsBody: '지도 위치와 경로 기록에 사용합니다.',
     initialTitle: '위치를 사용할까요?',
-    initialBody: '지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다.',
+    initialBody: '지도 위치와 경로 기록에 사용합니다.',
     requestNow: '위치 요청',
     refreshLocation: '위치 새로고침',
     requestOnOpen: '앱을 열 때 위치 묻기',
