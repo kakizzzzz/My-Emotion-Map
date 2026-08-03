@@ -1,0 +1,456 @@
+/* AI, MCP, and export settings */
+
+.ai-user-prompt-card {
+  display: grid;
+  gap: 10px;
+  margin: 0 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--em-soft-surface);
+}
+
+.ai-user-prompt-card > label {
+  color: var(--em-text-primary);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ai-user-prompt-card > textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: none;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  outline: 0;
+  background: var(--em-card);
+  color: var(--em-text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mcp-connection-hint,
+.mcp-last-tested {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.connections-card-list > .settings-submenu.ai-settings-links {
+  width: 100%;
+  margin: 2px 0 0;
+}
+
+.mcp-access-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--em-card);
+}
+
+.mcp-access-card > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.mcp-identity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.mcp-identity-grid > div,
+.mcp-config-row > div,
+.mcp-active-token {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.mcp-identity-grid small,
+.mcp-config-row small,
+.mcp-active-token > small {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.mcp-identity-grid strong,
+.mcp-config-row strong {
+  overflow: hidden;
+  color: var(--em-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.mcp-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.mcp-config-row span,
+.mcp-active-token span {
+  overflow-wrap: anywhere;
+  color: var(--em-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.mcp-config-row > button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--em-soft-surface);
+  color: var(--em-text-muted);
+}
+
+.mcp-config-row > button:disabled {
+  opacity: 0.35;
+}
+
+.mcp-feedback,
+.mcp-token-warning {
+  color: var(--em-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.my-life-memory-mcp-panel .mcp-feedback {
+  text-align: center;
+}
+
+.mcp-active-token {
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.mcp-active-token > button {
+  min-height: 36px;
+  justify-self: end;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mcp-token-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  outline: 0;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
+}
+
+.connection-token-once {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.connection-token-once small,
+.connection-status-meta small {
+  color: var(--em-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.connection-status-meta {
+  display: grid;
+  gap: 3px;
+}
+
+.connection-token-once code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--em-soft-surface);
+  color: var(--em-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+  user-select: all;
+}
+
+.my-life-memory-connection > input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  outline: 0;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
+}
+
+.my-life-memory-connection > input:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--em-icon);
+}
+
+.connection-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mcp-proposal-list,
+.mcp-proposal-row,
+.mcp-proposal-row > p {
+  display: grid;
+  gap: 8px;
+}
+
+.mcp-proposal-row {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--em-soft-surface);
+}
+
+.mcp-proposal-row > p {
+  margin: 0;
+  color: var(--em-text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mcp-proposal-row > p span {
+  overflow-wrap: anywhere;
+  color: var(--em-text-muted);
+}
+
+.mcp-proposal-row > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.export-data-panel {
+  margin-top: 16px;
+}
+
+.copied-settings-card.export-data-card {
+  width: min(100%, 350px);
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 14px;
+}
+
+.export-data-card > header {
+  margin-bottom: 8px;
+  color: var(--em-text-secondary);
+}
+
+.export-data-card > header h2 {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.export-result {
+  margin: 8px 4px 0;
+  color: var(--em-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.export-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--em-soft-card);
+}
+
+.export-mode-switch button {
+  min-height: 40px;
+  border-radius: 999px;
+  color: var(--em-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.export-mode-switch button.is-selected {
+  background: var(--em-dark);
+  color: var(--em-on-dark);
+  box-shadow: none;
+}
+
+.export-date-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.export-date-fields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--em-soft-card);
+  color: var(--em-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.export-date-fields input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--em-text-primary);
+  font: inherit;
+}
+
+.export-validation {
+  display: block;
+  margin: 0 4px 12px;
+  color: #9c4a40;
+  font-size: 12px;
+}
+
+.export-submit {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: var(--em-soft-card);
+  color: var(--em-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.export-submit:disabled {
+  opacity: 0.45;
+}
+
+.ai-conversation-settings-card {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.ai-conversation-settings-card > .connection-card__header {
+  min-height: 72px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  padding: 12px 14px 10px;
+}
+
+.ai-conversation-settings-card .connection-card__icon {
+  width: 42px;
+  height: 42px;
+}
+
+.ai-conversation-settings-card .connection-card__title strong {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.ai-context-control {
+  display: grid;
+  gap: 10px;
+  margin: 0 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--em-soft-surface);
+}
+
+.ai-context-control > span {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.ai-context-control strong {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ai-context-control output,
+.ai-context-control > small {
+  color: var(--em-text-muted);
+  font-size: 11px;
+}
+
+.ai-context-control input {
+  width: 100%;
+  accent-color: var(--em-dark);
+}
+
+.ai-context-control > small {
+  line-height: 1.5;
+}
+
+@media (min-width: 700px) {
+  .settings-panel-header {
+    width: min(100%, 700px);
+  }
+
+  .settings-panel .copied-settings-card,
+  .settings-panel .connections-card-list,
+  .settings-panel .settings-submenu,
+  .settings-panel .mock-settings-options,
+  .settings-panel .copied-settings-card.export-data-card {
+    width: min(100%, 660px);
+  }
+
+  .profile-editor-card {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    align-items: start;
+    gap: 22px;
+  }
+
+  .profile-editor-avatar {
+    margin: 0 auto;
+  }
+
+  .theme-preset-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .settings-screen > .settings-paper {
+    width: min(900px, calc(100% - 48px));
+  }
+
+  .settings-paper .settings-panel {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+}
