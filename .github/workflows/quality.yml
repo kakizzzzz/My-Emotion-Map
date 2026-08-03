@@ -43,7 +43,8 @@ jobs:
           if sha256(reconstructed.encode()).digest() != sha256(source.encode()).digest():
               raise SystemExit('split hash verification failed')
 
-          source_path.write_text(base, encoding='utf-8')
+          base_output = base.rstrip() + '\n'
+          source_path.write_text(base_output, encoding='utf-8')
           ai_path.write_text(ai, encoding='utf-8')
 
           imports = imports_path.read_text(encoding='utf-8')
@@ -54,7 +55,7 @@ jobs:
           imports_path.write_text(imports.replace(import_line, replacement, 1), encoding='utf-8')
           exception_path.write_text('{}\n', encoding='utf-8')
 
-          base_lines = len(base.splitlines())
+          base_lines = len(base_output.splitlines())
           ai_lines = len(ai.splitlines())
           if base_lines > 700 or ai_lines > 700:
               raise SystemExit(f'split remains oversized: base={base_lines}, ai={ai_lines}')
@@ -62,8 +63,6 @@ jobs:
           print(f'base_lines={base_lines}')
           print(f'ai_lines={ai_lines}')
           PY
-      - name: Restore normal quality workflow
-        run: git show origin/main:.github/workflows/quality.yml > .github/workflows/quality.yml
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -80,6 +79,6 @@ jobs:
           git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add .github/workflows/quality.yml scripts/source-size-exceptions.json src/styles.css src/styles/settings.css src/styles/settings-ai.css
+          git add scripts/source-size-exceptions.json src/styles.css src/styles/settings.css src/styles/settings-ai.css
           git commit -m "refactor: split settings styles"
           git push origin HEAD:${{ github.head_ref }}
