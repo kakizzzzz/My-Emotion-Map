@@ -18,6 +18,8 @@ describe('AI runtime contracts', () => {
     expect(planner).toContain('Decide from the meaning of the latest user message');
     expect(planner).toContain('never require a special command, product name, country, or keyword');
     expect(planner).toContain('["list_locations","get_location_memory"]');
+    expect(planner).toContain('resultMode "recent_places"');
+    expect(planner).toContain('Where did I go last time?');
     expect(planner).toContain("task: 'plan'");
     expect(chat).toContain('await planChatWithModel(planBody)');
     expect(chat).toContain('verifyChatPlanToken(');

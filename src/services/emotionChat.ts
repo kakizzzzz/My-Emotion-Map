@@ -23,7 +23,7 @@ export type ExternalPublicEvidence = {
 export type EmotionChatResult = {
   requestId?: string;
   serverRevision?: number;
-  intent: 'lookup' | 'comparison' | 'pattern' | 'reflection' | 'count_stats' | 'recent_records' | 'casual' | 'clarification_required' | 'unsupported';
+  intent: 'lookup' | 'comparison' | 'pattern' | 'reflection' | 'count_stats' | 'recent_records' | 'recent_places' | 'casual' | 'clarification_required' | 'unsupported';
   retrievalStatus: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'clarification_required' | 'unsupported' | 'unavailable';
   status: 'supported' | 'ambiguous' | 'not_found' | 'evidence_insufficient' | 'clarification_required' | 'unsupported' | 'generation_rejected' | 'unavailable';
   answer: string;
@@ -81,7 +81,7 @@ const validateResult = (
   const source = value as Record<string, unknown>;
   const retrievalStatuses = new Set(['supported', 'ambiguous', 'not_found', 'evidence_insufficient', 'clarification_required', 'unsupported', 'unavailable']);
   const responseStatuses = new Set([...retrievalStatuses, 'generation_rejected']);
-  const intents = new Set(['lookup', 'comparison', 'pattern', 'reflection', 'count_stats', 'recent_records', 'casual', 'clarification_required', 'unsupported']);
+  const intents = new Set(['lookup', 'comparison', 'pattern', 'reflection', 'count_stats', 'recent_records', 'recent_places', 'casual', 'clarification_required', 'unsupported']);
   if (expectedRequestId && source.requestId !== expectedRequestId) return null;
   if (expectedRevision !== undefined && source.serverRevision !== expectedRevision) return null;
   if (!responseStatuses.has(String(source.status)) || !retrievalStatuses.has(String(source.retrievalStatus)) || !intents.has(String(source.intent))) return null;

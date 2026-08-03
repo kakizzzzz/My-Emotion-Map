@@ -21,6 +21,7 @@ export type SourcePlan = {
   tools: MlmReadTool[];
   maxCalls: 0 | 1 | 2;
   searchQuery?: string;
+  resultMode?: 'recent_places';
 };
 
 const mlmReadTools = new Set<MlmReadTool>([
@@ -53,7 +54,7 @@ export const parseAiSourcePlan = (value: unknown): SourcePlan | null => {
   const body = asObject(value);
   if (!body || Object.keys(body).some((key) =>
     key !== 'source' && key !== 'tools' && key !== 'maxCalls' &&
-    key !== 'searchQuery')) return null;
+    key !== 'searchQuery' && key !== 'resultMode')) return null;
   if (
     body.source !== 'emotion_map_local' &&
     body.source !== 'my_life_memory' &&
@@ -73,6 +74,12 @@ export const parseAiSourcePlan = (value: unknown): SourcePlan | null => {
   if (tools.includes('get_location_memory') &&
     (tools.length !== 2 || tools[0] !== 'list_locations' ||
       tools[1] !== 'get_location_memory')) return null;
+  const resultMode = body.resultMode === undefined
+    ? undefined
+    : body.resultMode === 'recent_places' ? body.resultMode : null;
+  if (resultMode === null || (!external && resultMode) ||
+    (resultMode === 'recent_places' &&
+      (tools.length !== 1 || tools[0] !== 'search_memories'))) return null;
   const searchQuery = typeof body.searchQuery === 'string'
     ? body.searchQuery.normalize('NFKC').replace(/\s+/g, ' ').trim()
     : '';
@@ -83,6 +90,7 @@ export const parseAiSourcePlan = (value: unknown): SourcePlan | null => {
     tools,
     maxCalls: body.maxCalls,
     ...(searchQuery ? { searchQuery } : {}),
+    ...(resultMode ? { resultMode } : {}),
   };
 };
 

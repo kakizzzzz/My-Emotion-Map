@@ -55,4 +55,23 @@ describe('signed chat routing plans', () => {
     await expect(verifyChatPlanToken(token, secret, expected, 3_000))
       .resolves.toBeNull();
   });
+
+  it('preserves a signed recent-places result mode', async () => {
+    const inputDigest = await digestChatPlanInput(input);
+    const token = await issueChatPlanToken({
+      version: 1,
+      userId: 'user-a', requestId: 'request-a', revision: 8, inputDigest,
+      plan: {
+        source: 'both', tools: ['search_memories'], maxCalls: 1,
+        resultMode: 'recent_places',
+      },
+      expiresAt: 5_000,
+    }, secret);
+
+    await expect(verifyChatPlanToken(token, secret, {
+      userId: 'user-a', requestId: 'request-a', revision: 8, inputDigest,
+    }, 1_000)).resolves.toMatchObject({
+      plan: { resultMode: 'recent_places' },
+    });
+  });
 });

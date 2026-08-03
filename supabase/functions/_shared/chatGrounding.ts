@@ -583,6 +583,41 @@ export const deterministicFallback = (language: ChatLanguage) => ({
   ko: '관련 기록을 찾았지만, 이번 답변은 사실 확인을 통과하지 못해 신뢰할 수 없는 내용을 보내지 않았어요. 아래 기록은 그대로 열어볼 수 있고, 그중 하나부터 이어서 이야기할 수 있어요.',
 } as const)[language];
 
+export const formatRecentPlacesAnswer = (
+  language: ChatLanguage,
+  evidence: AuthorizedEvidence[],
+) => {
+  const seen = new Set<string>();
+  const places = [...evidence]
+    .sort((left, right) => Date.parse(right.date) - Date.parse(left.date))
+    .filter((item) => {
+      const key = [item.title, item.place, item.date].map(normalized).join('|');
+      if (!item.key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+  if (!places.length) return null;
+  const fallbackTitle = {
+    zh: '已保存地点',
+    en: 'Saved place',
+    ko: '저장된 장소',
+  } as const;
+  const intro = {
+    zh: '最近的已保存地点记录，按时间从近到远：',
+    en: 'Your recent saved place records, from newest to oldest:',
+    ko: '최근 저장된 장소 기록을 최신순으로 정리했어요:',
+  } as const;
+  return {
+    answer: [
+      intro[language],
+      ...places.map((item) =>
+        `• ${item.title.trim() || fallbackTitle[language]}${item.date ? ` · ${item.date}` : ''}`),
+    ].join('\n'),
+    evidenceKeys: places.map((item) => item.key),
+  };
+};
+
 export const insufficientAnswer = (language: ChatLanguage) => ({
   zh: '现有的已保存记录不足以安全回答这个问题。',
   en: 'There are not enough saved records to answer this safely.',

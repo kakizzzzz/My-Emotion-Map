@@ -69,6 +69,7 @@ const toolArguments = (
   query: string,
   selectedImageNoteIds: string[],
   selectedLocationStarIds: string[],
+  plan: SourcePlan,
 ) => {
   if (tool === 'get_memory_images') {
     return selectedImageNoteIds.length
@@ -87,7 +88,11 @@ const toolArguments = (
     return date ? { date } : null;
   }
   if (tool === 'summarize_memory_range') return {};
-  if (tool === 'search_memories') return { query: memoryQuery(query), limit: 6 };
+  if (tool === 'search_memories') {
+    return plan.resultMode === 'recent_places'
+      ? { query: '', limit: 20 }
+      : { query: plan.searchQuery || memoryQuery(query), limit: 6 };
+  }
   if (tool === 'research_memory_context') {
     return { query: memoryQuery(query), limit: 6 };
   }
@@ -115,7 +120,7 @@ const callTool = async (
       method: 'tools/call',
       params: { name: tool, arguments: args },
     }),
-    signal: AbortSignal.timeout(imageRequest ? 14_000 : 12_000),
+    signal: AbortSignal.timeout(imageRequest ? 14_000 : 20_000),
   });
   if (!response.ok) throw new Error(response.status === 401 ? 'unauthorized' : 'unavailable');
   const payload = await readBoundedJson(
@@ -300,6 +305,7 @@ export const retrieveMyLifeMemory = async ({
         query,
         selectedImageNoteIds,
         selectedLocationStarIds,
+        plan,
       );
       if (!args) continue;
       let rawResult: unknown;
@@ -370,7 +376,9 @@ export const retrieveMyLifeMemory = async ({
         });
         continue;
       }
-      const result = normalizeMlmToolResult(tool, rawResult);
+      const result = normalizeMlmToolResult(tool, rawResult, {
+        recentPlaces: plan.resultMode === 'recent_places',
+      });
       const nextEvidence = result.evidence.map((item, index) => ({
         ...item,
         key: `M${evidence.length + index + 1}`,

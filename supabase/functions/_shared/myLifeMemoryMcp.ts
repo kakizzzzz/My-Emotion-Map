@@ -1,6 +1,6 @@
 export const MLM_SERVER_NAME = 'my-life-memory';
 export const MLM_PROTOCOL_VERSION = '2025-03-26';
-export const MLM_MAX_RESPONSE_BYTES = 48_000;
+export const MLM_MAX_RESPONSE_BYTES = 192_000;
 export const MLM_MAX_MODEL_BYTES = 12_000;
 export const MLM_MANIFEST_TOOL_NAMES = [
   'research_memory_context',
@@ -218,9 +218,31 @@ const candidatesFrom = (payload: JsonObject) => {
   return arrays.find(Array.isArray) as unknown[] | undefined ?? [];
 };
 
+const candidateTimestamp = (item: JsonObject) => {
+  const raw = item.createdAt ?? item.date ?? item.localDate;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  const parsed = Date.parse(text(raw, 40));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const recentDistinctPlaces = (items: JsonObject[]) => {
+  const seen = new Set<string>();
+  return [...items]
+    .sort((left, right) => candidateTimestamp(right) - candidateTimestamp(left))
+    .filter((item) => {
+      const key = text(item.starId, 200) || coordinates(item) ||
+        text(item.id ?? item.noteId, 200);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+};
+
 export const normalizeMlmToolResult = (
   toolName: string,
   result: unknown,
+  options: { recentPlaces?: boolean } = {},
 ) => {
   const payload = parseToolPayload(result);
   if (!payload) {
@@ -244,12 +266,14 @@ export const normalizeMlmToolResult = (
   const rawCandidates = candidatesFrom(payload)
     .map(asObject)
     .filter((item): item is JsonObject => Boolean(item));
-  const candidates = toolName === 'list_locations'
-    ? [...rawCandidates]
-        .sort((left, right) =>
-          Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0))
-        .slice(0, 3)
-    : rawCandidates.slice(0, 6);
+  const candidates = options.recentPlaces
+    ? recentDistinctPlaces(rawCandidates)
+    : toolName === 'list_locations'
+      ? [...rawCandidates]
+          .sort((left, right) =>
+            Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0))
+          .slice(0, 3)
+      : rawCandidates.slice(0, 6);
   const selectedLocationStarIds = toolName === 'list_locations'
     ? candidates.map((item) => text(item.id ?? item.starId, 200)).filter(Boolean)
     : [];

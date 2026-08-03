@@ -166,6 +166,34 @@ describe('emotion-chat request boundary', () => {
     }]);
   });
 
+  it('accepts the server-owned recent-places intent', async () => {
+    const payload = {
+      requestId: valid.requestId,
+      serverRevision: valid.clientRevision,
+      intent: 'recent_places', retrievalStatus: 'supported', status: 'supported',
+      answer: '最近的已保存地点记录。', evidence: [],
+      externalEvidence: [], mcpCalls: [], confidence: 'medium', limitations: [],
+      clarificationOptions: [],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify(payload), { status: 200 },
+    )));
+
+    await expect(requestEmotionChat({
+      auth: {
+        supabaseUrl: 'https://project.supabase.co',
+        publishableKey: 'publishable', accessToken: 'access', userId: 'user-a',
+      },
+      requestId: valid.requestId,
+      message: '我最近去了哪里',
+      language: 'zh',
+      conversationId: valid.conversationId,
+      conversationAnchorNoteIds: [],
+      clientRevision: valid.clientRevision,
+      signal: new AbortController().signal,
+    })).resolves.toMatchObject({ intent: 'recent_places' });
+  });
+
   it('rejects invented or malformed MCP call metadata', async () => {
     const payload = {
       requestId: valid.requestId,

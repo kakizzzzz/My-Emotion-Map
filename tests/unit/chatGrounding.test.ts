@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeAllowedFacts,
+  formatRecentPlacesAnswer,
   isCasualChatQuery,
   MAX_CHAT_CLAIMS,
   parseCasualReply,
@@ -299,6 +300,30 @@ describe('grounded chat boundary', () => {
     expect(validation.validClaims).toHaveLength(1);
     expect(validation.validLimitations).toEqual(['情绪未填写']);
     expect(validation.retry).toBe(false);
+  });
+
+  it('formats authorized recent places without adding model facts or list numbers', () => {
+    const external = [
+      { key: 'M1', noteId: 'a', title: '京都旅行', date: '2026-07-15' },
+      { key: 'M2', noteId: 'b', title: '日常', date: '2026-07-30' },
+      { key: 'M3', noteId: 'c', title: '涩谷旅行', date: '2026-07-21' },
+    ].map((item) => ({
+      ...item,
+      place: '', time: '', emotion: null, excerpt: '', answers: [],
+      matchReason: 'my_life_memory:search_memories',
+      source: 'my_life_memory_external' as const,
+      trust: 'untrusted_tool_data' as const,
+    }));
+
+    expect(formatRecentPlacesAnswer('zh', external)).toEqual({
+      answer: [
+        '最近的已保存地点记录，按时间从近到远：',
+        '• 日常 · 2026-07-30',
+        '• 涩谷旅行 · 2026-07-21',
+        '• 京都旅行 · 2026-07-15',
+      ].join('\n'),
+      evidenceKeys: ['M2', 'M3', 'M1'],
+    });
   });
 
   it('rejects unsafe limitation text instead of exposing it', () => {

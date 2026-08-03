@@ -38,6 +38,27 @@ describe('deterministic chat source plan', () => {
     });
     expect(parseAiSourcePlan({
       source: 'both',
+      tools: ['search_memories'],
+      maxCalls: 1,
+      resultMode: 'recent_places',
+    })).toEqual({
+      source: 'both',
+      tools: ['search_memories'],
+      maxCalls: 1,
+      resultMode: 'recent_places',
+    });
+    expect(parseAiSourcePlan({
+      source: 'both',
+      tools: ['research_memory_context'],
+      maxCalls: 1,
+      resultMode: 'recent_places',
+    })).toBeNull();
+    expect(parseAiSourcePlan({
+      source: 'emotion_map_local', tools: [], maxCalls: 0,
+      resultMode: 'recent_places',
+    })).toBeNull();
+    expect(parseAiSourcePlan({
+      source: 'both',
       tools: ['research_memory_context', 'get_location_memory'],
       maxCalls: 2,
       searchQuery: '最近游玩的地点',

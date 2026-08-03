@@ -216,4 +216,68 @@ describe('My Life Memory external retrieval boundary', () => {
         starId: 'newest',
       } } });
   });
+
+  it('requests and returns several distinct recent saved places in stored-time order', async () => {
+    const encrypted = await encryptMlmCredential(
+      `mlm_${'3'.repeat(64)}`,
+      input.credentialKey,
+    );
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        credential_ciphertext: encrypted.ciphertext,
+        credential_iv: encrypted.iv,
+        credential_key_version: encrypted.keyVersion,
+        manifest_hash: input.expectedManifestHash,
+        status: 'connected',
+      }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        jsonrpc: '2.0', id: 'recent-places', result: {
+          content: [{ type: 'text', text: JSON.stringify({
+            status: 'supported',
+            records: [
+              {
+                id: 'older-a', starId: 'a', title: '旧地点', createdAt: 100,
+                coordinates: { lat: 1, lng: 1 },
+              },
+              {
+                id: 'new-b', starId: 'b', title: '京都旅行', createdAt: 300,
+                coordinates: { lat: 2, lng: 2 },
+              },
+              {
+                id: 'newer-a', starId: 'a', title: '再次散步', createdAt: 400,
+                coordinates: { lat: 1, lng: 1 },
+              },
+              {
+                id: 'middle-c', starId: 'c', title: '海边', createdAt: 200,
+                coordinates: { lat: 3, lng: 3 },
+              },
+            ],
+          }) }],
+        },
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await retrieveMyLifeMemory({
+      ...input,
+      query: '列出我最近去过的几个地方，按时间从近到远',
+      plan: {
+        source: 'my_life_memory',
+        tools: ['search_memories'],
+        maxCalls: 1,
+        resultMode: 'recent_places',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'supported',
+      calls: [{ toolName: 'search_memories', status: 'completed' }],
+    });
+    expect(result.evidence.map((item) => item.title)).toEqual([
+      '再次散步', '京都旅行', '海边',
+    ]);
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)))
+      .toMatchObject({ params: { name: 'search_memories', arguments: {
+        query: '', limit: 20,
+      } } });
+  });
 });
