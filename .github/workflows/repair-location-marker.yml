@@ -1,0 +1,172 @@
+name: repair location marker
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    if: github.head_ref == 'fix/location-marker-and-copy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply guarded marker and copy fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file_path = Path(path)
+              source = file_path.read_text(encoding='utf-8')
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one exact match, found {count}')
+              file_path.write_text(source.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'src/i18n/zh.ts',
+              "    settingsBody: '用于回到当前位置，以及在当前位置放置星星。',\n    initialTitle: '使用定位？',\n    initialBody: '用于回到当前位置和在当前位置放置星星。',",
+              "    settingsBody: '用于地图定位和在当前位置放置星星。',\n    initialTitle: '使用定位？',\n    initialBody: '用于地图定位和在当前位置放置星星。',",
+          )
+          replace_once(
+              'src/i18n/en.ts',
+              "    settingsBody: 'Used to return to your location and place stars where you are.',\n    initialTitle: 'Use location?',\n    initialBody: 'Used to return to your location and place stars where you are.',",
+              "    settingsBody: 'Used to locate you on the map and place stars at your current location.',\n    initialTitle: 'Use location?',\n    initialBody: 'Used to locate you on the map and place stars at your current location.',",
+          )
+          replace_once(
+              'src/i18n/ko.ts',
+              "    settingsBody: '현재 위치로 돌아가거나 지금 있는 곳에 별을 놓을 때 사용합니다.',\n    initialTitle: '위치를 사용할까요?',\n    initialBody: '현재 위치로 돌아가거나 지금 있는 곳에 별을 놓을 때 사용합니다.',",
+              "    settingsBody: '지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다.',\n    initialTitle: '위치를 사용할까요?',\n    initialBody: '지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다.',",
+          )
+
+          old_marker = '''.map-location-marker > i {
+            position: absolute;
+            z-index: 2;
+            top: 50%;
+            left: 50%;
+            width: 26px;
+            height: 26px;
+            border: 5px solid #c3c3c3;
+            border-radius: 50%;
+            background: black;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+          }'''.replace('          ', '')
+          new_marker = '''.map-location-marker > i {
+            position: absolute;
+            z-index: 2;
+            top: 50%;
+            left: 50%;
+            display: block;
+            width: 16px;
+            height: 16px;
+            box-sizing: content-box;
+            border: 5px solid #c3c3c3;
+            border-radius: 50%;
+            background: black;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+          }'''.replace('          ', '')
+          replace_once('src/styles/map.css', old_marker, new_marker)
+
+          test_source = r'''import { readFile } from 'node:fs/promises';
+          import { describe, expect, it } from 'vitest';
+
+          async function readSource(path: string) {
+            return readFile(path, 'utf8');
+          }
+
+          function extractRule(css: string, selector: string) {
+            const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = css.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`));
+            expect(match, `missing CSS rule: ${selector}`).not.toBeNull();
+            return match?.[1] ?? '';
+          }
+
+          describe('map visual geometry contracts', () => {
+            it('keeps the current-location origin centered and circular', async () => {
+              const mapCss = await readSource('src/styles/map.css');
+              const dot = extractRule(mapCss, '.map-location-marker > i');
+
+              expect(dot).toContain('width: 16px;');
+              expect(dot).toContain('height: 16px;');
+              expect(dot).toContain('box-sizing: content-box;');
+              expect(dot).toContain('border: 5px solid #c3c3c3;');
+              expect(dot).toContain('border-radius: 50%;');
+              expect(dot).toContain('transform: translate(-50%, -50%);');
+            });
+
+            it('keeps visible map controls and badges square and non-shrinking', async () => {
+              const [shellCss, mapCss] = await Promise.all([
+                readSource('src/styles/shell.css'),
+                readSource('src/styles/map.css'),
+              ]);
+              const sharedControls = shellCss.match(
+                /\.round-back-button,[\s\S]*?\.global-menu-button\s*\{([\s\S]*?)\}/,
+              )?.[1] ?? '';
+              const styleThumb = extractRule(mapCss, '.map-style-thumb');
+              const orderBadge = extractRule(shellCss, '.emotion-star__order');
+
+              expect(sharedControls).toContain('flex: 0 0 auto;');
+              expect(sharedControls).toContain('width: 48px;');
+              expect(sharedControls).toContain('height: 48px;');
+              expect(sharedControls).toContain('border-radius: 50%;');
+              expect(styleThumb).toContain('width: 36px;');
+              expect(styleThumb).toContain('height: 36px;');
+              expect(styleThumb).toContain('border-radius: 50%;');
+              expect(orderBadge).toContain('width: 16px;');
+              expect(orderBadge).toContain('height: 16px;');
+              expect(orderBadge).toContain('box-sizing: border-box;');
+              expect(orderBadge).toContain('border-radius: 50%;');
+            });
+
+            it('uses concise and equivalent location descriptions in all languages', async () => {
+              const [zh, en, ko] = await Promise.all([
+                readSource('src/i18n/zh.ts'),
+                readSource('src/i18n/en.ts'),
+                readSource('src/i18n/ko.ts'),
+              ]);
+
+              expect(zh.match(/用于地图定位和在当前位置放置星星。/g)).toHaveLength(2);
+              expect(
+                en.match(/Used to locate you on the map and place stars at your current location\./g),
+              ).toHaveLength(2);
+              expect(
+                ko.match(/지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다\./g),
+              ).toHaveLength(2);
+            });
+          });
+          '''
+          test_source = '\n'.join(line[10:] if line.startswith('          ') else line for line in test_source.splitlines()) + '\n'
+          Path('tests/unit/mapVisualContracts.test.ts').write_text(test_source, encoding='utf-8')
+          PY
+          git diff --check
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run check:all
+        env:
+          VITE_SUPABASE_URL: https://uifgpmmlvmfrauzbbrem.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: e2e-public-placeholder
+
+      - name: Commit verified repair
+        run: |
+          git rm .github/workflows/repair-location-marker.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/i18n/zh.ts src/i18n/en.ts src/i18n/ko.ts src/styles/map.css tests/unit/mapVisualContracts.test.ts
+          git commit -m "fix: restore location marker geometry"
+          git push origin HEAD:${{ github.head_ref }}
