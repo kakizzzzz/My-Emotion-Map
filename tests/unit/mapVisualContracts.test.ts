@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
-// Guard the small map widgets that are easiest to distort through shared CSS.
+// Guard map widgets whose square geometry depends on shared CSS contracts.
 async function readSource(path: string) {
   return readFile(path, 'utf8');
 }
