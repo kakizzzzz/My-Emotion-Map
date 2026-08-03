@@ -1,0 +1,63 @@
+name: finalize My Life Memory location copy
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  copy-and-verify:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Copy exact location descriptions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              'src/i18n/zh.ts': (
+                  '用于地图定位和在当前位置放置星星。',
+                  '用于地图定位和路线记录。',
+              ),
+              'src/i18n/en.ts': (
+                  'Used to locate you on the map and place stars at your current location.',
+                  'Used for map location and route recording.',
+              ),
+              'src/i18n/ko.ts': (
+                  '지도에서 현재 위치를 확인하고 그 위치에 별을 놓을 때 사용합니다.',
+                  '지도 위치와 경로 기록에 사용합니다.',
+              ),
+          }
+          for name, (old, new) in replacements.items():
+              path = Path(name)
+              source = path.read_text(encoding='utf-8')
+              if source.count(old) != 2:
+                  raise SystemExit(f'{name}: expected two source descriptions')
+              path.write_text(source.replace(old, new), encoding='utf-8')
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run check:all
+        env:
+          VITE_SUPABASE_URL: https://uifgpmmlvmfrauzbbrem.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: e2e-public-placeholder
+      - name: Commit verified copy
+        run: |
+          rm .github/workflows/finalize-mlm-location-copy.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: copy My Life Memory location direction"
+          git push origin HEAD:${{ github.head_ref }}
