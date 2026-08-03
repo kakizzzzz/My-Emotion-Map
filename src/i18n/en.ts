@@ -378,9 +378,9 @@ export const enCopy: AppCopy = {
   location: {
     settingsTitle: 'Location',
     settingsHint: 'Manage how the map uses your current location.',
-    settingsBody: 'Used to locate you on the map and place stars at your current location.',
+    settingsBody: 'Used for map location and route recording.',
     initialTitle: 'Use location?',
-    initialBody: 'Used to locate you on the map and place stars at your current location.',
+    initialBody: 'Used for map location and route recording.',
     requestNow: 'Request location',
     refreshLocation: 'Refresh location',
     requestOnOpen: 'Ask for location when the app opens',

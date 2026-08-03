@@ -376,9 +376,9 @@ export const zhCopy = {
   location: {
     settingsTitle: '定位',
     settingsHint: '管理地图使用当前位置的方式。',
-    settingsBody: '用于地图定位和在当前位置放置星星。',
+    settingsBody: '用于地图定位和路线记录。',
     initialTitle: '使用定位？',
-    initialBody: '用于地图定位和在当前位置放置星星。',
+    initialBody: '用于地图定位和路线记录。',
     requestNow: '请求定位',
     refreshLocation: '刷新定位',
     requestOnOpen: '打开程序时询问定位',
