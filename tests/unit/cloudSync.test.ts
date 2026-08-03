@@ -8,6 +8,7 @@ import {
 } from '../../src/app/appDataRepository';
 import { useCloudSync } from '../../src/services/useCloudSync';
 import { loadSyncMeta, saveSyncMeta } from '../../src/services/cloudSyncModel';
+import { createRecord } from '../../src/app/recordFactory';
 
 const session = {
   user: { id: 'user-a' },
@@ -99,6 +100,46 @@ describe('cloud sync', () => {
         p_expected_revision: 0,
         p_schema_version: CURRENT_SCHEMA_VERSION,
         p_payload: createEmptyAppData(),
+      }),
+    );
+  });
+
+  it('uploads existing local records automatically when the account cloud is empty', async () => {
+    const { moment, note } = createRecord({
+      longitude: 127,
+      latitude: 37.558,
+      place: '本地星星',
+      language: 'zh',
+      source: 'manual',
+    });
+    const local = {
+      ...createEmptyAppData(),
+      moments: [moment],
+      notes: [{ ...note, isDraft: false }],
+    };
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { revision: 1, updated_at: '2026-08-03T00:00:00.000Z' },
+      error: null,
+    });
+    const client = {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })),
+      })),
+      rpc,
+    } as unknown as SupabaseClient;
+
+    const { result } = renderHook(() =>
+      useCloudSync({ client, session, snapshot: local, applySnapshot: vi.fn() }),
+    );
+
+    await waitFor(() => expect(result.current.revision).toBe(1), { timeout: 2_000 });
+    expect(result.current.status).toBe('synced');
+    expect(rpc).toHaveBeenCalledWith(
+      'save_app_state',
+      expect.objectContaining({
+        p_expected_revision: 0,
+        p_payload: local,
       }),
     );
   });

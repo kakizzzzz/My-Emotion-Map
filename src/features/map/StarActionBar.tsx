@@ -55,7 +55,7 @@ export function StarActionBar({
 }) {
   const { copy } = useAppLanguage();
   const selectedColor =
-    moment.color ?? (moment.emotion ? EMOTIONS[moment.emotion].color : '#5C5C5C');
+    moment.color ?? (moment.emotion ? EMOTIONS[moment.emotion].color : '#EDC727');
 
   return (
     <motion.div
@@ -133,17 +133,17 @@ export function StarActionBar({
         <div className="map-provider-grid">
           {(
             [
-              ['apple', 'Apple'],
-              ['amap', 'AMap'],
-              ['baidu', 'Baidu'],
-              ['google', 'Google'],
-            ] as Array<[MapProvider, string]>
-          ).map(([provider, label]) => (
+              'apple',
+              'amap',
+              'baidu',
+              'google',
+            ] as MapProvider[]
+          ).map((provider) => (
             <button
               key={provider}
               onClick={() => onOpenMap(provider)}
             >
-              {label}
+              {copy.map.mapProviders[provider]}
             </button>
           ))}
         </div>

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeAllowedFacts,
+  formatRecentPlacesAnswer,
+  isCasualChatQuery,
   MAX_CHAT_CLAIMS,
+  parseCasualReply,
   parseGeneratedDraft,
   resolveConversationReference,
   retrieveAuthorizedEvidence,
@@ -25,6 +28,40 @@ const snapshot = {
 };
 
 describe('grounded chat boundary', () => {
+  it('separates ordinary conversation from saved-record lookup', () => {
+    expect(isCasualChatQuery('你好，今天想随便聊聊')).toBe(true);
+    expect(isCasualChatQuery('我今天有点累')).toBe(true);
+    expect(isCasualChatQuery('111111')).toBe(true);
+    expect(isCasualChatQuery('你叫什么')).toBe(true);
+    expect(isCasualChatQuery('你觉得今天天气怎么样')).toBe(true);
+    expect(isCasualChatQuery('看看我的星星记录')).toBe(false);
+    expect(isCasualChatQuery('你好，你去看看我去日本的经历')).toBe(false);
+    expect(parseCasualReply({ reply: '我们慢慢聊。' })).toBe('我们慢慢聊。');
+    expect(parseCasualReply({ reply: '不能带额外字段', extra: true })).toBeNull();
+  });
+
+  it('retrieves all matching local place records for an experience lookup', () => {
+    const japanSnapshot = {
+      schemaVersion: 3,
+      dataMode: 'real',
+      notes: [
+        { id: 'tokyo', title: '东京散步', place: '日本东京', date: '2026-04-01', time: '10:00', emotion: 'curious', excerpt: '沿着河边走', answers: [], isDraft: false },
+        { id: 'kyoto', title: '京都午后', place: '日本京都', date: '2026-04-03', time: '15:00', emotion: 'calm', excerpt: '看见旧街道', answers: [], isDraft: false },
+      ],
+      moments: [
+        { id: 'tokyo-m', noteId: 'tokyo', isNew: false, isInboxDraft: false },
+        { id: 'kyoto-m', noteId: 'kyoto', isNew: false, isInboxDraft: false },
+      ],
+    };
+    const retrieval = retrieveAuthorizedEvidence(
+      japanSnapshot,
+      '你好，你去看看我去日本的经历',
+    );
+    expect(retrieval.retrievalStatus).toBe('supported');
+    expect(retrieval.evidence.map((item) => item.noteId).sort())
+      .toEqual(['kyoto', 'tokyo']);
+  });
+
   it('selects only formal records and assigns server evidence keys', () => {
     const evidence = selectAuthorizedEvidence(snapshot, '图书馆', []);
     expect(evidence).toHaveLength(1);
@@ -263,6 +300,30 @@ describe('grounded chat boundary', () => {
     expect(validation.validClaims).toHaveLength(1);
     expect(validation.validLimitations).toEqual(['情绪未填写']);
     expect(validation.retry).toBe(false);
+  });
+
+  it('formats authorized recent places without adding model facts or list numbers', () => {
+    const external = [
+      { key: 'M1', noteId: 'a', title: '京都旅行', date: '2026-07-15' },
+      { key: 'M2', noteId: 'b', title: '日常', date: '2026-07-30' },
+      { key: 'M3', noteId: 'c', title: '涩谷旅行', date: '2026-07-21' },
+    ].map((item) => ({
+      ...item,
+      place: '', time: '', emotion: null, excerpt: '', answers: [],
+      matchReason: 'my_life_memory:search_memories',
+      source: 'my_life_memory_external' as const,
+      trust: 'untrusted_tool_data' as const,
+    }));
+
+    expect(formatRecentPlacesAnswer('zh', external)).toEqual({
+      answer: [
+        '最近的已保存地点记录，按时间从近到远：',
+        '• 日常 · 2026-07-30',
+        '• 涩谷旅行 · 2026-07-21',
+        '• 京都旅行 · 2026-07-15',
+      ].join('\n'),
+      evidenceKeys: ['M2', 'M3', 'M1'],
+    });
   });
 
   it('rejects unsafe limitation text instead of exposing it', () => {

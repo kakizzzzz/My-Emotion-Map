@@ -15,12 +15,6 @@ type FunctionFailure = {
   code: string;
 };
 
-type AccountSession = {
-  accessToken: string;
-  refreshToken: string;
-  userId: string;
-};
-
 const asObject = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -40,48 +34,40 @@ const readFunctionFailure = async (error: unknown): Promise<FunctionFailure> => 
   };
 };
 
-const readAccountSession = (value: unknown): AccountSession | null => {
-  const source = asObject(value);
-  const session = asObject(source?.session);
-  if (
-    source?.status !== 'ready' ||
-    typeof session?.accessToken !== 'string' ||
-    typeof session.refreshToken !== 'string' ||
-    typeof session.userId !== 'string'
-  ) {
-    return null;
-  }
-  return {
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
-    userId: session.userId,
-  };
-};
-
 const signInAccount = async (
   client: SupabaseClient,
   account: string,
   password: string,
 ): Promise<AuthResult> => {
-  const { data, error } = await client.functions.invoke('login-account', {
-    body: { account, password },
+  const { data, error } = await client.auth.signInWithPassword({
+    email: accountIdToAuthEmail(account),
+    password,
   });
   if (error) {
-    const failure = await readFunctionFailure(error);
-    if (failure.code === 'rate_limited' || failure.status === 429) return 'rate_limited';
-    if (failure.code === 'invalid_credentials' || failure.status === 401) {
+    if (
+      error.code === 'invalid_credentials' ||
+      error.status === 400 ||
+      error.status === 401
+    ) {
       return 'invalid_credentials';
     }
     return 'unavailable';
   }
-  const session = readAccountSession(data);
-  if (!session) return 'unavailable';
+  if (!data.user || !data.session?.access_token || !data.session.refresh_token) {
+    return 'invalid_credentials';
+  }
   const activated = await client.auth.setSession({
-    access_token: session.accessToken,
-    refresh_token: session.refreshToken,
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
   });
-  return !activated.error &&
-      activated.data.session?.user.id === session.userId
+  if (
+    activated.error ||
+    activated.data.session?.user.id !== data.user.id
+  ) {
+    return 'unavailable';
+  }
+  const verified = await client.auth.getUser();
+  return !verified.error && verified.data.user?.id === data.user.id
     ? 'signed_in'
     : 'unavailable';
 };

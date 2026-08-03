@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Bot, Check, ChevronRight, Link2 } from 'lucide-react';
+import { ChevronRight, History, Link2, MessageCircle } from 'lucide-react';
 import { useAppLanguage } from '../../i18n';
+import {
+  MAX_AI_CONTEXT_MESSAGE_COUNT,
+  MIN_AI_CONTEXT_MESSAGE_COUNT,
+  normalizeAiContextMessageCount,
+} from '../../app/profilePreferences';
 import type { MyLifeMemoryConnectionStatus } from '../../services/myLifeMemoryConnection';
 import type { SettingsPanel } from './settingsTypes';
-
-const STYLES = ['concise', 'direct', 'gentle', 'sharp'] as const;
 
 type AiPanelMode = Extract<SettingsPanel, 'ai' | 'my-life-memory-mcp'>;
 
 export function AiSettingsPanel({
   mode,
-  styles,
   userPrompt,
-  onStyles,
+  contextMessageCount,
   onUserPrompt,
+  onContextMessageCount,
   onPanel,
   onConnectMyLifeMemory,
   onTestMyLifeMemory,
@@ -21,10 +24,10 @@ export function AiSettingsPanel({
   onDisconnectMyLifeMemory,
 }: {
   mode: AiPanelMode;
-  styles: string[];
   userPrompt: string;
-  onStyles: (styles: string[]) => void;
+  contextMessageCount: number;
   onUserPrompt: (value: string) => void;
+  onContextMessageCount: (count: number) => void;
   onPanel: (panel: SettingsPanel) => void;
   onConnectMyLifeMemory: (token: string) => Promise<MyLifeMemoryConnectionStatus | null>;
   onTestMyLifeMemory: () => Promise<MyLifeMemoryConnectionStatus | null>;
@@ -52,47 +55,44 @@ export function AiSettingsPanel({
   if (mode === 'ai') {
     return (
       <section className="connections-card-list ai-settings-panel">
-        <article className="connection-card is-open">
+        <article className="connection-card is-open ai-conversation-settings-card">
           <div className="connection-card__header">
             <span className="connection-card__icon">
-              <Bot size={22} strokeWidth={2.2} />
+              <MessageCircle size={22} strokeWidth={2.2} />
             </span>
             <span className="connection-card__title">
-              <strong>{copy.settings.assistant}</strong>
+              <strong>{copy.settings.aiConversation}</strong>
             </span>
           </div>
-          <div className="connection-card__body ai-style-options">
-            {STYLES.map((style) => {
-              const selected = styles.includes(style);
-              return (
-                <button
-                  key={style}
-                  className={selected ? 'is-selected' : ''}
-                  aria-pressed={selected}
-                  onClick={() => onStyles(
-                    selected
-                      ? styles.filter((item) => item !== style)
-                      : [...styles, style].slice(0, 3),
-                  )}
-                >
-                  {selected ? <Check size={16} strokeWidth={2.2} /> : null}
-                  {copy.settings.aiStyles[style]}
-                </button>
-              );
-            })}
+          <label className="ai-context-control">
+            <span>
+              <History size={18} strokeWidth={2.2} />
+              <strong>{copy.settings.contextMessages}</strong>
+              <output>{copy.settings.contextMessageCount(contextMessageCount)}</output>
+            </span>
+            <input
+              type="range"
+              min={MIN_AI_CONTEXT_MESSAGE_COUNT}
+              max={MAX_AI_CONTEXT_MESSAGE_COUNT}
+              step="2"
+              value={contextMessageCount}
+              aria-label={copy.settings.contextMessages}
+              onChange={(event) => onContextMessageCount(
+                normalizeAiContextMessageCount(event.target.value),
+              )}
+            />
+            <small>{copy.settings.contextMessagesBody}</small>
+          </label>
+          <div className="ai-user-prompt-card">
+            <label htmlFor="ai-user-prompt">{copy.settings.userPrompt}</label>
+            <textarea
+              id="ai-user-prompt"
+              value={userPrompt}
+              maxLength={500}
+              placeholder={copy.settings.userPromptPlaceholder}
+              onChange={(event) => onUserPrompt(event.target.value)}
+            />
           </div>
-        </article>
-
-        <article className="connection-card is-open ai-user-prompt-card">
-          <label htmlFor="ai-user-prompt">{copy.settings.userPrompt}</label>
-          <textarea
-            id="ai-user-prompt"
-            value={userPrompt}
-            maxLength={240}
-            placeholder={copy.settings.userPromptPlaceholder}
-            onChange={(event) => onUserPrompt(event.target.value)}
-          />
-          <small>{copy.settings.userPromptHint}</small>
         </article>
 
         <div className="settings-submenu ai-settings-links">

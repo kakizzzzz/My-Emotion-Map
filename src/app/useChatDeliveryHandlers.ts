@@ -4,6 +4,7 @@ import type {
   ClarificationOption,
   Conversation,
   ExternalEvidenceReference,
+  McpCallReference,
 } from '../types';
 import {
   completeChatRequest,
@@ -28,6 +29,7 @@ export type CompleteChatInput = {
   assistantBody: string;
   noteIds: string[];
   externalEvidence?: ExternalEvidenceReference[];
+  mcpCalls?: McpCallReference[];
   clarificationOptions: ClarificationOption[];
   retryable?: boolean;
   createdAt: string;

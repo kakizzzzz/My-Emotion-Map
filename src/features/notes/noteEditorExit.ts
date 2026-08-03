@@ -8,8 +8,6 @@ export type EditorExitOutcome =
   | 'close'
   | 'save'
   | 'discard'
-  | 'keep_draft'
-  | 'delete_draft'
   | null;
 
 export type EditorExitState = {
@@ -21,9 +19,7 @@ export type EditorExitAction =
   | { type: 'request_close'; isNew: boolean; dirty: boolean }
   | { type: 'continue_editing' }
   | { type: 'save' }
-  | { type: 'discard' }
-  | { type: 'keep_draft' }
-  | { type: 'delete_draft' };
+  | { type: 'exit' };
 
 export const initialEditorExitState: EditorExitState = {
   view: 'editing',
@@ -44,11 +40,11 @@ export const reduceEditorExit = (
   if (action.type === 'continue_editing') return initialEditorExitState;
   if (state.view === 'confirm_existing') {
     if (action.type === 'save') return { view: 'closed', outcome: 'save' };
-    if (action.type === 'discard') return { view: 'closed', outcome: 'discard' };
+    if (action.type === 'exit') return { view: 'closed', outcome: 'discard' };
   }
   if (state.view === 'confirm_new') {
-    if (action.type === 'keep_draft') return { view: 'closed', outcome: 'keep_draft' };
-    if (action.type === 'delete_draft') return { view: 'closed', outcome: 'delete_draft' };
+    if (action.type === 'save') return { view: 'closed', outcome: 'save' };
+    if (action.type === 'exit') return { view: 'closed', outcome: 'close' };
   }
   return state;
 };

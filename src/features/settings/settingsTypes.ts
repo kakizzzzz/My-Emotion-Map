@@ -1,7 +1,6 @@
 import type { ThemePalette, ThemeTone } from '../../types';
 import type { LocationRequestState } from '../../useLocationController';
 import type { ToastHandler } from '../../app/appTypes';
-import type { CloudSyncStatus } from '../../services/useCloudSync';
 import type { DataExportRange, ReadableExportResult } from '../../app/exportReadableData';
 import type { MyLifeMemoryConnectionStatus } from '../../services/myLifeMemoryConnection';
 import type { McpOutputStatus } from '../../services/externalAccess';
@@ -15,6 +14,7 @@ export type SettingsPanel =
   | 'emotion-map-mcp'
   | 'language'
   | 'location'
+  | 'follow-up'
   | 'export';
 
 export type McpProposal = {
@@ -32,6 +32,8 @@ export type SettingsScreenProps = {
   themePalette: ThemePalette;
   onThemeTone: (tone: ThemeTone) => void;
   onThemeColor: (key: keyof ThemePalette, color: string) => void;
+  followUpIntervals: number[];
+  onFollowUpIntervals: (intervals: number[]) => void;
   onExportData: (range: DataExportRange) => ReadableExportResult;
   locationRequestState: LocationRequestState;
   onRequestLocation: () => void;
@@ -39,14 +41,10 @@ export type SettingsScreenProps = {
   cloudConfigured: boolean;
   cloudUserId: string | null;
   cloudAccount: string | null;
-  cloudStatus: CloudSyncStatus;
   onSignOut: () => Promise<unknown>;
   onUpdatePassword: (
     password: string,
   ) => Promise<'success' | 'weak_password' | 'unavailable'>;
-  onConfirmInitialUpload: () => void;
-  onUseRemoteVersion: () => void;
-  onOverwriteRemote: () => void;
   onIssueMcpToken: () => Promise<{ token: string; expiresAt: string } | null>;
   onGetMcpOutputStatus: () => Promise<McpOutputStatus | null>;
   onRevokeAllMcpTokens: () => Promise<boolean>;

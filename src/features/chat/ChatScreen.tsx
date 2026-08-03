@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Heart,
+  Link2,
   MessageSquarePlus,
   RotateCcw,
   Send,
@@ -35,26 +36,18 @@ import {
 import { useDialogFocus } from '../../app/useDialogFocus';
 import type { CloudAuth } from '../../services/supabaseClient';
 import type { CloudSyncStatus } from '../../services/useCloudSync';
-import { requestEmotionChat } from '../../services/emotionChat';
-import type { ToastHandler } from '../../app/appTypes';
 import {
-  loadLocalSettings,
-  toneTagsFromUserPrompt,
-} from '../../app/profilePreferences';
+  requestEmotionChat,
+  requestEmotionChatPlan,
+} from '../../services/emotionChat';
+import type { ToastHandler } from '../../app/appTypes';
+import { loadLocalSettings } from '../../app/profilePreferences';
 import { chatDraftKey } from '../../app/workspace/chatDraftStorage';
 import { createRecordId } from '../../app/createRecordId';
 import type {
   BeginChatInput,
   CompleteChatInput,
 } from '../../app/useChatDeliveryHandlers';
-
-function AiAvatar() {
-  return (
-    <span className="ai-avatar" aria-hidden="true">
-      AI
-    </span>
-  );
-}
 
 export function ChatScreen({
   notes,
@@ -66,11 +59,11 @@ export function ChatScreen({
   onRevisitEmotion,
   cloudAuth,
   cloudRevision,
-  cloudStatus,
   onBeginChat,
   onCompleteChat,
   onFailChat,
   onNewConversation,
+  onRenameConversation = () => undefined,
   onExitToMap,
   onToast,
 }: {
@@ -95,6 +88,7 @@ export function ChatScreen({
     state: Extract<ChatDeliveryState, 'failed' | 'stopped'>,
   ) => void;
   onNewConversation: () => void;
+  onRenameConversation?: (conversationId: string, title: string) => void;
   onExitToMap: () => void;
   onToast: ToastHandler;
 }) {
@@ -118,6 +112,7 @@ export function ChatScreen({
   };
   const [sending, setSending] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const [activeMcpRequestId, setActiveMcpRequestId] = useState<string | null>(null);
   const [showJumpToEnd, setShowJumpToEnd] = useState(false);
   const [unreadBelow, setUnreadBelow] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -150,39 +145,44 @@ export function ChatScreen({
       (conversation.id === FOLLOW_UP_CONVERSATION_ID ||
         conversation.kind === 'companion'),
   );
+  const displayedTitle = isFollowUp
+    ? copy.navigation.chat
+    : conversation.title;
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(displayedTitle);
+  useEffect(() => {
+    if (!editingTitle) setTitleDraft(displayedTitle);
+  }, [displayedTitle, editingTitle]);
+  const commitTitle = () => {
+    const nextTitle = titleDraft.trim().slice(0, 60);
+    setEditingTitle(false);
+    if (nextTitle && nextTitle !== conversation.title) {
+      onRenameConversation(conversation.id, nextTitle);
+    } else {
+      setTitleDraft(displayedTitle);
+    }
+  };
   const available = Boolean(
     cloudAuth &&
-      cloudRevision !== null &&
-      cloudStatus === 'synced',
+      cloudRevision !== null,
   );
-  const unavailableMessage = !cloudAuth
-    ? copy.chat.signInRequired
-    : copy.chat.syncRequired;
   const followUpOptions = useMemo(
     () => getFollowUpOptions(language),
     [language],
   );
-  const responseStyle = useMemo(
-    () => {
-      if (!cloudAuth) return [];
-      const settings = loadLocalSettings(cloudAuth.userId);
-      const allowlist = new Set(['concise', 'direct', 'gentle', 'sharp']);
-      return [...new Set([
-        ...settings.aiToneTags,
-        ...toneTagsFromUserPrompt(settings.aiUserPrompt),
-      ])]
-        .filter((item): item is 'concise' | 'direct' | 'gentle' | 'sharp' =>
-          allowlist.has(item),
-        )
-        .slice(0, 3);
-    },
+  const aiPreferences = useMemo(
+    () => loadLocalSettings(cloudAuth?.userId ?? null),
     [cloudAuth],
   );
 
   const scrollToEnd = useCallback((behavior: ScrollBehavior) => {
-    const target = endRef.current;
-    if (target && typeof target.scrollIntoView === 'function') {
-      target.scrollIntoView({ behavior, block: 'end' });
+    const scroller = scrollRef.current;
+    if (scroller && typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+    } else if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+    } else {
+      endRef.current?.scrollIntoView({ behavior, block: 'end' });
     }
     nearBottomRef.current = true;
     setShowJumpToEnd(false);
@@ -202,7 +202,8 @@ export function ChatScreen({
   useLayoutEffect(() => {
     previousMessageCountRef.current = renderedMessageCountRef.current;
     resizeReadyRef.current = false;
-    scrollToEnd('instant');
+    const frame = window.requestAnimationFrame(() => scrollToEnd('instant'));
+    return () => window.cancelAnimationFrame(frame);
   }, [activeConversationId, scrollToEnd]);
 
   useEffect(() => {
@@ -286,8 +287,18 @@ export function ChatScreen({
       return;
     }
     const requestId = retryRequestId ?? createRecordId('chat-request');
+    const recentMessages = conversation.messages
+      .filter((item) =>
+        (item.role === 'user' || item.role === 'assistant') &&
+        item.body.trim() &&
+        item.deliveryState !== 'failed' &&
+        item.deliveryState !== 'stopped',
+      )
+      .slice(-aiPreferences.aiContextMessageCount)
+      .map((item) => ({ role: item.role, body: item.body }));
     setSending(true);
     setActiveRequestId(requestId);
+    setActiveMcpRequestId(null);
     onBeginChat({
       conversationId: conversation.id,
       requestId,
@@ -299,10 +310,24 @@ export function ChatScreen({
     window.requestAnimationFrame(() => scrollToEnd('smooth'));
     const controller = new AbortController();
     abortRef.current = controller;
-    const timer = window.setTimeout(() => controller.abort(), 55_000);
+    const timer = window.setTimeout(() => controller.abort(), 65_000);
     try {
       const result = cloudAuth && cloudRevision !== null
-        ? await requestEmotionChat({
+        ? await (async () => {
+            const plan = await requestEmotionChatPlan({
+              auth: cloudAuth,
+              requestId,
+              message,
+              language,
+              conversationId: conversation.id,
+              recentMessages,
+              clientRevision: cloudRevision,
+              signal: controller.signal,
+            });
+            if (plan.source === 'my_life_memory' || plan.source === 'both') {
+              setActiveMcpRequestId(requestId);
+            }
+            return requestEmotionChat({
               auth: cloudAuth,
               requestId,
               message,
@@ -312,11 +337,14 @@ export function ChatScreen({
               conversationAnchorNoteIds: conversation.messages
                 .flatMap((item) => item.noteIds ?? [])
                 .slice(-6),
-              responseStyle,
+              stylePrompt: aiPreferences.aiUserPrompt,
+              recentMessages,
               clientRevision: cloudRevision,
+              routingPlanToken: plan.routingPlanToken,
               referenceConfirmation,
               signal: controller.signal,
-          })
+            });
+          })()
         : null;
       if (!result || !result.answer.trim()) throw new Error('Unavailable');
       onCompleteChat({
@@ -325,6 +353,7 @@ export function ChatScreen({
         assistantBody: result.answer,
         noteIds: result.evidence.map((item) => item.noteId),
         externalEvidence: result.externalEvidence,
+        mcpCalls: result.mcpCalls,
         clarificationOptions: result.clarificationOptions ?? [],
         retryable: result.status === 'generation_rejected',
         createdAt: new Date().toISOString(),
@@ -341,6 +370,7 @@ export function ChatScreen({
       abortRef.current = null;
       setSending(false);
       setActiveRequestId(null);
+      setActiveMcpRequestId(null);
     }
   };
 
@@ -361,38 +391,68 @@ export function ChatScreen({
   return (
     <section className="paper-screen chat-screen" aria-busy={sending}>
       <header className="chat-header chat-header--thread">
-        <div>
-          <h1>{isFollowUp ? copy.navigation.chat : conversation.title}</h1>
+        <button
+          className="round-back-button chat-header-back"
+          aria-label={copy.chat.exitToMap}
+          onClick={onExitToMap}
+        >
+          <ChevronLeft size={23} strokeWidth={2.2} />
+        </button>
+        <div className="chat-thread-title">
+          {editingTitle ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              maxLength={60}
+              aria-label={copy.chat.conversationTitle}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitTitle();
+                } else if (event.key === 'Escape') {
+                  setTitleDraft(displayedTitle);
+                  setEditingTitle(false);
+                }
+              }}
+            />
+          ) : isFollowUp ? (
+            <h1>{displayedTitle}</h1>
+          ) : (
+            <button
+              type="button"
+              className="chat-title-button"
+              aria-label={copy.chat.renameConversation}
+              onClick={() => {
+                setTitleDraft(displayedTitle);
+                setEditingTitle(true);
+              }}
+            >
+              <h1>{displayedTitle}</h1>
+            </button>
+          )}
         </div>
-        <div className="chat-header-actions">
-          <button
-            className="round-back-button"
-            aria-label={copy.chat.exitToMap}
-            onClick={onExitToMap}
-          >
-            <ChevronLeft size={23} strokeWidth={2.2} />
-          </button>
-          <button
-            className="round-back-button"
-            aria-label={
-              sending ? copy.chat.stopGenerating : copy.chat.newConversation
+        <button
+          className="round-back-button chat-header-new"
+          aria-label={
+            sending ? copy.chat.stopGenerating : copy.chat.newConversation
+          }
+          onClick={() => {
+            if (sending) {
+              abortRef.current?.abort();
+              if (activeRequestId) onFailChat(activeRequestId, 'stopped');
+              return;
             }
-            onClick={() => {
-              if (sending) {
-                abortRef.current?.abort();
-                if (activeRequestId) onFailChat(activeRequestId, 'stopped');
-                return;
-              }
-              onNewConversation();
-            }}
-          >
-            {sending ? (
-              <X size={22} strokeWidth={2.2} />
-            ) : (
-              <MessageSquarePlus size={22} strokeWidth={2.2} />
-            )}
-          </button>
-        </div>
+            onNewConversation();
+          }}
+        >
+          {sending ? (
+            <X size={22} strokeWidth={2.2} />
+          ) : (
+            <MessageSquarePlus size={22} strokeWidth={2.2} />
+          )}
+        </button>
       </header>
 
       <div
@@ -434,7 +494,6 @@ export function ChatScreen({
                 key={message.id}
                 className={`message-row message-row--${message.role}`}
               >
-                {message.role === 'assistant' ? <AiAvatar /> : null}
                 <div className="message-stack">
                   {message.noteIds?.length ? (
                     <div className="message-note-links">
@@ -469,6 +528,18 @@ export function ChatScreen({
                           {item.date ? ` · ${item.date}` : ''}
                         </span>
                       ))}
+                    </div>
+                  ) : null}
+                  {message.mcpCalls?.length ? (
+                    <div className="message-mcp-call" role="status">
+                      <Link2 size={13} strokeWidth={2.2} aria-hidden="true" />
+                      <span>
+                        {message.mcpCalls.some((call) => call.status === 'completed')
+                          ? copy.chat.mcpCallCompleted
+                          : message.mcpCalls.every((call) => call.status === 'not_found')
+                            ? copy.chat.mcpCallNoMatch
+                            : copy.chat.mcpCallUnavailable}
+                      </span>
                     </div>
                   ) : null}
                   {body ? <div className="message-bubble">{body}</div> : null}
@@ -575,13 +646,19 @@ export function ChatScreen({
           (message) => message.deliveryState === 'pending',
         ) ? (
             <article className="message-row message-row--assistant is-pending">
-              <AiAvatar />
               <div className="message-stack">
-                <div className="message-bubble" aria-label={copy.common.loading}>
-                  <i />
-                  <i />
-                  <i />
-                </div>
+                {activeMcpRequestId ? (
+                  <div className="message-mcp-call message-mcp-call--pending" role="status">
+                    <Link2 size={14} strokeWidth={2.2} aria-hidden="true" />
+                    <span>{copy.chat.mcpCalling}</span>
+                  </div>
+                ) : (
+                  <div className="message-bubble" aria-label={copy.common.loading}>
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                )}
               </div>
             </article>
         ) : null}
@@ -614,16 +691,10 @@ export function ChatScreen({
             value={draft}
             onChange={(event) => setDraft(event.target.value.slice(0, 1_200))}
             onKeyDown={handleComposerKeyDown}
-            readOnly={!available}
-            disabled={!available}
-            placeholder={
-              available ? copy.chat.messagePlaceholder : unavailableMessage
-            }
+            placeholder={copy.chat.messagePlaceholder}
             rows={1}
             enterKeyHint="send"
-            aria-label={
-              available ? copy.chat.messagePlaceholder : unavailableMessage
-            }
+            aria-label={copy.chat.messagePlaceholder}
           />
           <button
             className="send-button"

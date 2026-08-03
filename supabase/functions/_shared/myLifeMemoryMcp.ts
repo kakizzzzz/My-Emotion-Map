@@ -1,6 +1,6 @@
 export const MLM_SERVER_NAME = 'my-life-memory';
 export const MLM_PROTOCOL_VERSION = '2025-03-26';
-export const MLM_MAX_RESPONSE_BYTES = 48_000;
+export const MLM_MAX_RESPONSE_BYTES = 192_000;
 export const MLM_MAX_MODEL_BYTES = 12_000;
 export const MLM_MANIFEST_TOOL_NAMES = [
   'research_memory_context',
@@ -153,8 +153,24 @@ const text = (value: unknown, max: number) =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
 
 const date = (value: unknown) => {
-  const candidate = text(value, 10);
-  return /^20\d{2}-\d{2}-\d{2}$/.test(candidate) ? candidate : '';
+  const candidate = text(value, 32);
+  if (/^20\d{2}-\d{2}-\d{2}$/.test(candidate)) return candidate;
+  const timestamp = typeof value === 'number'
+    ? value
+    : /^\d{10,13}$/.test(candidate) ? Number(candidate) : Number.NaN;
+  if (!Number.isFinite(timestamp)) return '';
+  const instant = new Date(timestamp < 10_000_000_000 ? timestamp * 1_000 : timestamp);
+  return Number.isNaN(instant.getTime()) ? '' : instant.toISOString().slice(0, 10);
+};
+
+const coordinates = (item: JsonObject) => {
+  const nested = asObject(item.coordinates);
+  const lat = typeof item.lat === 'number' ? item.lat : nested?.lat;
+  const lng = typeof item.lng === 'number' ? item.lng : nested?.lng;
+  return typeof lat === 'number' && Number.isFinite(lat) &&
+      typeof lng === 'number' && Number.isFinite(lng)
+    ? `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    : '';
 };
 
 const metricExcerpt = (item: JsonObject) => [
@@ -202,33 +218,81 @@ const candidatesFrom = (payload: JsonObject) => {
   return arrays.find(Array.isArray) as unknown[] | undefined ?? [];
 };
 
+const candidateTimestamp = (item: JsonObject) => {
+  const raw = item.createdAt ?? item.date ?? item.localDate;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  const parsed = Date.parse(text(raw, 40));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const recentDistinctPlaces = (items: JsonObject[]) => {
+  const seen = new Set<string>();
+  return [...items]
+    .sort((left, right) => candidateTimestamp(right) - candidateTimestamp(left))
+    .filter((item) => {
+      const key = text(item.starId, 200) || coordinates(item) ||
+        text(item.id ?? item.noteId, 200);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+};
+
 export const normalizeMlmToolResult = (
   toolName: string,
   result: unknown,
+  options: { recentPlaces?: boolean } = {},
 ) => {
   const payload = parseToolPayload(result);
   if (!payload) {
-    return { status: 'invalid' as const, evidence: [], modelContext: null };
+    return {
+      status: 'invalid' as const,
+      evidence: [],
+      modelContext: null,
+      selectedImageNoteIds: [],
+      selectedLocationStarIds: [],
+    };
   }
-  const verifiedPlaces = Array.isArray(asObject(payload.evidence)?.verifiedPlaceNames)
-    ? (asObject(payload.evidence)?.verifiedPlaceNames as unknown[])
+  const evidencePayload = asObject(payload.evidence);
+  const verifiedPlaces = Array.isArray(evidencePayload?.verifiedPlaceNames)
+    ? (evidencePayload.verifiedPlaceNames as unknown[])
         .map((item) => text(item, 160)).filter(Boolean).slice(0, 3)
     : [];
-  const evidence = candidatesFrom(payload)
+  const selectedImageNoteIds = Array.isArray(evidencePayload?.selectedImageNoteIds)
+    ? [...new Set((evidencePayload.selectedImageNoteIds as unknown[])
+        .map((item) => text(item, 200)).filter(Boolean))].slice(0, 10)
+    : [];
+  const rawCandidates = candidatesFrom(payload)
     .map(asObject)
-    .filter((item): item is JsonObject => Boolean(item))
-    .slice(0, 6)
+    .filter((item): item is JsonObject => Boolean(item));
+  const candidates = options.recentPlaces
+    ? recentDistinctPlaces(rawCandidates)
+    : toolName === 'list_locations'
+      ? [...rawCandidates]
+          .sort((left, right) =>
+            Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0))
+          .slice(0, 3)
+      : rawCandidates.slice(0, 6);
+  const selectedLocationStarIds = toolName === 'list_locations'
+    ? candidates.map((item) => text(item.id ?? item.starId, 200)).filter(Boolean)
+    : [];
+  const evidence = candidates
     .map((item, index): ExternalMemoryEvidence => ({
       key: `M${index + 1}`,
       source: 'my_life_memory_external',
       trust: 'untrusted_tool_data',
       referenceId: text(item.id ?? item.noteId ?? item.starId, 200) ||
         `${toolName}-${index + 1}`,
-      title: text(item.title ?? item.name, 200) ||
-        (toolName === 'get_routes' ? 'Saved route' : 'My Life Memory record'),
-      date: date(item.localDate ?? item.date),
-      place: text(item.place ?? item.location, 160) || verifiedPlaces[0] || '',
-      excerpt: text(item.excerpt ?? item.summary ?? item.text, 600) ||
+      title: text(item.title ?? item.name, 200) || (toolName === 'get_routes'
+        ? 'Saved route'
+        : toolName === 'list_locations' || toolName === 'get_location_memory'
+          ? 'Saved location'
+          : 'My Life Memory record'),
+      date: date(item.localDate ?? item.date ?? item.createdAt),
+      place: text(item.place ?? item.location, 160) || verifiedPlaces[0] ||
+        coordinates(item),
+      excerpt: text(item.excerpt ?? item.summary ?? item.text ?? item.snippet, 600) ||
         metricExcerpt(item),
       matchReason: `my_life_memory:${toolName}`,
     }));
@@ -245,5 +309,7 @@ export const normalizeMlmToolResult = (
     modelContext: serialized.length <= MLM_MAX_MODEL_BYTES
       ? JSON.parse(serialized) as JsonObject
       : null,
+    selectedImageNoteIds,
+    selectedLocationStarIds,
   };
 };

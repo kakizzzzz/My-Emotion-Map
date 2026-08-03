@@ -8,6 +8,7 @@ import {
   tokenizeQuery,
   type QueryIntent,
 } from '../../../src/domain/query/queryCore.ts';
+import { detectMyLifeMemoryMcpIntent } from '../../../src/domain/query/mcpIntent.ts';
 
 export type ChatLanguage = 'zh' | 'en' | 'ko';
 export type ClaimKind =
@@ -80,6 +81,25 @@ export const normalized = normalizeQueryText;
 export const queryTerms = tokenizeQuery;
 export const parseChatQueryConstraints = parseQueryConstraints;
 
+const RECORD_SEEKING_QUERY = /(?:记录|笔记|星星|地图|回访|哪条|那条|刚才那条|my\s*emotion\s*map|saved\s+(?:record|note)|(?:my\s+)?(?:records?|notes?|stars?)|what\s+did\s+i\s+(?:save|record)|기록|노트|별|지도|후속)/i;
+
+export const isCasualChatQuery = (query: string) => {
+  const value = normalized(query);
+  return Boolean(value) &&
+    routeIntent(query) !== 'unsupported' &&
+    !detectMyLifeMemoryMcpIntent(query).requested &&
+    !RECORD_SEEKING_QUERY.test(value);
+};
+
+export const parseCasualReply = (value: unknown) => {
+  const payload = asObject(value);
+  if (!payload || Object.keys(payload).some((key) => key !== 'reply')) return null;
+  const reply = typeof payload.reply === 'string'
+    ? payload.reply.trim().slice(0, 2_000)
+    : '';
+  return reply || null;
+};
+
 const EMOTION_ALIASES: Record<string, string[]> = {
   calm: ['平静', 'calm', '평온'], joy: ['开心', '快乐', 'joy', 'happy', '기쁨'],
   tender: ['柔软', '温柔', 'tender', 'gentle', '부드러움'], curious: ['好奇', 'curious', '호기심'],
@@ -143,6 +163,7 @@ export const resolveRetrievalStatus = (
   intent: QueryIntent,
   evidence: AuthorizedEvidence[],
   scores: number[],
+  query = '',
 ): RetrievalStatus => {
   if (intent === 'unsupported') return 'unsupported';
   if (intent === 'clarification_required') return 'clarification_required';
@@ -152,6 +173,7 @@ export const resolveRetrievalStatus = (
   if (intent === 'pattern' && !facts.repeatedEligible) return 'evidence_insufficient';
   if (
     (intent === 'lookup' || intent === 'reflection') &&
+    !/(?:经历|回忆|记忆|足迹|旅程|旅行|行程|去过|到过|所有|全部|相关记录|experiences?|memories|journeys?|trips?|travels?|visits?|all\s+(?:records?|notes?)|경험|추억|여정|여행|방문)/i.test(query) &&
     scores.length > 1 && scores[0] - scores[1] < 8
   ) return 'ambiguous';
   return 'supported';
@@ -341,6 +363,7 @@ export const retrieveAuthorizedEvidence = (
     intent,
     computationSet,
     ranked.map((item) => item.score),
+    query,
   );
   const comparisonTargets = intent === 'comparison'
     ? parseComparisonTargets(query)
@@ -555,10 +578,45 @@ export const validateGeneratedDraft = (
 };
 
 export const deterministicFallback = (language: ChatLanguage) => ({
-  zh: '我找到了与这个问题相关的已保存记录，但当前生成结果没有通过证据和表达边界检查。你可以打开下面的记录直接查看；现有数据不足以安全地产生进一步判断。',
-  en: 'I found saved records related to this question, but the generated response did not pass the evidence and language checks. You can open the records below directly; the current data is not sufficient for a safe further conclusion.',
-  ko: '이 질문과 관련된 저장 기록을 찾았지만, 생성 결과가 근거 및 표현 경계 검사를 통과하지 못했습니다. 아래 기록을 직접 열어볼 수 있으며, 현재 데이터만으로는 더 판단하기에 충분하지 않습니다.',
+  zh: '我找到了相关记录，但这次回答没有通过事实核对，所以没有把不可靠的内容发给你。下面的记录仍可以直接打开，我们可以继续从其中一条聊起。',
+  en: 'I found relevant records, but this reply did not pass the fact check, so I did not send you unreliable content. You can still open the records below, and we can continue from any one of them.',
+  ko: '관련 기록을 찾았지만, 이번 답변은 사실 확인을 통과하지 못해 신뢰할 수 없는 내용을 보내지 않았어요. 아래 기록은 그대로 열어볼 수 있고, 그중 하나부터 이어서 이야기할 수 있어요.',
 } as const)[language];
+
+export const formatRecentPlacesAnswer = (
+  language: ChatLanguage,
+  evidence: AuthorizedEvidence[],
+) => {
+  const seen = new Set<string>();
+  const places = [...evidence]
+    .sort((left, right) => Date.parse(right.date) - Date.parse(left.date))
+    .filter((item) => {
+      const key = [item.title, item.place, item.date].map(normalized).join('|');
+      if (!item.key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+  if (!places.length) return null;
+  const fallbackTitle = {
+    zh: '已保存地点',
+    en: 'Saved place',
+    ko: '저장된 장소',
+  } as const;
+  const intro = {
+    zh: '最近的已保存地点记录，按时间从近到远：',
+    en: 'Your recent saved place records, from newest to oldest:',
+    ko: '최근 저장된 장소 기록을 최신순으로 정리했어요:',
+  } as const;
+  return {
+    answer: [
+      intro[language],
+      ...places.map((item) =>
+        `• ${item.title.trim() || fallbackTitle[language]}${item.date ? ` · ${item.date}` : ''}`),
+    ].join('\n'),
+    evidenceKeys: places.map((item) => item.key),
+  };
+};
 
 export const insufficientAnswer = (language: ChatLanguage) => ({
   zh: '现有的已保存记录不足以安全回答这个问题。',

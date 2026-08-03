@@ -7,6 +7,18 @@ import type { AppLanguage } from '../i18n';
 import { createRecordId } from '../app/createRecordId';
 
 export const FOLLOW_UP_CONVERSATION_ID = 'thread-revisit';
+export const DEFAULT_FOLLOW_UP_CURVE = [3, 7, 14] as const;
+
+export const normalizeFollowUpCurve = (value: unknown): number[] => {
+  if (!Array.isArray(value)) return [...DEFAULT_FOLLOW_UP_CURVE];
+  const normalized = [...new Set(value.flatMap((item) => {
+    const days = Number(item);
+    return Number.isSafeInteger(days) && days >= 1 && days <= 365
+      ? [days]
+      : [];
+  }))].sort((left, right) => left - right).slice(0, 8);
+  return normalized.length ? normalized : [...DEFAULT_FOLLOW_UP_CURVE];
+};
 
 const FOLLOW_UP_OPTIONS: ChatOption[] = [
   {
@@ -200,17 +212,18 @@ export const promoteNextDueFollowUp = (
 export const createFollowUpForNote = (
   note: EmotionNote,
   _language: AppLanguage,
-  intervalDays: 1 | 3 | 7 = 3,
+  intervalDays: number = DEFAULT_FOLLOW_UP_CURVE[0],
   consentedAt = new Date(),
 ): FollowUpRecord => {
+  const normalizedInterval = normalizeFollowUpCurve([intervalDays])[0];
   const baseTime = consentedAt.getTime();
   const dueAt = new Date(
-    baseTime + intervalDays * 24 * 60 * 60 * 1_000,
+    baseTime + normalizedInterval * 24 * 60 * 60 * 1_000,
   ).toISOString();
   return {
     id: createRecordId('follow-up'),
     noteId: note.id,
-    intervalDays,
+    intervalDays: normalizedInterval,
     followUpConsentedAt: consentedAt.toISOString(),
     dueAt,
     status: 'queued',

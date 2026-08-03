@@ -23,6 +23,28 @@ export type SpeechRecognitionLike = {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
+export type MicrophoneAccess = 'granted' | 'denied' | 'unavailable';
+
+export const requestMicrophoneAccess = async (): Promise<MicrophoneAccess> => {
+  if (
+    typeof navigator === 'undefined' ||
+    !navigator.mediaDevices?.getUserMedia
+  ) return 'unavailable';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+    return 'granted';
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === 'NotAllowedError' || error.name === 'SecurityError')
+    ) {
+      return 'denied';
+    }
+    return 'unavailable';
+  }
+};
+
 export const getSpeechRecognitionConstructor =
   (): SpeechRecognitionConstructor | null => {
     const speechWindow = window as typeof window & {

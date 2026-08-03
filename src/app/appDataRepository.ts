@@ -17,6 +17,7 @@ import {
 import { migrateLegacyHiddenDefaults } from './appDataV3';
 import { migrateLegacyTemporalFields } from '../domain/time/temporal';
 import { sanitizeExternalEvidence } from './sanitizeExternalEvidence';
+import { sanitizeMcpCalls } from '../domain/query/mcpCalls';
 import {
   LEGACY_APP_DATA_STORAGE_KEY,
   isWorkspaceWithinBudget,
@@ -377,6 +378,7 @@ const sanitizeMessage = (
           .slice(0, 20)
       : undefined,
     externalEvidence: sanitizeExternalEvidence(source.externalEvidence),
+    mcpCalls: sanitizeMcpCalls(source.mcpCalls),
     options: Array.isArray(source.options)
       ? source.options
           .map((option) => {
@@ -481,9 +483,9 @@ const sanitizeFollowUp = (
     !source ||
     !asString(source.id, 200) ||
     !asString(source.noteId, 200) ||
-    (source.intervalDays !== 1 &&
-      source.intervalDays !== 3 &&
-      source.intervalDays !== 7) ||
+    !Number.isSafeInteger(source.intervalDays) ||
+    Number(source.intervalDays) < 1 ||
+    Number(source.intervalDays) > 365 ||
     !isValidTimestamp(source.dueAt) ||
     !FOLLOW_UP_STATUSES.has(String(source.status))
   ) {
@@ -493,7 +495,7 @@ const sanitizeFollowUp = (
   return {
     id: asString(source.id, 200),
     noteId: asString(source.noteId, 200),
-    intervalDays: source.intervalDays,
+    intervalDays: Number(source.intervalDays),
     dueAt: source.dueAt,
     status: source.status as FollowUpRecord['status'],
     prompt: asString(source.prompt, 5_000) || undefined,

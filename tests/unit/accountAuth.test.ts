@@ -9,10 +9,14 @@ import {
 
 const clientMock = ({
   invoke,
+  signIn = validSignIn,
   setSession = validSession,
+  getUser = validUser,
 }: {
   invoke: unknown | unknown[];
+  signIn?: unknown;
   setSession?: unknown;
+  getUser?: unknown;
 }) => ({
   functions: {
     invoke: Array.isArray(invoke)
@@ -21,7 +25,11 @@ const clientMock = ({
           .mockResolvedValueOnce(invoke[1])
       : vi.fn().mockResolvedValue(invoke),
   },
-  auth: { setSession: vi.fn().mockResolvedValue(setSession) },
+  auth: {
+    signInWithPassword: vi.fn().mockResolvedValue(signIn),
+    setSession: vi.fn().mockResolvedValue(setSession),
+    getUser: vi.fn().mockResolvedValue(getUser),
+  },
 }) as unknown as SupabaseClient;
 
 const validSession = {
@@ -29,15 +37,20 @@ const validSession = {
   error: null,
 };
 
-const loginReady = {
+const validSignIn = {
   data: {
-    status: 'ready',
+    user: { id: 'user-1' },
     session: {
-      accessToken: 'access-test',
-      refreshToken: 'refresh-test',
-      userId: 'user-1',
+      access_token: 'access-test',
+      refresh_token: 'refresh-test',
+      user: { id: 'user-1' },
     },
   },
+  error: null,
+};
+
+const validUser = {
+  data: { user: { id: 'user-1' } },
   error: null,
 };
 
@@ -58,10 +71,7 @@ describe('account authentication mapping', () => {
 
   it('signs in immediately after the registration function succeeds', async () => {
     const client = clientMock({
-      invoke: [
-        { data: { status: 'ready' }, error: null },
-        loginReady,
-      ],
+      invoke: { data: { status: 'ready' }, error: null },
     });
 
     await expect(authenticateAccount({
@@ -79,10 +89,7 @@ describe('account authentication mapping', () => {
       headers: { 'content-type': 'application/json' },
     });
     const client = clientMock({
-      invoke: [
-        { data: null, error: { context } },
-        loginReady,
-      ],
+      invoke: { data: null, error: { context } },
     });
 
     await expect(authenticateAccount({
@@ -113,8 +120,8 @@ describe('account authentication mapping', () => {
     expect(client.auth.setSession).not.toHaveBeenCalled();
   });
 
-  it('activates a server-resolved legacy account session', async () => {
-    const client = clientMock({ invoke: loginReady });
+  it('signs in directly through Supabase Auth and verifies the active user', async () => {
+    const client = clientMock({ invoke: { data: null, error: null } });
 
     await expect(authenticateAccount({
       client,
@@ -123,15 +130,21 @@ describe('account authentication mapping', () => {
       password: 'safe-pass-123',
       passwordConfirmation: '',
     })).resolves.toBe('signed_in');
+    expect(client.functions.invoke).not.toHaveBeenCalled();
+    expect(client.auth.signInWithPassword).toHaveBeenCalledWith({
+      email: 'u_6b616b69@accounts.my-emotion-map.app',
+      password: 'safe-pass-123',
+    });
     expect(client.auth.setSession).toHaveBeenCalledWith({
       access_token: 'access-test',
       refresh_token: 'refresh-test',
     });
+    expect(client.auth.getUser).toHaveBeenCalledTimes(1);
   });
 
   it('does not activate a session when the resolved user id changes', async () => {
     const client = clientMock({
-      invoke: loginReady,
+      invoke: { data: null, error: null },
       setSession: {
         data: { session: { user: { id: 'different-user' } } },
         error: null,
@@ -145,5 +158,24 @@ describe('account authentication mapping', () => {
       password: 'safe-pass-123',
       passwordConfirmation: '',
     })).resolves.toBe('unavailable');
+  });
+
+  it('maps rejected Supabase credentials without reporting a service outage', async () => {
+    const client = clientMock({
+      invoke: { data: null, error: null },
+      signIn: {
+        data: { user: null, session: null },
+        error: { code: 'invalid_credentials', status: 400 },
+      },
+    });
+
+    await expect(authenticateAccount({
+      client,
+      mode: 'login',
+      account: 'kaki',
+      password: 'wrong-pass-123',
+      passwordConfirmation: '',
+    })).resolves.toBe('invalid_credentials');
+    expect(client.auth.setSession).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { MapPin, X } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useAppLanguage } from "../../i18n";
 import { type LocationRequestState } from "../../useLocationController";
@@ -64,15 +64,6 @@ export function LocationPermissionPrompt({
                 <MapPin size={22} strokeWidth={2.2} />
                 {copy.location.initialTitle}
               </h2>
-              <button
-                type="button"
-                className="popup-close-button"
-                onClick={onClose}
-                aria-label={copy.common.close}
-                disabled={isRequesting}
-              >
-                <X size={19} strokeWidth={2.2} />
-              </button>
             </header>
             <p id="location-permission-description">
               {copy.location.initialBody}

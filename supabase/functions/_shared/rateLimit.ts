@@ -2,7 +2,7 @@ import type { AuthenticatedSession } from './security.ts';
 
 export const claimAiQuota = async (
   session: AuthenticatedSession,
-  feature: 'photo-assist' | 'emotion-chat',
+  feature: 'photo-assist' | 'emotion-chat' | 'voice-summary',
 ) => {
   try {
     const response = await fetch(`${session.supabaseUrl}/rest/v1/rpc/claim_ai_quota`, {

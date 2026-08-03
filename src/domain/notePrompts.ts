@@ -91,7 +91,7 @@ export const normalizeNewRecordPrompts = (
 ): EmotionNote['answers'] => {
   const normalized = normalizeGuidedAnswers(source);
   const purpose = normalized.find((answer) => answer.role === 'purpose');
-  const optional = normalized.filter((answer) => answer !== purpose).slice(0, 2);
+  const optional = normalized.filter((answer) => answer !== purpose).slice(0, 7);
   return [
     { id: purpose?.id ?? createRecordId('prompt'), question: PURPOSE_QUESTION[language], answer: purpose?.answer ?? '', role: 'purpose' },
     ...optional,

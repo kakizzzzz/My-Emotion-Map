@@ -3,6 +3,7 @@ import type {
   ClarificationOption,
   Conversation,
   ExternalEvidenceReference,
+  McpCallReference,
 } from '../types';
 import { FOLLOW_UP_CONVERSATION_ID } from '../domain/followUps';
 import { createRecordId } from './createRecordId';
@@ -102,6 +103,7 @@ export const completeChatRequest = (
     assistantBody: string;
     noteIds: string[];
     externalEvidence?: ExternalEvidenceReference[];
+    mcpCalls?: McpCallReference[];
     clarificationOptions: ClarificationOption[];
     retryable?: boolean;
     createdAt: string;
@@ -133,6 +135,7 @@ export const completeChatRequest = (
         body: input.assistantBody,
         noteIds: input.noteIds,
         externalEvidence: input.externalEvidence?.slice(0, 6),
+        mcpCalls: input.mcpCalls?.slice(0, 2),
         clarificationOptions: input.clarificationOptions.slice(0, 3),
         retryable: input.retryable === true,
         replyToRequestId: input.requestId,

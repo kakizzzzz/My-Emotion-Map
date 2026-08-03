@@ -5,9 +5,26 @@ import {
   DEVICE_PREFERENCES_STORAGE_KEY,
   userPreferencesStorageKey,
 } from './workspace/workspaceStorage';
+import {
+  DEFAULT_FOLLOW_UP_CURVE,
+  normalizeFollowUpCurve,
+} from '../domain/followUps';
 
 export const LOCAL_SETTINGS_STORAGE_KEY =
   'my-emotion-map.local-settings.v1';
+
+export const DEFAULT_AI_CONTEXT_MESSAGE_COUNT = 8;
+export const MIN_AI_CONTEXT_MESSAGE_COUNT = 2;
+export const MAX_AI_CONTEXT_MESSAGE_COUNT = 20;
+
+export const normalizeAiContextMessageCount = (value: unknown) => {
+  const count = Number(value);
+  if (!Number.isFinite(count)) return DEFAULT_AI_CONTEXT_MESSAGE_COUNT;
+  return Math.max(
+    MIN_AI_CONTEXT_MESSAGE_COUNT,
+    Math.min(MAX_AI_CONTEXT_MESSAGE_COUNT, Math.round(count)),
+  );
+};
 
 export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   avatarSrc: '',
@@ -15,26 +32,19 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   profileName: '',
   language: 'zh',
   aboutMe: '',
-  aiToneTags: [],
   aiUserPrompt: '',
+  aiContextMessageCount: DEFAULT_AI_CONTEXT_MESSAGE_COUNT,
   chatPreferenceTags: [],
+  followUpIntervals: [...DEFAULT_FOLLOW_UP_CURVE],
 };
 
 export const createDefaultLocalSettings = (): LocalSettings => ({
   ...DEFAULT_LOCAL_SETTINGS,
-  aiToneTags: [],
   aiUserPrompt: '',
+  aiContextMessageCount: DEFAULT_AI_CONTEXT_MESSAGE_COUNT,
   chatPreferenceTags: [],
+  followUpIntervals: [...DEFAULT_FOLLOW_UP_CURVE],
 });
-
-const AI_TONE_TAG_ALIASES: Record<string, string> = {
-  客观: 'objective',
-  温和: 'gentle',
-  直接: 'direct',
-  简洁: 'concise',
-  有耐心: 'patient',
-  犀利: 'sharp',
-};
 
 const DEFAULT_PROFILE_NAME_PREFIX: Record<AppLanguage, string> = {
   zh: '用户',
@@ -49,18 +59,6 @@ export const buildDefaultProfileName = (
   const normalizedAccount = account.trim().toLocaleLowerCase();
   const prefix = DEFAULT_PROFILE_NAME_PREFIX[language];
   return normalizedAccount ? `${prefix}${normalizedAccount}` : prefix.trim();
-};
-
-export const toneTagsFromUserPrompt = (value: string) => {
-  const prompt = value.normalize('NFKC').toLocaleLowerCase();
-  const matches: string[] = [];
-  if (/简洁|短一些|简短|concise|shorter|짧게|간결/.test(prompt)) {
-    matches.push('concise');
-  }
-  if (/直接|直说|direct|straight|직접/.test(prompt)) matches.push('direct');
-  if (/温和|柔和|gentle|soft|부드럽/.test(prompt)) matches.push('gentle');
-  if (/犀利|尖锐|sharp|incisive|날카롭/.test(prompt)) matches.push('sharp');
-  return matches.slice(0, 3);
 };
 
 const COMMUNICATION_TAG_ALIASES: Record<string, string> = {
@@ -100,22 +98,20 @@ export const loadLocalSettings = (userId: string | null = null): LocalSettings =
       language: isLanguage(device.language) ? device.language : 'zh',
       aboutMe:
         typeof parsed.aboutMe === 'string' ? parsed.aboutMe.slice(0, 2_000) : '',
-      aiToneTags: Array.isArray(parsed.aiToneTags)
-        ? parsed.aiToneTags
-            .filter((item): item is string => typeof item === 'string')
-            .map((item) => AI_TONE_TAG_ALIASES[item] ?? item)
-            .slice(0, 20)
-        : [],
       aiUserPrompt:
         typeof parsed.aiUserPrompt === 'string'
-          ? parsed.aiUserPrompt.trim().slice(0, 240)
+          ? parsed.aiUserPrompt.trim().slice(0, 500)
           : '',
+      aiContextMessageCount: normalizeAiContextMessageCount(
+        parsed.aiContextMessageCount,
+      ),
       chatPreferenceTags: Array.isArray(parsed.chatPreferenceTags)
         ? parsed.chatPreferenceTags
             .filter((item): item is string => typeof item === 'string')
             .map((item) => COMMUNICATION_TAG_ALIASES[item] ?? item)
             .slice(0, 20)
         : [],
+      followUpIntervals: normalizeFollowUpCurve(parsed.followUpIntervals),
     };
   } catch {
     return defaults;

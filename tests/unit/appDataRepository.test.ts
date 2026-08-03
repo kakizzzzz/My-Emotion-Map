@@ -241,10 +241,17 @@ describe('app data repository', () => {
       place: 'Dongguk University', matchReason: 'my_life_memory:research',
       source: 'my_life_memory_external',
     }];
+    snapshot.conversations[0].messages[0].mcpCalls = [{
+      server: 'my_life_memory',
+      toolName: 'research_memory_context',
+      status: 'completed',
+    }];
     const migrated = migrateOk(snapshot).snapshot;
     expect(migrated.schemaVersion).toBe(6);
     expect(migrated.conversations[0].messages[0].externalEvidence)
       .toEqual([expect.objectContaining({ referenceId: 'mlm-note-1' })]);
+    expect(migrated.conversations[0].messages[0].mcpCalls)
+      .toEqual([expect.objectContaining({ status: 'completed' })]);
     expect(migrated.notes).toHaveLength(1);
   });
 

@@ -228,16 +228,30 @@ export function useLocalDataController({
 
   const deleteMoment = useCallback(
     (momentId: string) => {
-      if (!window.confirm(copy.feedback.deleteStarConfirm)) return;
-      const previous = snapshot;
-      applySnapshot(removeMomentAssociations(previous, momentId));
-      showToast(copy.feedback.starDeleted, {
-        durationMs: 6_000,
-        actionLabel: copy.common.undo,
-        onAction: () => applySnapshot(previous),
-      });
+      const next = removeMomentAssociations(snapshot, momentId);
+      if (next === snapshot) return;
+      if (persistenceEnabled) {
+        const digest = canonicalSnapshotDigest(next);
+        if (saveAppData(next, userId)) {
+          savedDigestRef.current = digest;
+        } else if (!hasReportedStorageFailureRef.current) {
+          hasReportedStorageFailureRef.current = true;
+          showToast(copy.feedback.storageWriteFailed, {
+            placement: 'top',
+            durationMs: 5_000,
+          });
+        }
+      }
+      applySnapshot(next);
     },
-    [applySnapshot, copy, showToast, snapshot],
+    [
+      applySnapshot,
+      copy.feedback.storageWriteFailed,
+      persistenceEnabled,
+      showToast,
+      snapshot,
+      userId,
+    ],
   );
 
   const exportData = useCallback((range: DataExportRange) => {

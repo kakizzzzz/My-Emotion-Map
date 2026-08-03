@@ -81,12 +81,22 @@ describe('canonical chat delivery', () => {
         place: 'Dongguk University', matchReason: 'my_life_memory:research',
         source: 'my_life_memory_external',
       }],
+      mcpCalls: [{
+        server: 'my_life_memory',
+        toolName: 'research_memory_context',
+        status: 'completed',
+      }],
       clarificationOptions: [], createdAt: '2026-08-02T12:00:01.000Z',
     });
     expect(completed[0].messages[1]).toMatchObject({
       noteIds: [],
       externalEvidence: [{
         referenceId: 'mlm-note-1', source: 'my_life_memory_external',
+      }],
+      mcpCalls: [{
+        server: 'my_life_memory',
+        toolName: 'research_memory_context',
+        status: 'completed',
       }],
     });
   });

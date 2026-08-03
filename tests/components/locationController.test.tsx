@@ -67,4 +67,22 @@ describe('location controller lifecycle', () => {
     act(() => document.dispatchEvent(new Event('visibilitychange')));
     await waitFor(() => expect(watchPosition).toHaveBeenCalledTimes(2));
   });
+
+  it('does not reopen the entry prompt after the user dismisses it', async () => {
+    const { result, rerender } = renderHook(
+      ({ isEnabled }) => useLocationController({
+        isMapActive: true,
+        isEnabled,
+      }),
+      { initialProps: { isEnabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.isPermissionPromptOpen).toBe(true));
+    act(() => result.current.closePermissionPrompt());
+    await waitFor(() => expect(result.current.isPermissionPromptOpen).toBe(false));
+
+    rerender({ isEnabled: false });
+    rerender({ isEnabled: true });
+    await waitFor(() => expect(result.current.isPermissionPromptOpen).toBe(false));
+  });
 });

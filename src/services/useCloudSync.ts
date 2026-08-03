@@ -94,12 +94,14 @@ export function useCloudSync({
   snapshot,
   applySnapshot,
   blockedByFutureSchema = false,
+  pauseUploads = false,
 }: {
   client: SupabaseClient | null;
   session: Session | null;
   snapshot: AppDataSnapshot;
   applySnapshot: (snapshot: AppDataSnapshot) => void;
   blockedByFutureSchema?: boolean;
+  pauseUploads?: boolean;
 }) {
   const [status, setStatus] = useState<CloudSyncStatus>(client ? 'signed_out' : 'unconfigured');
   const [revision, setRevision] = useState<number | null>(null);
@@ -286,7 +288,6 @@ export function useCloudSync({
         }
         if (!data) {
           setRevision(0);
-          const needsConfirmation = hasUserRecords(snapshot);
           setUploadedSnapshot('');
           const existingMeta = syncMetaRef.current;
           persistMeta(userId, {
@@ -297,7 +298,7 @@ export function useCloudSync({
             dirty: true,
             lastSyncedAt: existingMeta?.lastSyncedAt ?? null,
           });
-          setStatus(needsConfirmation ? 'upload_confirmation_required' : 'synced');
+          setStatus('synced');
           return;
         }
         const remoteResult = safeSnapshot(data.payload);
@@ -390,7 +391,7 @@ export function useCloudSync({
   }, [persistMeta, session?.user.id, snapshot]);
 
   useEffect(() => {
-    if (!client || !session || status !== 'synced' || revision === null || snapshot.dataMode !== 'real') return;
+    if (pauseUploads || !client || !session || status !== 'synced' || revision === null || snapshot.dataMode !== 'real') return;
     const serialized = canonicalSnapshotDigest(snapshot);
     if (serialized === uploadedSnapshot) return;
     if (pendingAppliedHashRef.current && pendingAppliedHashRef.current !== serialized) return;
@@ -471,7 +472,7 @@ export function useCloudSync({
       });
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [client, instanceId, persistMeta, revision, session, snapshot, status, uploadedSnapshot]);
+  }, [client, instanceId, pauseUploads, persistMeta, revision, session, snapshot, status, uploadedSnapshot]);
 
   useEffect(() => {
     if (!client || !session || status !== 'offline' || revision === null || snapshot.dataMode !== 'real') return;
