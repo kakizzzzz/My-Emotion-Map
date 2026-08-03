@@ -1,0 +1,50 @@
+/* Typography parity with My Life Memory */
+
+:root {
+  --em-language-font-scale: 1;
+}
+
+html:lang(zh),
+html:lang(ko) {
+  /* Keep this aligned with LANGUAGE_DISPLAY_SCALE in src/i18n.ts. */
+  --em-language-font-scale: 0.9;
+}
+
+html,
+body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/*
+ * My Life Memory keeps English at the authored sizes, while Chinese and
+ * Korean use a 0.9 optical scale for login and settings copy. Display titles,
+ * 16px inputs, icons, and touch targets intentionally stay unchanged.
+ */
+.login-card > header h2,
+.settings-list strong,
+.copied-settings-card > header h2,
+.settings-sign-out-button {
+  font-size: calc(18px * var(--em-language-font-scale));
+}
+
+.login-card > p,
+.login-restoring,
+.theme-color-control > button {
+  font-size: calc(15px * var(--em-language-font-scale));
+}
+
+.login-actions button {
+  font-size: calc(16px * var(--em-language-font-scale));
+}
+
+.theme-preset-grid > button strong,
+.settings-submenu > button span,
+.language-card > div button,
+.ai-avatar-preference > span,
+.ai-about-field > span,
+.ai-preference-group > span,
+.ai-preference-group button,
+.location-request-button {
+  font-size: calc(14px * var(--em-language-font-scale));
+}
