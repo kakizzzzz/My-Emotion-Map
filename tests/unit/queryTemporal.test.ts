@@ -8,7 +8,6 @@ import {
 } from '../../src/domain/query/rankRecords';
 import { resolveRetrievalStatus } from '../../src/domain/query/retrievalStatus';
 import { createTemporalFields, migrateLegacyTemporalFields } from '../../src/domain/time/temporal';
-import { createRecord } from '../../src/app/recordFactory';
 import type { EmotionMoment, EmotionNote } from '../../src/types';
 import {
   normalized as normalizeEdgeQuery,
@@ -96,31 +95,6 @@ describe('v4 query and temporal contracts', () => {
       localDate: '2026-08-02',
       localTime: '09:15',
       utcOffsetMinutes: 540,
-    });
-  });
-
-  it('uses the original heart sample instant without changing its wall fields', () => {
-    const { moment, note } = createRecord({
-      longitude: 126.99,
-      latitude: 37.56,
-      place: '东国大学',
-      language: 'zh',
-      source: 'inbox',
-      date: '2026-08-02',
-      time: '18:42',
-      eventTimeSource: 'health-sample',
-      eventTimestamp: '2026-08-02T18:42:00+09:00',
-    });
-    expect(moment).toMatchObject({
-      occurredAtUtc: '2026-08-02T09:42:00.000Z',
-      date: '2026-08-02',
-      time: '18:42',
-      utcOffsetMinutes: 540,
-    });
-    expect(note).toMatchObject({
-      occurredAtUtc: '2026-08-02T09:42:00.000Z',
-      localDate: '2026-08-02',
-      localTime: '18:42',
     });
   });
 

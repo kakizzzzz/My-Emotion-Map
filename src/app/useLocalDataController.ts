@@ -17,7 +17,6 @@ import type {
   FollowUpRecord,
   MapViewport,
   RevisitRecord,
-  StarInboxItem,
   ThemePalette,
   ThemeTone,
 } from '../types';
@@ -47,7 +46,6 @@ type LocalDataControllerOptions = {
   conversations: Conversation[];
   followUps: FollowUpRecord[];
   revisits: RevisitRecord[];
-  starInboxItems: StarInboxItem[];
   dataMode: DataMode;
   themeTone: ThemeTone;
   themePalette: ThemePalette;
@@ -59,7 +57,6 @@ type LocalDataControllerOptions = {
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
   setFollowUps: Dispatch<SetStateAction<FollowUpRecord[]>>;
   setRevisits: Dispatch<SetStateAction<RevisitRecord[]>>;
-  setStarInboxItems: Dispatch<SetStateAction<StarInboxItem[]>>;
   setDataMode: Dispatch<SetStateAction<DataMode>>;
   setThemeTone: Dispatch<SetStateAction<ThemeTone>>;
   setThemePalette: Dispatch<SetStateAction<ThemePalette>>;
@@ -82,7 +79,6 @@ export function useLocalDataController({
   conversations,
   followUps,
   revisits,
-  starInboxItems,
   dataMode,
   themeTone,
   themePalette,
@@ -94,7 +90,6 @@ export function useLocalDataController({
   setConversations,
   setFollowUps,
   setRevisits,
-  setStarInboxItems,
   setDataMode,
   setThemeTone,
   setThemePalette,
@@ -118,7 +113,6 @@ export function useLocalDataController({
       conversations,
       followUps,
       revisits,
-      starInboxItems,
       themeTone,
       themePalette,
       lastViewport,
@@ -136,7 +130,6 @@ export function useLocalDataController({
       moments,
       notes,
       revisits,
-      starInboxItems,
       themePalette,
       themeTone,
       lastViewport,
@@ -197,7 +190,6 @@ export function useLocalDataController({
       setConversations(next.conversations);
       setFollowUps(promoteNextDueFollowUp(next.followUps));
       setRevisits(next.revisits);
-      setStarInboxItems(next.starInboxItems);
       setThemeTone(next.themeTone);
       setThemePalette(next.themePalette);
       setLastViewport(next.lastViewport);
@@ -226,7 +218,6 @@ export function useLocalDataController({
       setNotes,
       setRevisitNoteId,
       setRevisits,
-      setStarInboxItems,
       setThemePalette,
       setThemeTone,
       setLastViewport,

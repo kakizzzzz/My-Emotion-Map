@@ -7,7 +7,6 @@ import type {
   DataMode,
   EmotionKey,
   EmotionNote,
-  HealthPreferences,
 } from '../types';
 import type { UserLocation } from '../useLocationController';
 import type { McpProposal } from '../features/settings/settingsTypes';
@@ -19,7 +18,6 @@ import {
   markProposalLocallyApplied,
   stageProposalApplication,
 } from './proposalApplication';
-import { createShortcutAccessHandlers } from './shortcutAccess';
 import { createMyLifeMemoryConnectionHandlers } from './myLifeMemoryConnection';
 
 const EMOTIONS = new Set<EmotionKey>([
@@ -51,7 +49,6 @@ export const createExternalAccessHandlers = ({
   client,
   userId,
   dataMode,
-  healthPreferences,
   userLocation,
   language,
   snapshot,
@@ -63,7 +60,6 @@ export const createExternalAccessHandlers = ({
   client: SupabaseClient | null;
   userId: string | null;
   dataMode: DataMode;
-  healthPreferences: HealthPreferences;
   userLocation: UserLocation | null;
   language: AppLanguage;
   snapshot: AppDataSnapshot;
@@ -74,12 +70,6 @@ export const createExternalAccessHandlers = ({
 }) => {
   const available = Boolean(client && userId && dataMode === 'real');
   const appliedThisSession = new Set<string>();
-  const shortcutAccess = createShortcutAccessHandlers({
-    client,
-    userId,
-    available,
-    preferences: healthPreferences,
-  });
   const myLifeMemoryConnection = createMyLifeMemoryConnectionHandlers({
     client,
     available,
@@ -342,7 +332,6 @@ export const createExternalAccessHandlers = ({
     revokeAllMcpTokens,
     getMcpOutputStatus,
     ...myLifeMemoryConnection,
-    ...shortcutAccess,
     listMcpProposals,
     resolveMcpProposal,
   };

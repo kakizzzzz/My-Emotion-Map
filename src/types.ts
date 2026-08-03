@@ -1,4 +1,4 @@
-export type AppView = 'map' | 'calendar' | 'chat' | 'inbox' | 'settings';
+export type AppView = 'map' | 'calendar' | 'chat' | 'settings';
 
 export type EmotionKey =
   | 'calm'
@@ -30,7 +30,6 @@ export type EventTimeSource =
   | 'user'
   | 'device-created'
   | 'photo-exif'
-  | 'health-sample'
   | 'legacy';
 
 export type TimePrecision = 'minute' | 'date' | 'unknown';
@@ -60,9 +59,7 @@ export type EmotionMoment = Partial<TemporalFields> & {
   tagGroupId?: number;
   tagOrder?: number;
   isNew?: boolean;
-  isInboxDraft?: boolean;
-  heartRate?: number;
-  source?: 'manual' | 'current-location' | 'photo' | 'inbox';
+  source?: 'manual' | 'current-location' | 'photo';
   photoTakenAt?: string;
   photoTakenAtKind?: 'local' | 'offset';
   photoTakenAtSource?: 'DateTimeOriginal' | 'CreateDate';
@@ -213,66 +210,6 @@ export type RevisitRecord = {
   sourceFollowUpId?: string;
 };
 
-export type StarInboxStatus =
-  | 'pending'
-  | 'draft_created'
-  | 'completed'
-  | 'dismissed';
-
-export type StarInboxItem = {
-  id: string;
-  source: 'heart-rate';
-  sourceEventId: string;
-  eventAt: string;
-  receivedAt: string;
-  heartRate: number;
-  latitude?: number;
-  longitude?: number;
-  locationCapturedAt?: string;
-  locationAccuracyMeters?: number;
-  locationTimeRelation?: 'event' | 'confirmation' | 'manual';
-  verification?: 'verified' | 'unverified' | 'test';
-  context?: 'resting' | 'workout' | 'unknown';
-  samples?: Array<{ bpm: number; at: string }>;
-  lowSignalConfidence?: boolean;
-  decisionReason?:
-    | 'outside_range'
-    | 'outside_range_single_sample'
-    | 'post_workout_review'
-    | 'unknown_strict_review'
-    | 'pending_test'
-    | 'outside_resting_range'
-    | 'low_signal_review'
-    | 'non_resting_review'
-    | 'test_event'
-    | 'legacy_review';
-  thresholdSnapshot?: {
-    restingMin: number;
-    restingMax: number;
-    singleSampleEnabled?: boolean;
-    workoutPolicy?: 'suppress' | 'post_workout_review';
-    unknownPolicy?: 'suppress' | 'strict_review';
-    cooldownMinutes?: number;
-  };
-  algorithmVersion?: string;
-  signalLevel?: 'standard' | 'low';
-  repeatCount?: number;
-  linkedMomentId?: string;
-  status: StarInboxStatus;
-  seenAt?: string;
-  confirmedAt?: string;
-};
-
-export type HealthPreferences = {
-  restingHeartRateMin: number;
-  restingHeartRateMax: number;
-  rangeConfirmed: boolean;
-  singleSampleEnabled: boolean;
-  workoutPolicy: 'suppress' | 'post_workout_review';
-  unknownPolicy: 'suppress' | 'strict_review';
-  cooldownMinutes: number;
-};
-
 export type ThemeTone = 'original' | 'terracotta' | 'blue' | 'mauve';
 
 export type ThemePalette = {
@@ -309,7 +246,6 @@ export type AppDataSnapshot = {
   conversations: Conversation[];
   followUps: FollowUpRecord[];
   revisits: RevisitRecord[];
-  starInboxItems: StarInboxItem[];
   themeTone: ThemeTone;
   themePalette: ThemePalette;
   lastConversationId?: string;

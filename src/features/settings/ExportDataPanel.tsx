@@ -3,15 +3,31 @@ import { Download } from 'lucide-react';
 import { useAppLanguage } from '../../i18n';
 import type { DataExportRange, ReadableExportResult } from '../../app/exportReadableData';
 
+const dateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const defaultDates = () => {
+  const today = new Date();
+  return {
+    start: dateKey(new Date(today.getFullYear(), today.getMonth(), 1)),
+    end: dateKey(today),
+  };
+};
+
 export function ExportDataPanel({
   onExportData,
 }: {
   onExportData: (range: DataExportRange) => ReadableExportResult;
 }) {
   const { copy } = useAppLanguage();
+  const defaults = useState(defaultDates)[0];
   const [mode, setMode] = useState<DataExportRange['mode']>('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(defaults.start);
+  const [endDate, setEndDate] = useState(defaults.end);
   const [result, setResult] = useState<ReadableExportResult | null>(null);
   const rangeInvalid =
     mode === 'range' && (!startDate || !endDate || startDate > endDate);
@@ -51,17 +67,26 @@ export function ExportDataPanel({
         <div className="export-date-fields">
           <label>
             <span>{copy.settings.exportStartDate}</span>
-            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(event) => setStartDate(event.target.value)}
+            />
           </label>
           <label>
             <span>{copy.settings.exportEndDate}</span>
-            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
           </label>
         </div>
       ) : null}
       {rangeInvalid ? <small className="export-validation">{copy.settings.exportRangeInvalid}</small> : null}
       <button className="export-submit" onClick={exportRecords} disabled={rangeInvalid}>
-        <Download size={18} strokeWidth={2.2} />
         {copy.settings.exportReport}
       </button>
       {result ? (

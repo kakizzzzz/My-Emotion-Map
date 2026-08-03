@@ -8,7 +8,6 @@ const SUPABASE_AUTH_STORAGE_KEY = 'sb-uifgpmmlvmfrauzbbrem-auth-token';
 async function seedAuthenticatedSession(
   page: Page,
   includeBlankData: boolean,
-  showOnboarding = false,
   legacyProfileName: string | null = null,
 ) {
   await page.route(
@@ -22,7 +21,7 @@ async function seedAuthenticatedSession(
       });
     },
   );
-  await page.addInitScript(({ storageKey, authStorageKey, blank, userId, firstRun, profileName }) => {
+  await page.addInitScript(({ storageKey, authStorageKey, blank, userId, profileName }) => {
     if (window.sessionStorage.getItem('e2e-storage-initialized')) return;
     window.localStorage.clear();
     window.localStorage.setItem(authStorageKey, JSON.stringify({
@@ -50,14 +49,7 @@ async function seedAuthenticatedSession(
         conversations: [],
         followUps: [],
         revisits: [],
-        starInboxItems: [],
       }));
-    }
-    if (!firstRun) {
-      window.localStorage.setItem(
-        `my-emotion-map.user.${userId}.onboardingSeenVersion`,
-        '1',
-      );
     }
     if (profileName) {
       window.localStorage.setItem(
@@ -71,7 +63,6 @@ async function seedAuthenticatedSession(
     authStorageKey: SUPABASE_AUTH_STORAGE_KEY,
     blank: includeBlankData,
     userId: TEST_USER_ID,
-    firstRun: showOnboarding,
     profileName: legacyProfileName,
   });
 }
@@ -80,6 +71,9 @@ async function startBlank(page: Page) {
   await seedAuthenticatedSession(page, true);
   await page.goto('/');
   await expect(page.locator('.map-screen')).toBeVisible();
+  const locationPrompt = page.getByRole('dialog', { name: '使用定位？' });
+  await expect(locationPrompt).toBeVisible();
+  await locationPrompt.getByRole('button', { name: '暂不' }).click();
 }
 
 async function expandMapTools(page: Page) {
@@ -118,7 +112,8 @@ async function dragNewStarToMap(page: Page) {
       button: 0, clientX: x, clientY: y,
     }));
   }, { x: 180, y: 360 });
-  await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
+  await expect(page.locator('.map-star-button')).toHaveCount(1);
 }
 
 async function completeEditor(page: Page, title: string) {
@@ -174,12 +169,12 @@ test('login has no Demo bypass and opens no workspace without an account', async
   expect(await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY)).toBeNull();
 });
 
-test('first real workspace uses the shared onboarding without creating records', async ({ page }) => {
-  await seedAuthenticatedSession(page, true, true);
+test('first real workspace asks for location immediately without creating records', async ({ page }) => {
+  await seedAuthenticatedSession(page, true);
   await page.goto('/');
-  const onboarding = page.getByRole('dialog', { name: '留下一颗星星' });
-  await expect(onboarding).toBeVisible();
-  await page.getByRole('button', { name: '跳过' }).click();
+  const locationPrompt = page.getByRole('dialog', { name: '使用定位？' });
+  await expect(locationPrompt).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '留下一颗星星' })).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(0);
   const snapshot = await page.evaluate((key) =>
     JSON.parse(window.localStorage.getItem(key) ?? '{}'), STORAGE_KEY,
@@ -191,8 +186,10 @@ test('first real workspace uses the shared onboarding without creating records',
 test('authenticated identity opens an empty real workspace', async ({
   page,
 }) => {
-  await seedAuthenticatedSession(page, false, false, 'e2e_student');
+  await seedAuthenticatedSession(page, false, 'e2e_student');
   await page.goto('/');
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
 
   await expect(page.locator('.demo-mode-badge')).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(0);
@@ -217,42 +214,6 @@ test('authenticated identity opens an empty real workspace', async ({
   );
 });
 
-test('Shortcut setup stays vertical and cannot fake a test before pairing', async ({
-  page,
-}) => {
-  await startBlank(page);
-  await page.getByRole('button', { name: '打开页面导航' }).click();
-  await page.getByRole('dialog', { name: '页面导航' })
-    .getByRole('button', { name: '设置' })
-    .click();
-  await page.getByRole('button', { name: 'AI设置' }).click();
-
-  const assistantCardBox = await page.locator('.ai-settings-panel > .connection-card')
-    .first().boundingBox();
-  const aiLinksBox = await page.locator('.ai-settings-links').boundingBox();
-  expect(aiLinksBox?.width).toBeCloseTo(assistantCardBox!.width, 0);
-  expect(await page.locator('.ai-style-options').evaluate(
-    (element) => getComputedStyle(element).justifyContent,
-  )).toBe('center');
-
-  await page.getByRole('button', { name: 'Apple健康自动化' }).click();
-
-  await expect(page.getByText('未安装')).toBeVisible();
-  await expect(page.getByText('暂不可用：还没有经过真机验证的一键安装链接。')).toBeVisible();
-  await expect(page.getByRole('button', { name: '生成配对码' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '测试输入' })).toBeDisabled();
-  await page.getByText('高级复核规则').click();
-  const policyButtons = [
-    page.getByRole('button', { name: '允许单次样本复核' }),
-    page.getByRole('button', { name: '允许运动后复核' }),
-    page.getByRole('button', { name: '严格复核未知情境' }),
-  ];
-  const boxes = await Promise.all(policyButtons.map((button) => button.boundingBox()));
-  expect(boxes.every(Boolean)).toBe(true);
-  expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + boxes[0]!.height - 1);
-  expect(boxes[2]!.y).toBeGreaterThan(boxes[1]!.y + boxes[1]!.height - 1);
-});
-
 test('blank new user, keyboard sheets, and accessibility smoke', async ({
   page,
 }) => {
@@ -272,13 +233,9 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
 
   await menu.click();
   const navigation = page.getByRole('dialog', { name: '页面导航' });
-  const chatDisclosure = navigation.getByRole('button', {
-    name: '展开交流回访历史',
-  });
-  await chatDisclosure.click();
-  await expect(navigation.getByRole('button', {
-    name: '收起交流回访历史',
-  })).toHaveAttribute('aria-expanded', 'true');
+  const chatRow = navigation.getByRole('button', { name: '交流回访', exact: true });
+  await chatRow.click();
+  await expect(chatRow).toHaveAttribute('aria-expanded', 'true');
   await expect(navigation.locator('#side-chat-history')).toBeVisible();
   await navigation.getByRole('button', { name: '新建对话' }).click();
   await expect(page.locator('.chat-screen')).toBeVisible();
@@ -335,6 +292,8 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
   test.setTimeout(75_000);
   await startBlank(page);
   await dragNewStarToMap(page);
+  await page.locator('.map-star-button').click();
+  await page.getByRole('button', { name: '记录这颗星星' }).click();
   await completeEditor(page, 'E2E 安静角落');
 
   await expect(page.locator('.map-star-button')).toHaveCount(1);
@@ -390,6 +349,8 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
     return data.moments[0];
   }, STORAGE_KEY);
   await page.reload();
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
   await expect(page.locator('.map-star-button')).toHaveCount(1);
   await expect.poll(async () =>
     page.evaluate((storageKey) => {
@@ -433,13 +394,12 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
     window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
   }, STORAGE_KEY);
   await page.reload();
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
 
   await page.getByRole('button', { name: '打开页面导航' }).click();
   const navigation = page.getByRole('dialog', { name: '页面导航' });
-  const chatDisclosure = navigation.getByRole('button', {
-    name: '展开交流回访历史',
-  });
-  await chatDisclosure.click();
+  await navigation.getByRole('button', { name: '交流回访', exact: true }).click();
   await expect(navigation.locator('#side-chat-history')).toBeVisible();
   await navigation
     .locator('.side-ai-list')
@@ -466,6 +426,8 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
     .click();
 
   await page.reload();
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
   await page.locator('.map-star-button').click();
   await page.getByRole('button', { name: '查看星星记录' }).click();
   await page.getByRole('button', { name: '回访记录' }).click();
@@ -491,7 +453,9 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await startBlank(page);
   await page.getByRole('button', { name: '打开页面导航' }).click();
-  await page.getByRole('button', { name: '交流回访', exact: true }).click();
+  const navigation = page.getByRole('dialog', { name: '页面导航' });
+  await navigation.getByRole('button', { name: '交流回访', exact: true }).click();
+  await navigation.getByRole('button', { name: '新建对话' }).click();
   const composer = page.locator('.chat-composer');
   const textareaBox = await composer.getByRole('textbox').boundingBox();
   const sendBox = await composer.getByRole('button', { name: '发送' }).boundingBox();
@@ -502,15 +466,21 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: '页面导航' })).toHaveCount(0);
   await dragNewStarToMap(page);
+  await page.locator('.map-star-button').click();
+  await page.getByRole('button', { name: '记录这颗星星' }).click();
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toBeVisible();
   await page
     .getByRole('textbox', { name: '给这一刻起个名字' })
     .fill('中途退出也保留');
+  await page.getByRole('button', { name: '平静' }).click();
   await page.getByRole('button', { name: '关闭' }).click();
   await expect(page.getByRole('alertdialog')).toBeVisible();
-  await page.getByRole('button', { name: '保留草稿' }).click();
+  await page.getByRole('button', { name: '保存' }).click();
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(1);
+  await expect(page.locator('.map-star-button .emotion-star__expression')).toHaveCount(1);
+  await expect(page.locator('.map-star-button .star-marker-glyph stop').first())
+    .toHaveAttribute('stop-color', '#7F9E91');
   await expect.poll(() => page.evaluate((storageKey) => {
     const raw = window.localStorage.getItem(storageKey);
     const data = raw ? JSON.parse(raw) : null;
@@ -522,16 +492,127 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   }, STORAGE_KEY);
   expect(stored.notes[0]).toMatchObject({
     title: '中途退出也保留',
-    emotion: null,
+    emotion: 'calm',
     placeRating: null,
-    isDraft: true,
+    isDraft: false,
   });
-  expect(stored.moments[0]).toMatchObject({ isNew: true });
+  expect(stored.moments[0]).toMatchObject({ emotion: 'calm', isNew: false });
 
   const animationDuration = await page.locator('.map-screen').evaluate(
     (element) => getComputedStyle(element).animationDuration,
   );
   expect(['0s', '0.01ms', '1e-05s', '0.00001s']).toContain(animationDuration);
+});
+
+test('regular conversation rows reveal a real delete action on left swipe', async ({ page }) => {
+  await startBlank(page);
+  await page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    snapshot.conversations = [{
+      id: 'conversation-delete',
+      title: '可删除对话',
+      preview: '左滑删除',
+      kind: 'regular',
+      messages: [],
+    }];
+    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+  }, STORAGE_KEY);
+  await page.reload();
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  const navigation = page.getByRole('dialog', { name: '页面导航' });
+  await navigation.getByRole('button', { name: '交流回访', exact: true }).click();
+  await expect(navigation.locator('#side-chat-history')).toHaveCSS('opacity', '1');
+  const row = navigation.locator('.side-ai-thread', { hasText: '可删除对话' });
+  await expect(row).toBeVisible();
+  const box = await row.boundingBox();
+  if (!box) throw new Error('Conversation row is not visible');
+  await page.mouse.move(box.x + box.width - 12, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 20, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await navigation.getByRole('button', { name: '删除 可删除对话' }).click();
+  await expect(row).toHaveCount(0);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.conversations?.length ?? -1;
+  }, STORAGE_KEY)).toBe(0);
+});
+
+test('an emotionless star changes color immediately', async ({ page }) => {
+  await startBlank(page);
+  await dragNewStarToMap(page);
+  await page.locator('.map-star-button').click();
+  await page.getByRole('button', { name: '选择心情颜色' }).click();
+  await page.getByRole('button', { name: '使用颜色 #D2936D' }).click();
+  await expect(page.locator('.map-star-button .star-marker-glyph stop').first())
+    .toHaveAttribute('stop-color', '#D2936D');
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return [snapshot.moments?.[0]?.color, snapshot.notes?.[0]?.color];
+  }, STORAGE_KEY)).toEqual(['#D2936D', '#D2936D']);
+  const stored = await page.evaluate((storageKey) => (
+    JSON.parse(window.localStorage.getItem(storageKey) ?? '{}')
+  ), STORAGE_KEY);
+  expect(stored.moments[0]).toMatchObject({
+    emotion: null,
+    color: '#D2936D',
+  });
+  expect(stored.notes[0]).toMatchObject({
+    emotion: null,
+    color: '#D2936D',
+  });
+});
+
+test('touching stars in connection mode assigns visible order numbers', async ({ page }) => {
+  await startBlank(page);
+  await page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    snapshot.moments = [
+      { id: 'moment-tag-1', noteId: 'note-tag-1', emotion: null, intensity: 0,
+        place: 'A', date: '2026-08-03', time: '10:00', longitude: 126.998,
+        latitude: 37.558, placeRating: null, isNew: true, source: 'manual' },
+      { id: 'moment-tag-2', noteId: 'note-tag-2', emotion: null, intensity: 0,
+        place: 'B', date: '2026-08-03', time: '10:01', longitude: 127.002,
+        latitude: 37.56, placeRating: null, isNew: true, source: 'manual' },
+    ];
+    snapshot.notes = snapshot.moments.map((moment: { id: string; noteId: string; place: string; date: string; time: string }) => ({
+      id: moment.noteId, title: moment.place, titleSource: 'fallback',
+      place: moment.place, date: moment.date, time: moment.time, emotion: null,
+      placeRating: null, answers: [], excerpt: '', isDraft: true,
+      followUpEnabled: false,
+    }));
+    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+  }, STORAGE_KEY);
+  await page.reload();
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
+  await expect(page.locator('.map-star-button')).toHaveCount(2);
+  await expandMapTools(page);
+  await page.getByRole('button', { name: '标记并连接星星' }).click();
+
+  for (let index = 0; index < 2; index += 1) {
+    await page.locator('.map-star-button').nth(index).evaluate((element, pointerId) => {
+      const box = element.getBoundingClientRect();
+      const init = {
+        pointerId,
+        pointerType: 'touch',
+        isPrimary: true,
+        bubbles: true,
+        clientX: box.x + box.width / 2,
+        clientY: box.y + box.height / 2,
+      };
+      element.dispatchEvent(new PointerEvent('pointerdown', init));
+      element.dispatchEvent(new PointerEvent('pointerup', init));
+    }, index + 1);
+  }
+
+  await expect(page.locator('.emotion-star__order')).toHaveText(['1', '2']);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.moments.map((moment: { tagOrder?: number }) => moment.tagOrder);
+  }, STORAGE_KEY)).toEqual([1, 2]);
 });
 
 test('tablet, landscape, desktop, and 200% zoom layouts stay usable', async ({
@@ -573,9 +654,6 @@ test('tablet, landscape, desktop, and 200% zoom layouts stay usable', async ({
   await startBlank(page);
   await expect(
     page.getByRole('button', { name: '打开页面导航' }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: /打开星星信箱/ }),
   ).toBeVisible();
   await page.waitForTimeout(1_200);
   expect(runtimeErrors).toEqual([]);

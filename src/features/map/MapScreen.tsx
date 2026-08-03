@@ -139,7 +139,7 @@ export function MapScreen({
   } = useMapInteractionController({
     isLocationRequesting: locationRequestState === 'requesting',
     onDropStar: ({ lng, lat }) => {
-      onEditMoment(addMomentAt(lng, lat));
+      addMomentAt(lng, lat);
     },
   });
 
@@ -214,7 +214,7 @@ export function MapScreen({
     };
     const begin = (event: MouseEvent) => {
       const momentId = getMomentId(event.target);
-      if (!momentId || event.button !== 0 || momentPointerPressedRef.current) {
+      if (!momentId || tagMode || event.button !== 0 || momentPointerPressedRef.current) {
         return;
       }
       momentPointerPressedRef.current = true;
@@ -283,7 +283,7 @@ export function MapScreen({
       window.removeEventListener('mousedown', begin, true);
       cleanupDrag?.();
     };
-  }, [mapRef, setMoments]);
+  }, [mapRef, setMoments, tagMode]);
 
   const tagLine = useMemo(() => {
     const groups = new Map<number, EmotionMoment[]>();
@@ -740,6 +740,7 @@ export function MapScreen({
           selectedId={selectedId}
           mapStyle={mapStyle}
           tagLine={tagLine}
+          isTagging={Boolean(tagMode)}
           userLocation={userLocation}
           starDragPreview={starDragPreview}
           onSelectMoment={(momentId) => {

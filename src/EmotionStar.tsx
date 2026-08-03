@@ -146,7 +146,12 @@ export function EmotionStar({
       } as React.CSSProperties}
       aria-hidden="true"
     >
-      <StarMarkerGlyph size={size} color={color} selected={selected} outline={outline || emotion === null} />
+      <StarMarkerGlyph
+        size={size}
+        color={color}
+        selected={selected}
+        outline={outline || (emotion === null && !colorOverride)}
+      />
       {face ? (
         <svg className="emotion-star__expression" viewBox="0 0 24 24" focusable="false">
           <g className="emotion-star__face">

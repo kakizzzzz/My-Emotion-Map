@@ -74,9 +74,6 @@ export function NoteViewSheet({
         <header className="sheet-header">
           <small>
             {moment.date} · {moment.time}
-            {typeof moment.heartRate === 'number'
-              ? ` · ${copy.health.heartRate} ${moment.heartRate} bpm`
-              : ''}
           </small>
           <button
             className="popup-close-button"

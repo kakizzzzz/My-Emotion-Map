@@ -3,7 +3,6 @@ import type {
   EmotionKey,
   EmotionNote,
   RevisitRecord,
-  StarInboxItem,
 } from '../types';
 import { createRecordId } from './createRecordId';
 
@@ -74,30 +73,6 @@ export const setRevisitCurrentEmotion = (
     : record,
 );
 
-export const dismissInboxItem = (
-  items: StarInboxItem[],
-  itemId: string,
-  seenAt = new Date().toISOString(),
-): StarInboxItem[] => items.map((item) =>
-  item.id === itemId
-    ? { ...item, status: 'dismissed', seenAt: item.seenAt ?? seenAt }
-    : item,
-);
-
-export const clearInboxLocation = (item: StarInboxItem): StarInboxItem => {
-  const {
-    linkedMomentId: _linkedMomentId,
-    confirmedAt: _confirmedAt,
-    latitude: _latitude,
-    longitude: _longitude,
-    locationCapturedAt: _locationCapturedAt,
-    locationAccuracyMeters: _locationAccuracyMeters,
-    locationTimeRelation: _locationTimeRelation,
-    ...unlinked
-  } = item;
-  return { ...unlinked, status: 'pending' };
-};
-
 export const removeMomentAssociations = (
   snapshot: AppDataSnapshot,
   momentId: string,
@@ -138,10 +113,5 @@ export const removeMomentAssociations = (
           Boolean(message.followUpId),
         ),
     })),
-    starInboxItems: snapshot.starInboxItems.map((item) =>
-      item.linkedMomentId === moment.id
-        ? clearInboxLocation(item)
-        : item,
-    ),
   };
 };

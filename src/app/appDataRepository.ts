@@ -9,17 +9,12 @@ import type {
   EmotionNote,
   FollowUpRecord,
   PlaceRating,
-  StarInboxItem,
 } from '../types';
 import {
   DEFAULT_THEME,
   isThemePalette,
 } from './themePreferences';
-import {
-  migrateLegacyHiddenDefaults,
-  relinkLegacyInboxDrafts,
-  sanitizeStarInboxItem,
-} from './appDataV3';
+import { migrateLegacyHiddenDefaults } from './appDataV3';
 import { migrateLegacyTemporalFields } from '../domain/time/temporal';
 import { sanitizeExternalEvidence } from './sanitizeExternalEvidence';
 import {
@@ -34,7 +29,6 @@ import {
   clearChatDraftsForWorkspace,
   clearLegacyChatDrafts,
 } from './workspace/chatDraftStorage';
-import { clearInboxLocation } from './recordAssociations';
 import { sanitizeRevisits } from './appDataRevisits';
 
 export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
@@ -198,19 +192,10 @@ const sanitizeMoment = (
         ? Math.round(source.tagOrder)
         : undefined,
     isNew: source.isNew === true ? true : undefined,
-    isInboxDraft: source.isInboxDraft === true ? true : undefined,
-    heartRate:
-      typeof source.heartRate === 'number' &&
-      Number.isFinite(source.heartRate) &&
-      source.heartRate >= 20 &&
-      source.heartRate <= 260
-        ? Math.round(source.heartRate)
-        : undefined,
     source:
       source.source === 'manual' ||
       source.source === 'current-location' ||
-      source.source === 'photo' ||
-      source.source === 'inbox'
+      source.source === 'photo'
         ? source.source
         : undefined,
     photoTakenAt: isValidTimestamp(source.photoTakenAt)
@@ -260,8 +245,7 @@ const sanitizeMoment = (
       eventTimeSource:
         source.eventTimeSource === 'user' ||
         source.eventTimeSource === 'device-created' ||
-        source.eventTimeSource === 'photo-exif' ||
-        source.eventTimeSource === 'health-sample'
+        source.eventTimeSource === 'photo-exif'
           ? source.eventTimeSource
           : 'legacy',
     }),
@@ -355,8 +339,7 @@ const sanitizeNote = (
       eventTimeSource:
         source.eventTimeSource === 'user' ||
         source.eventTimeSource === 'device-created' ||
-        source.eventTimeSource === 'photo-exif' ||
-        source.eventTimeSource === 'health-sample'
+        source.eventTimeSource === 'photo-exif'
           ? source.eventTimeSource
           : 'legacy',
     }),
@@ -578,13 +561,11 @@ export const createEmptyAppData = (): AppDataSnapshot => ({
   conversations: [],
   followUps: [],
   revisits: [],
-  starInboxItems: [],
   themeTone: 'original',
   themePalette: DEFAULT_THEME,
 });
 export {
   appendRevisitRecord,
-  dismissInboxItem,
   removeMomentAssociations,
   setRevisitCurrentEmotion,
   upsertFollowUpRevisit,
@@ -654,7 +635,7 @@ export const migrateAppData = (
     seenNoteIds.add(note.id);
     return true;
   });
-  const noteById = migrateLegacyHiddenDefaults(
+  migrateLegacyHiddenDefaults(
     sourceVersion,
     moments,
     notes,
@@ -729,18 +710,6 @@ export const migrateAppData = (
     noteIds,
     followUpById,
   );
-  const momentIds = new Set(moments.map((moment) => moment.id));
-  const starInboxItems = Array.isArray(source.starInboxItems)
-    ? source.starInboxItems
-        .map((item) => sanitizeStarInboxItem(item, issues))
-        .filter((item): item is StarInboxItem => Boolean(item))
-        .map((item) =>
-          item.linkedMomentId && !momentIds.has(item.linkedMomentId)
-            ? clearInboxLocation(item)
-            : item,
-        )
-    : [];
-  relinkLegacyInboxDrafts(starInboxItems, moments, noteById);
   if (source.dataMode === 'demo' || isLegacyDemoSnapshot(moments, notes)) {
     return { status: 'invalid', issues: ['demo-snapshot-rejected'] };
   }
@@ -782,7 +751,6 @@ export const migrateAppData = (
       })),
       followUps,
       revisits,
-      starInboxItems,
       themeTone,
       themePalette,
       lastConversationId: asString(source.lastConversationId, 200) || undefined,
@@ -913,8 +881,6 @@ export const clearAllLocalData = (userId: string | null, mode: DataMode) => {
     activeKey,
     userId ? legacyUserWorkspaceStorageKey(userId) : null,
     userId ? `my-emotion-map.user-preferences.${userId}.v2` : null,
-    userId ? `my-emotion-map.health-preferences.${userId}.v2` : null,
-    userId ? `my-emotion-map.shortcut-heart-dedupe.${userId}.v2` : null,
   ];
   try {
     keys.forEach((key) => {
@@ -947,7 +913,6 @@ export const canonicalSnapshotDigest = (snapshot: AppDataSnapshot) =>
 export const validateReferentialIntegrity = (snapshot: AppDataSnapshot) => {
   const issues: string[] = [];
   const noteIds = new Set(snapshot.notes.map((note) => note.id));
-  const momentIds = new Set(snapshot.moments.map((moment) => moment.id));
   const followUpIds = new Set(snapshot.followUps.map((record) => record.id));
   const noteOwners = new Map<string, number>();
   snapshot.moments.forEach((moment) => {
@@ -974,13 +939,6 @@ export const validateReferentialIntegrity = (snapshot: AppDataSnapshot) => {
     )
   ) {
     issues.push('message-followup-missing');
-  }
-  if (
-    snapshot.starInboxItems.some(
-      (item) => item.linkedMomentId && !momentIds.has(item.linkedMomentId),
-    )
-  ) {
-    issues.push('inbox-moment-missing');
   }
   if (snapshot.followUps.filter((record) => record.status === 'active').length > 1) {
     issues.push('multiple-active-followups');

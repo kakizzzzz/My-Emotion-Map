@@ -47,7 +47,6 @@ export function SettingsScreen({
   onConfirmInitialUpload,
   onUseRemoteVersion,
   onOverwriteRemote,
-  onTestShortcutPairing,
   onIssueMcpToken,
   onGetMcpOutputStatus,
   onRevokeAllMcpTokens,
@@ -55,11 +54,6 @@ export function SettingsScreen({
   onTestMyLifeMemory,
   onGetMyLifeMemoryStatus,
   onDisconnectMyLifeMemory,
-  healthPreferences,
-  onHealthPreferences,
-  onIssueShortcutPairing,
-  onGetShortcutConnectionStatus,
-  onRevokeShortcutTokens,
   onListMcpProposals,
   onResolveMcpProposal,
   onBack,
@@ -103,9 +97,7 @@ export function SettingsScreen({
           ? copy.settings.ai
           : panel === 'my-life-memory-mcp'
             ? copy.settings.myLifeMemoryMcp
-            : panel === 'health-automation'
-              ? copy.settings.healthAutomation
-              : panel === 'data-account'
+            : panel === 'data-account'
                 ? copy.settings.dataAccount
                 : panel === 'emotion-map-mcp'
                   ? copy.settings.emotionMapMcp
@@ -138,7 +130,7 @@ export function SettingsScreen({
       setPanel('data-account');
       return;
     }
-    if (panel === 'my-life-memory-mcp' || panel === 'health-automation') {
+    if (panel === 'my-life-memory-mcp') {
       setPanel('ai');
       return;
     }
@@ -276,9 +268,7 @@ export function SettingsScreen({
                   onThemeTone={onThemeTone}
                   onThemeColor={onThemeColor}
                 />
-              ) : panel === 'ai' ||
-                panel === 'my-life-memory-mcp' ||
-                panel === 'health-automation' ? (
+              ) : panel === 'ai' || panel === 'my-life-memory-mcp' ? (
                 <AiSettingsPanel
                   mode={panel}
                   styles={aiStyles}
@@ -286,16 +276,10 @@ export function SettingsScreen({
                   onStyles={setAiStyles}
                   onUserPrompt={setAiUserPrompt}
                   onPanel={setPanel}
-                  onTestShortcutPairing={onTestShortcutPairing}
                   onConnectMyLifeMemory={onConnectMyLifeMemory}
                   onTestMyLifeMemory={onTestMyLifeMemory}
                   onGetMyLifeMemoryStatus={onGetMyLifeMemoryStatus}
                   onDisconnectMyLifeMemory={onDisconnectMyLifeMemory}
-                  healthPreferences={healthPreferences}
-                  onHealthPreferences={onHealthPreferences}
-                  onIssueShortcutPairing={onIssueShortcutPairing}
-                  onGetShortcutConnectionStatus={onGetShortcutConnectionStatus}
-                  onRevokeShortcutTokens={onRevokeShortcutTokens}
                 />
               ) : panel === 'data-account' ? (
                 <DataAccountSettingsPanel

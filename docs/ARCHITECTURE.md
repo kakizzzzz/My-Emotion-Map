@@ -43,7 +43,6 @@ src/
   features/
     calendar/                     calendar and date-detail UI
     chat/                         continuous AI conversation
-    inbox/                        external observation inbox and Shortcut ingress
     location/                     location permission prompt
     map/                          map, stars and map tools
     notes/                        note reader/editor/revisit flows
@@ -54,8 +53,8 @@ src/
   useLocationController.ts        browser geolocation lifecycle
 ```
 
-Put domain behavior in a named module (`healthPreferences.ts`,
-`coordinateTransforms.ts`, `notePrompts.ts`, and so on), then import it where
+Put domain behavior in a named module (`coordinateTransforms.ts`,
+`notePrompts.ts`, and so on), then import it where
 it is owned.
 
 ## State ownership

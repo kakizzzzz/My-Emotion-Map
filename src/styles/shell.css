@@ -108,7 +108,6 @@
 .round-back-button,
 .map-tool,
 .icon-button,
-.global-inbox-button,
 .global-menu-button {
   display: inline-grid;
   flex: 0 0 auto;
@@ -129,7 +128,6 @@
 .round-back-button:active,
 .map-tool:active,
 .icon-button:active,
-.global-inbox-button:active,
 .global-menu-button:active {
   transform: scale(0.97);
 }

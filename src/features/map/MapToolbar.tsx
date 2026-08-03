@@ -117,9 +117,7 @@ export function MapToolbar({
               </AnimatePresence>
             </div>
             <button
-              className={`map-tool ${
-                locationRequestState === 'ready' ? 'is-active' : ''
-              }`}
+              className="map-tool"
               onClick={() => onRequestLocation('center')}
               aria-label={copy.map.returnToCurrentLocation}
               aria-busy={locationRequestState === 'requesting'}
