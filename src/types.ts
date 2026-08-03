@@ -135,7 +135,7 @@ export type FollowUpStatus = 'queued' | 'active' | 'answered' | 'skipped';
 export type FollowUpRecord = {
   id: string;
   noteId: string;
-  intervalDays: 1 | 3 | 7;
+  intervalDays: number;
   dueAt: string;
   status: FollowUpStatus;
   followUpConsentedAt?: string;
@@ -165,6 +165,7 @@ export type ChatMessage = {
     | 'followup_reply';
   noteIds?: string[];
   externalEvidence?: ExternalEvidenceReference[];
+  mcpCalls?: McpCallReference[];
   options?: ChatOption[];
   clarificationOptions?: ClarificationOption[];
   requestId?: string;
@@ -186,6 +187,20 @@ export type ExternalEvidenceReference = {
   place: string;
   matchReason: string;
   source: 'my_life_memory_external';
+};
+
+export type McpCallReference = {
+  server: 'my_life_memory';
+  toolName:
+    | 'research_memory_context'
+    | 'search_memories'
+    | 'list_locations'
+    | 'get_location_memory'
+    | 'get_day_memory'
+    | 'summarize_memory_range'
+    | 'get_memory_images'
+    | 'get_routes';
+  status: 'completed' | 'not_found' | 'unavailable';
 };
 
 export type Conversation = {
@@ -225,9 +240,10 @@ export type LocalSettings = {
   profileName: string;
   language: import('./i18n').AppLanguage;
   aboutMe: string;
-  aiToneTags: string[];
   aiUserPrompt: string;
+  aiContextMessageCount: number;
   chatPreferenceTags: string[];
+  followUpIntervals: number[];
 };
 
 export type MapViewport = {

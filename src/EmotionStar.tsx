@@ -133,7 +133,7 @@ export function EmotionStar({
   outline = false,
 }: EmotionStarProps) {
   const definition = emotion ? EMOTIONS[emotion] : null;
-  const color = colorOverride ?? definition?.color ?? '#5C5C5C';
+  const color = colorOverride ?? definition?.color ?? '#EDC727';
   const face = emotion ? facePaths[emotion] : null;
 
   return (
@@ -150,7 +150,7 @@ export function EmotionStar({
         size={size}
         color={color}
         selected={selected}
-        outline={outline || (emotion === null && !colorOverride)}
+        outline={outline}
       />
       {face ? (
         <svg className="emotion-star__expression" viewBox="0 0 24 24" focusable="false">

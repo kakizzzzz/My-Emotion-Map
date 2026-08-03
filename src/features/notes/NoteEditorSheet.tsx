@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { Bell, Check, ChevronLeft, ChevronRight, Mic, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, LoaderCircle, Mic, Plus, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { EMOTION_ORDER } from "../../data";
 import { EmotionStar } from "../../EmotionStar";
@@ -15,7 +15,10 @@ import {
   isPurposePrompt,
   applyAiOptionalQuestions,
 } from '../../domain/notePrompts';
-import { getSpeechRecognitionConstructor } from './speechRecognition';
+import {
+  getSpeechRecognitionConstructor,
+  requestMicrophoneAccess,
+} from './speechRecognition';
 import { createRecordId as createId } from '../../app/createRecordId';
 import type {
   PhotoAssistDelivery,
@@ -30,6 +33,11 @@ import {
   reduceEditorExit,
   type EditorExitAction,
 } from './noteEditorExit';
+import type { CloudAuth } from '../../services/supabaseClient';
+import {
+  requestVoiceSummary,
+  type VoiceSummaryTarget,
+} from '../../services/voiceSummary';
 
 type SaveNoteHandler = (
   momentId: string,
@@ -44,17 +52,17 @@ export function NoteEditorSheet({
   moment,
   note,
   onSave,
-  onDeleteDraft,
   onClose,
   onToast,
+  cloudAuth = null,
   photoAssistDelivery = null,
 }: {
   moment: EmotionMoment;
   note: EmotionNote;
   onSave: SaveNoteHandler;
-  onDeleteDraft: (momentId: string) => void;
   onClose: () => void;
   onToast: ToastHandler;
+  cloudAuth?: CloudAuth | null;
   photoAssistDelivery?: PhotoAssistDelivery | null;
 }) {
   const { copy, language, speechLocale } = useAppLanguage();
@@ -63,7 +71,7 @@ export function NoteEditorSheet({
   const initialTitle = moment.isNew && note.titleSource === 'fallback' ? '' : note.title;
   const [title, setTitle] = useState(initialTitle);
   const [titleSource, setTitleSource] = useState(note.titleSource ?? 'user');
-  const [place, setPlace] = useState(note.place || moment.place);
+  const place = note.place || moment.place;
   const [emotion, setEmotion] = useState<EmotionKey | null>(note.emotion);
   const starColor = note.color ?? moment.color;
   const [placeRating, setPlaceRating] = useState<PlaceRating | null>(note.placeRating);
@@ -75,11 +83,13 @@ export function NoteEditorSheet({
   const [followUp, setFollowUp] = useState(note.followUpEnabled ?? false);
   const [currentStep, setCurrentStep] = useState(0);
   const [highestStep, setHighestStep] = useState(0);
-  const [placeChosen, setPlaceChosen] = useState(true);
   const [promptIndex, setPromptIndex] = useState(0);
   const [questionsComplete, setQuestionsComplete] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
+  const [voicePending, setVoicePending] = useState(false);
+  const [voiceSummarizing, setVoiceSummarizing] = useState(false);
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const voiceSummaryAbortRef = useRef<AbortController | null>(null);
   const titleEditedRef = useRef(false);
   const questionsTouchedRef = useRef(false);
   const appliedPhotoAssistRef = useRef<string | null>(null);
@@ -119,8 +129,6 @@ export function NoteEditorSheet({
     const next = reduceEditorExit(exitState, action);
     dispatchExit(action);
     if (next.outcome === 'save') save();
-    if (next.outcome === 'keep_draft') save();
-    if (next.outcome === 'delete_draft') onDeleteDraft(moment.id);
     if (next.outcome === 'close' || next.outcome === 'discard') onClose();
   };
   const requestClose = () => applyExitAction({
@@ -145,6 +153,8 @@ export function NoteEditorSheet({
     () => () => {
       speechRecognitionRef.current?.abort();
       speechRecognitionRef.current = null;
+      voiceSummaryAbortRef.current?.abort();
+      voiceSummaryAbortRef.current = null;
     },
     [],
   );
@@ -232,7 +242,7 @@ export function NoteEditorSheet({
   const addQuestion = (question: string) => {
     questionsTouchedRef.current = true;
     const nextQuestion = question.trim();
-    if (!nextQuestion || (moment.isNew && prompts.length >= 3)) return;
+    if (!nextQuestion || prompts.length >= 8) return;
     if (
       prompts.some(
         (prompt) => prompt.question.trim().toLowerCase() === nextQuestion.toLowerCase(),
@@ -255,35 +265,40 @@ export function NoteEditorSheet({
     setAddQuestionOpen(false);
   };
 
-  const applyVoiceTranscript = (transcript: string) => {
-    const text = transcript.trim();
-    if (!text) return;
-    if (currentStep === 0) {
+  const applyVoiceText = (
+    text: string,
+    target: VoiceSummaryTarget,
+    promptId: string | null,
+    aiPlaceRating: PlaceRating | null = null,
+  ) => {
+    if (target === 'title') {
       titleEditedRef.current = true;
       setTitleSource('user');
-      setTitle((current) => `${current}${current.trim() ? ' ' : ''}${text}`);
+      setTitle(text);
       return;
     }
-    if (currentStep === 1) {
-      const normalized = text.toLocaleLowerCase();
-      const rating =
-        placeRatings.find(
-          (option) =>
-            normalized.includes(option.label.toLocaleLowerCase()) ||
-            normalized.includes(option.short.toLocaleLowerCase()),
-        )?.key ?? null;
-      if (!rating) {
-        onToast(copy.feedback.feelingOptionNotRecognized);
+    if (target === 'place_rating') {
+      if (aiPlaceRating) {
+        setPlaceRating(aiPlaceRating);
         return;
       }
-      setPlaceRating(rating);
-      setPlaceChosen(true);
+      const normalized = text.toLocaleLowerCase();
+      const rating = placeRatings.find(
+        (option) =>
+          normalized.includes(option.label.toLocaleLowerCase()) ||
+          normalized.includes(option.short.toLocaleLowerCase()),
+      )?.key ?? null;
+      if (rating) {
+        setPlaceRating(rating);
+      } else {
+        onToast(copy.feedback.feelingOptionNotRecognized);
+      }
       return;
     }
-    if (!currentPrompt) return;
+    if (!promptId) return;
     setAnswers((current) =>
       current.map((item) =>
-        item.id === currentPrompt.id
+        item.id === promptId
           ? {
               ...item,
               answer: `${item.answer}${item.answer.trim() ? ' ' : ''}${text}`,
@@ -293,7 +308,45 @@ export function NoteEditorSheet({
     );
   };
 
-  const toggleVoiceInput = () => {
+  const applyVoiceTranscript = async (
+    transcript: string,
+    target: VoiceSummaryTarget,
+    promptId: string | null,
+  ) => {
+    const text = transcript.trim();
+    if (!text) return;
+    if (!cloudAuth) {
+      applyVoiceText(text, target, promptId);
+      onToast(copy.feedback.voiceSummaryFallback);
+      return;
+    }
+    voiceSummaryAbortRef.current?.abort();
+    const controller = new AbortController();
+    voiceSummaryAbortRef.current = controller;
+    setVoiceSummarizing(true);
+    try {
+      const result = await requestVoiceSummary({
+        auth: cloudAuth,
+        transcript: text,
+        language,
+        target,
+        signal: controller.signal,
+      });
+      applyVoiceText(result.summary, target, promptId, result.placeRating);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      applyVoiceText(text, target, promptId);
+      onToast(copy.feedback.voiceSummaryFallback);
+    } finally {
+      if (voiceSummaryAbortRef.current === controller) {
+        voiceSummaryAbortRef.current = null;
+        setVoiceSummarizing(false);
+      }
+    }
+  };
+
+  const toggleVoiceInput = async () => {
+    if (voicePending || voiceSummarizing) return;
     if (voiceActive) {
       speechRecognitionRef.current?.stop();
       return;
@@ -308,7 +361,25 @@ export function NoteEditorSheet({
       return;
     }
 
+    setVoicePending(true);
+    const microphoneAccess = await requestMicrophoneAccess();
+    setVoicePending(false);
+    if (microphoneAccess !== 'granted') {
+      onToast(
+        microphoneAccess === 'denied'
+          ? copy.feedback.microphonePermissionRequired
+          : copy.feedback.voiceUnsupported,
+      );
+      return;
+    }
+
     const recognition = new SpeechRecognition();
+    const target: VoiceSummaryTarget = currentStep === 0
+      ? 'title'
+      : currentStep === 1
+        ? 'place_rating'
+        : 'answer';
+    const promptId = target === 'answer' ? currentPrompt?.id ?? null : null;
     recognition.lang = speechLocale;
     recognition.continuous = false;
     recognition.interimResults = false;
@@ -317,7 +388,7 @@ export function NoteEditorSheet({
         .filter((result) => result.isFinal)
         .map((result) => result[0]?.transcript ?? '')
         .join('');
-      applyVoiceTranscript(transcript);
+      void applyVoiceTranscript(transcript, target, promptId);
     };
     recognition.onerror = (event) => {
       if (event.error !== 'aborted' && event.error !== 'no-speech') {
@@ -446,10 +517,6 @@ export function NoteEditorSheet({
                     }}
                   />
                 </label>
-                <label className="title-input place-name-input">
-                  <span>{copy.note.placeNamePrompt}</span>
-                  <input value={place} onChange={(event) => setPlace(event.target.value)} />
-                </label>
                 <header className="editor-step-heading">
                   <h3>{copy.note.emotionPrompt}</h3>
                 </header>
@@ -474,9 +541,6 @@ export function NoteEditorSheet({
                     </button>
                   ))}
                 </div>
-                <button className="wizard-skip-button" onClick={goToPlaceStep}>
-                  {copy.note.skipEmotion}
-                </button>
               </section>
             </section>
 
@@ -496,7 +560,6 @@ export function NoteEditorSheet({
                       className={placeRating === rating.key ? 'is-selected' : ''}
                       onClick={() => {
                         setPlaceRating(rating.key);
-                        setPlaceChosen(true);
                       }}
                       title={rating.label}
                     >
@@ -505,32 +568,6 @@ export function NoteEditorSheet({
                     </button>
                   ))}
                 </div>
-                <button
-                  className="wizard-skip-button"
-                  onClick={() => {
-                    setPlaceChosen(true);
-                    goToPromptStep();
-                  }}
-                >
-                  {copy.note.skipPlaceRating}
-                </button>
-                <div className="follow-up-choice">
-                    <button
-                      className={`follow-up-toggle ${followUp ? 'is-active' : ''}`}
-                      onClick={() => setFollowUp((current) => !current)}
-                    >
-                      <span>
-                        <Bell size={19} strokeWidth={2.2} />
-                        <strong>{copy.note.followUpConsent}</strong>
-                      </span>
-                      <i>
-                        {followUp ? (
-                          <Check size={15} strokeWidth={2.2} />
-                        ) : null}
-                      </i>
-                    </button>
-                    <p>{copy.note.followUpConsentHint}</p>
-                  </div>
                 <div className="wizard-step-actions">
                   <button
                     className="wizard-arrow-button"
@@ -539,21 +576,22 @@ export function NoteEditorSheet({
                   >
                     <ChevronLeft size={22} strokeWidth={2.2} />
                   </button>
-                  <AnimatePresence>
-                    {placeChosen ? (
-                      <motion.button
-                        className="wizard-arrow-button is-primary"
-                        onClick={goToPromptStep}
-                        aria-label={copy.note.continueToQuestions}
-                        initial={{ opacity: 0, scale: 0.94 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.94 }}
-                        transition={{ duration: 0.14 }}
-                      >
-                        <ChevronRight size={22} strokeWidth={2.2} />
-                      </motion.button>
-                    ) : null}
-                  </AnimatePresence>
+                  <button
+                    className={`follow-up-toggle ${followUp ? 'is-active' : ''}`}
+                    onClick={() => setFollowUp((current) => !current)}
+                  >
+                    <strong>{copy.note.followUpConsent}</strong>
+                    <i>
+                      {followUp ? <Check size={11} strokeWidth={2.5} /> : null}
+                    </i>
+                  </button>
+                  <button
+                    className="wizard-arrow-button is-primary"
+                    onClick={goToPromptStep}
+                    aria-label={copy.note.continueToQuestions}
+                  >
+                    <ChevronRight size={22} strokeWidth={2.2} />
+                  </button>
                 </div>
               </section>
             </section>
@@ -630,16 +668,6 @@ export function NoteEditorSheet({
                             );
                           }}
                         />
-                        <button
-                          type="button"
-                          className="prompt-skip-guide-button"
-                          onClick={() => {
-                            questionsTouchedRef.current = true;
-                            setQuestionsComplete(true);
-                          }}
-                        >
-                          {copy.note.skipGuidedQuestions}
-                        </button>
                         <div className="prompt-step-actions">
                           <button
                             className="prompt-arrow-button"
@@ -652,18 +680,19 @@ export function NoteEditorSheet({
                           >
                             <ChevronLeft size={20} strokeWidth={2.2} />
                           </button>
-                          <div className="prompt-question-actions">
-                            {isLastPrompt && !moment.isNew ? (
-                              <button
-                                className="prompt-add-button"
-                                onClick={() => setAddQuestionOpen(true)}
-                                aria-label={copy.note.addQuestion}
-                                title={copy.note.addQuestion}
-                              >
-                                <Plus size={18} strokeWidth={2.2} />
-                              </button>
-                            ) : null}
-                            {!isPurposePrompt(currentPrompt) ? (
+                          {isPurposePrompt(currentPrompt) ? (
+                            <button
+                              type="button"
+                              className="prompt-skip-guide-button"
+                              onClick={() => {
+                                questionsTouchedRef.current = true;
+                                setQuestionsComplete(true);
+                              }}
+                            >
+                              {copy.note.skipGuidedQuestions}
+                            </button>
+                          ) : (
+                            <div className="prompt-center-actions">
                               <button
                                 className="prompt-delete-button"
                                 onClick={deleteCurrentPrompt}
@@ -672,8 +701,18 @@ export function NoteEditorSheet({
                               >
                                 <Trash2 size={18} strokeWidth={2.2} />
                               </button>
-                            ) : null}
-                          </div>
+                              {isLastPrompt ? (
+                                <button
+                                  className="prompt-add-button"
+                                  onClick={() => setAddQuestionOpen(true)}
+                                  aria-label={copy.note.addQuestion}
+                                  title={copy.note.addQuestion}
+                                >
+                                  <Plus size={18} strokeWidth={2.2} />
+                                </button>
+                              ) : null}
+                            </div>
+                          )}
                           <button
                             className="prompt-arrow-button"
                             onClick={advancePrompt}
@@ -717,14 +756,27 @@ export function NoteEditorSheet({
               </div>
             </div>
             <button
-              className={`voice-input-button ${voiceActive ? 'is-active' : ''}`}
-              onClick={toggleVoiceInput}
+              className={`voice-input-button ${voiceActive ? 'is-active' : ''} ${
+                voicePending || voiceSummarizing ? 'is-processing' : ''
+              }`}
+              onClick={() => void toggleVoiceInput()}
+              disabled={voicePending || voiceSummarizing}
               aria-label={
-                voiceActive ? copy.note.voiceStop : copy.note.voiceStart
+                voiceSummarizing
+                  ? copy.note.voiceSummarizing
+                  : voicePending
+                    ? copy.note.voiceRequestingPermission
+                    : voiceActive
+                      ? copy.note.voiceStop
+                      : copy.note.voiceStart
               }
               aria-pressed={voiceActive}
             >
-              <Mic size={25} strokeWidth={2.2} />
+              {voicePending || voiceSummarizing ? (
+                <LoaderCircle size={25} strokeWidth={2.2} />
+              ) : (
+                <Mic size={25} strokeWidth={2.2} />
+              )}
             </button>
           </footer>
         )}
@@ -828,33 +880,17 @@ export function NoteEditorSheet({
                   : copy.note.exitExistingTitle}
               </h2>
               <div className="note-editor-exit-actions">
-                {exitState.view === 'confirm_new' ? (
-                  <>
-                    <button
-                      className="is-primary"
-                      onClick={() => applyExitAction({ type: 'keep_draft' })}
-                    >
-                      {copy.common.save}
-                    </button>
-                    <button onClick={() => applyExitAction({ type: 'delete_draft' })}>
-                      {copy.note.deleteDraft}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      className="is-primary"
-                      onClick={() => applyExitAction({ type: 'save' })}
-                    >
-                      {copy.note.saveChanges}
-                    </button>
-                    <button onClick={() => applyExitAction({ type: 'discard' })}>
-                      {copy.note.discardChanges}
-                    </button>
-                  </>
-                )}
+                <button
+                  className="is-primary"
+                  onClick={() => applyExitAction({ type: 'save' })}
+                >
+                  {copy.common.save}
+                </button>
+                <button onClick={() => applyExitAction({ type: 'exit' })}>
+                  {copy.note.exitEditor}
+                </button>
                 <button onClick={() => applyExitAction({ type: 'continue_editing' })}>
-                  {copy.note.continueEditing}
+                  {copy.common.back}
                 </button>
               </div>
             </motion.section>

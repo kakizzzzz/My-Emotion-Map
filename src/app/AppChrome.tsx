@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Calendar, ChevronDown, ChevronRight, Map as MapIcon, MessageCircle, PanelLeft, Settings as SettingsIcon, Trash2 } from "lucide-react";
+import { Calendar, ChevronDown, ChevronRight, Inbox, Map as MapIcon, MessageCircle, PanelLeft, Settings as SettingsIcon, Trash2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { MOTION } from "../motion";
 import { useAppLanguage } from "../i18n";
@@ -32,6 +32,32 @@ export function GlobalMenuButton({
   );
 }
 
+export function GlobalInboxButton({
+  unreadCount,
+  onClick,
+}: {
+  unreadCount: number;
+  onClick: () => void;
+}) {
+  const { copy } = useAppLanguage();
+  return (
+    <motion.button
+      className="global-inbox-button"
+      whileTap={{ scale: 0.96 }}
+      transition={MOTION.press}
+      onClick={onClick}
+      aria-label={
+        unreadCount > 0
+          ? copy.inbox.openUnread(unreadCount)
+          : copy.inbox.open
+      }
+    >
+      <Inbox size={24} strokeWidth={2.2} />
+      {unreadCount > 0 ? <span className="global-inbox-button__unread" /> : null}
+    </motion.button>
+  );
+}
+
 function SwipeConversationRow({
   conversation,
   onOpen,
@@ -55,7 +81,7 @@ function SwipeConversationRow({
   const [offset, setOffset] = useState(0);
 
   return (
-    <div className="side-ai-swipe-row">
+    <div className={`side-ai-swipe-row${offset < 0 ? ' is-revealed' : ''}`}>
       <button
         type="button"
         className="side-ai-delete"
@@ -63,7 +89,6 @@ function SwipeConversationRow({
         onClick={onDelete}
       >
         <Trash2 size={18} strokeWidth={2.2} />
-        <span>{copy.common.delete}</span>
       </button>
       <button
         type="button"

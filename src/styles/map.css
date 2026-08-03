@@ -81,7 +81,6 @@
   border-radius: 50%;
   background: black;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  transform: translate(-50%, -50%);
 }
 
 .map-star-button {
@@ -751,4 +750,32 @@
     flex-direction: row;
     gap: 8px;
   }
+}
+.star-navigation-overlay {
+  position: absolute;
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+  visibility: hidden;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+.star-navigation-overlay button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 2px solid var(--em-icon);
+  border-radius: 50%;
+  background: var(--em-active-surface);
+  color: var(--em-text-primary);
+  box-shadow: var(--em-shadow-card);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.star-navigation-overlay button:active {
+  transform: scale(0.95);
 }

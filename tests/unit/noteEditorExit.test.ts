@@ -30,17 +30,17 @@ describe('note editor exit state machine', () => {
     expect(confirming).toEqual({ view: 'confirm_existing', outcome: null });
     expect(reduceEditorExit(confirming, { type: 'continue_editing' }))
       .toEqual(initialEditorExitState);
-    expect(reduceEditorExit(confirming, { type: 'discard' }))
+    expect(reduceEditorExit(confirming, { type: 'exit' }))
       .toEqual({ view: 'closed', outcome: 'discard' });
     expect(reduceEditorExit(confirming, { type: 'save' }))
       .toEqual({ view: 'closed', outcome: 'save' });
   });
 
-  it('keeps or deletes a new record only through explicit choices', () => {
+  it('saves or exits a new record without deleting its star', () => {
     const confirming = { view: 'confirm_new', outcome: null } as const;
-    expect(reduceEditorExit(confirming, { type: 'keep_draft' }))
-      .toEqual({ view: 'closed', outcome: 'keep_draft' });
-    expect(reduceEditorExit(confirming, { type: 'delete_draft' }))
-      .toEqual({ view: 'closed', outcome: 'delete_draft' });
+    expect(reduceEditorExit(confirming, { type: 'save' }))
+      .toEqual({ view: 'closed', outcome: 'save' });
+    expect(reduceEditorExit(confirming, { type: 'exit' }))
+      .toEqual({ view: 'closed', outcome: 'close' });
   });
 });

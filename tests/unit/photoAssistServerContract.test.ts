@@ -16,7 +16,9 @@ describe('photo assist server contract', () => {
     expect(functionSource).toContain('const MAX_IMAGE_BYTES = 700 * 1024');
     expect(functionSource).toContain('const MAX_DIMENSION = 672');
     expect(providerSource).toContain("const PHOTO_MODEL = 'zai-org/GLM-4.5V'");
-    expect(providerSource).toContain('maxTokens = task === \'photo\' ? 220 : 500');
+    expect(providerSource).toContain(
+      "maxTokens = task === 'photo' ? 220 : task === 'plan' ? 180 : 500",
+    );
   });
 
   it('uses one bounded retry inside a single 15 second deadline', () => {

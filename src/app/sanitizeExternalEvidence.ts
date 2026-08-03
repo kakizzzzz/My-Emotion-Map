@@ -28,4 +28,3 @@ export const sanitizeExternalEvidence = (
     }];
   }).slice(0, 6);
 };
-

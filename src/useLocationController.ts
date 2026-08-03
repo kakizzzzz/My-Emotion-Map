@@ -91,6 +91,7 @@ export const useLocationController = ({
   const requestSequenceRef = useRef(0);
   const pendingIntentRef = useRef<LocationRequestIntent>('center');
   const hasRequestedEntryLocationRef = useRef(false);
+  const hasSeenEntryLocationPromptRef = useRef(false);
 
   const stopWatch = useCallback(() => {
     if (
@@ -187,22 +188,33 @@ export const useLocationController = ({
       if (requestState === 'requesting') return;
       pendingIntentRef.current = intent;
       if (hasGrantedLocationAccess) {
+        if (intent === 'place' && userLocation) {
+          requestSequenceRef.current += 1;
+          setResolvedRequest({
+            id: requestSequenceRef.current,
+            intent,
+            location: userLocation,
+          });
+          return;
+        }
         void requestPosition(intent);
         return;
       }
       setRequestState('idle');
       setIsPermissionPromptOpen(true);
     },
-    [hasGrantedLocationAccess, requestPosition, requestState],
+    [hasGrantedLocationAccess, requestPosition, requestState, userLocation],
   );
 
   const confirmLocationRequest = useCallback(() => {
     if (requestState === 'requesting') return;
+    hasSeenEntryLocationPromptRef.current = true;
     void requestPosition(pendingIntentRef.current);
   }, [requestPosition, requestState]);
 
   const closePermissionPrompt = useCallback(() => {
     if (requestState === 'requesting') return;
+    hasSeenEntryLocationPromptRef.current = true;
     setIsPermissionPromptOpen(false);
     setRequestState('idle');
     clearLocationSession();
@@ -216,7 +228,11 @@ export const useLocationController = ({
     if (!isMapActive || hasRequestedEntryLocationRef.current) return;
     hasRequestedEntryLocationRef.current = true;
     pendingIntentRef.current = 'center';
-    if (!hasGrantedLocationAccess && requestState !== 'ready') {
+    if (
+      !hasSeenEntryLocationPromptRef.current &&
+      !hasGrantedLocationAccess &&
+      requestState !== 'ready'
+    ) {
       setRequestState('idle');
       setIsPermissionPromptOpen(true);
     }

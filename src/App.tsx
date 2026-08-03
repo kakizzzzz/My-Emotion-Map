@@ -37,7 +37,7 @@ import { useLocalDataController } from './app/useLocalDataController';
 import {
   FOLLOW_UP_CONVERSATION_ID,
 } from './domain/followUps';
-import { GlobalMenuButton, SideDrawer } from './app/AppChrome';
+import { GlobalInboxButton, GlobalMenuButton, SideDrawer } from './app/AppChrome';
 import { LocationPermissionPrompt } from './features/location/LocationPermissionPrompt';
 import { MapScreen } from './features/map/MapScreen';
 import { NoteEditorSheet } from './features/notes/NoteEditorSheet';
@@ -71,6 +71,11 @@ const SettingsScreen = lazy(() =>
     default: module.SettingsScreen,
   })),
 );
+const StarInboxScreen = lazy(() =>
+  import('./features/inbox/StarInboxScreen').then((module) => ({
+    default: module.StarInboxScreen,
+  })),
+);
 
 export function App() {
   const initialData = useMemo(() => createEmptyAppData(), []);
@@ -78,6 +83,9 @@ export function App() {
   const [activeView, setActiveView] = useState<AppView>('map');
   const [language, setLanguage] = useState<AppLanguage>(
     initialLocalSettings.language,
+  );
+  const [followUpIntervals, setFollowUpIntervals] = useState(
+    initialLocalSettings.followUpIntervals,
   );
   const copy = getAppCopy(language);
   const languageLocale = getLanguageLocale(language);
@@ -99,6 +107,7 @@ export function App() {
   const userLocation = locationController.userLocation;
   const openLocationRequest = locationController.openLocationRequest;
   const [sideOpen, setSideOpen] = useState(false);
+  const [starInboxOpen, setStarInboxOpen] = useState(false);
   const [moments, setMoments] = useState<EmotionMoment[]>(initialData.moments);
   const [notes, setNotes] = useState<EmotionNote[]>(initialData.notes);
   const [conversations, setConversations] = useState<Conversation[]>(
@@ -121,7 +130,6 @@ export function App() {
   );
   const [viewingMomentId, setViewingMomentId] = useState<string | null>(null);
   const [editingMomentId, setEditingMomentId] = useState<string | null>(null);
-  const editingMomentIdRef = useRef<string | null>(null);
   const [revisitNoteId, setRevisitNoteId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [photoAssistByMomentId, setPhotoAssistByMomentId] = useState<
@@ -132,9 +140,6 @@ export function App() {
   const [themePalette, setThemePalette] = useState<ThemePalette>(
     initialData.themePalette,
   );
-  useEffect(() => {
-    editingMomentIdRef.current = editingMomentId;
-  }, [editingMomentId]);
   const [lastViewport, setLastViewport] = useState<MapViewport | undefined>(
     initialData.lastViewport,
   );
@@ -160,6 +165,9 @@ export function App() {
     language,
     navigationCopy: copy.navigation,
   });
+  const unreadStarInboxCount = followUps.filter(
+    (record) => record.status === 'active' && !record.seenAt,
+  ).length;
   const themeStyle = getThemeStyle(themePalette);
   const chatWorkspace = chatWorkspaceKey(
     cloudSession.session?.user.id ?? null,
@@ -256,6 +264,11 @@ export function App() {
     showToast,
     workspaceReady,
   ]);
+  useEffect(() => {
+    setFollowUpIntervals(
+      loadLocalSettings(cloudSession.session?.user.id ?? null).followUpIntervals,
+    );
+  }, [cloudSession.session?.user.id]);
   const cloudSnapshot = useMemo(() => ({
     schemaVersion: initialData.schemaVersion,
     dataMode,
@@ -277,12 +290,16 @@ export function App() {
     initialData.schemaVersion, moments, notes, revisits,
     themePalette, themeTone, lastViewport,
   ]);
+  const chatUploadPaused = conversations.some((conversation) =>
+    conversation.messages.some((message) => message.deliveryState === 'pending'),
+  );
   const cloudSync = useCloudSync({
     client: cloudSession.client,
     session: workspaceReady ? cloudSession.session : null,
     snapshot: cloudSnapshot,
     applySnapshot,
     blockedByFutureSchema: workspaceUpgradeRequired,
+    pauseUploads: chatUploadPaused,
   });
 
   const authenticateCloudAccount = async (
@@ -419,9 +436,41 @@ export function App() {
     }
   };
 
+  const renameConversation = (id: string, title: string) => {
+    const nextTitle = title.trim().slice(0, 60);
+    if (!nextTitle) return;
+    setConversations((current) => {
+      if (current.some((conversation) => conversation.id === id)) {
+        return current.map((conversation) => conversation.id === id
+          ? { ...conversation, title: nextTitle }
+          : conversation);
+      }
+      return [{
+        id,
+        title: nextTitle,
+        preview: '',
+        kind: 'regular',
+        messages: [],
+      }, ...current];
+    });
+  };
+
   const exitConversationToMap = () => {
     setActiveView('map');
     setSideOpen(true);
+  };
+
+  const openStarInbox = () => {
+    const seenAt = new Date().toISOString();
+    setFollowUps((current) =>
+      current.map((record) =>
+        record.status === 'active' && !record.seenAt
+          ? { ...record, seenAt }
+          : record,
+      ),
+    );
+    setStarInboxOpen(true);
+    setSideOpen(false);
   };
 
   const openNoteById = (noteId: string) => {
@@ -431,13 +480,12 @@ export function App() {
 
   const {
     closeNoteEditor,
-    deleteNoteDraft,
     saveNote,
   } = useNoteEditorHandlers({
     language,
     starSavedMessage: copy.feedback.starSaved,
-    moments,
     followUps,
+    followUpIntervals,
     setMoments,
     setNotes,
     setFollowUps,
@@ -526,7 +574,6 @@ export function App() {
             onToast={showToast}
             cloudAuth={cloudSession.cloudAuth}
             onPhotoAssistResult={(momentId, delivery) => {
-              if (editingMomentIdRef.current !== momentId) return;
               setPhotoAssistByMomentId((current) => ({
                 ...current,
                 [momentId]: delivery,
@@ -578,6 +625,7 @@ export function App() {
                 onCompleteChat={chatDelivery.completeChat}
                 onFailChat={chatDelivery.failChat}
                 onNewConversation={startNewConversation}
+                onRenameConversation={renameConversation}
                 onExitToMap={exitConversationToMap}
                 onToast={showToast}
               />
@@ -602,6 +650,8 @@ export function App() {
                     [key]: color,
                   }))
                 }
+                followUpIntervals={followUpIntervals}
+                onFollowUpIntervals={setFollowUpIntervals}
                 onExportData={exportData}
                 locationRequestState={locationController.requestState}
                 onRequestLocation={() =>
@@ -615,7 +665,6 @@ export function App() {
                     ? cloudSession.session.user.user_metadata.account_id
                     : null
                 }
-                cloudStatus={cloudSync.status}
                 onSignOut={async () => {
                   const signingOutUserId = cloudSession.session?.user.id;
                   if (signingOutUserId) clearChatDraftsForUser(signingOutUserId);
@@ -625,9 +674,6 @@ export function App() {
                   await (cloudSession.client?.auth.signOut() ?? Promise.resolve());
                 }}
                 onUpdatePassword={updateCloudPassword}
-                onConfirmInitialUpload={cloudSync.confirmInitialUpload}
-                onUseRemoteVersion={cloudSync.useRemoteVersion}
-                onOverwriteRemote={cloudSync.overwriteRemoteWithLocal}
                 onIssueMcpToken={externalAccess.issueMcpToken}
                 onGetMcpOutputStatus={externalAccess.getMcpOutputStatus}
                 onRevokeAllMcpTokens={externalAccess.revokeAllMcpTokens}
@@ -644,10 +690,44 @@ export function App() {
         </AnimatePresence>
         </Suspense>
 
+        <AnimatePresence>
+          {starInboxOpen ? (
+            <motion.div
+              key="star-inbox"
+              className="screen-layer route-overlay-layer"
+              initial={{ opacity: 0.96, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0.96 }}
+              transition={CONTENT_FADE}
+            >
+              <Suspense fallback={null}>
+                <StarInboxScreen
+                  followUps={followUps}
+                  notes={savedNotes}
+                  onAnswerFollowUp={(followUpId, label, kind) => {
+                    const followUp = followUps.find((record) => record.id === followUpId);
+                    answerFollowUp(followUpId, label, kind, 'inbox');
+                    setStarInboxOpen(false);
+                    if (kind !== 'skip' && followUp) {
+                      window.setTimeout(() => setRevisitNoteId(followUp.noteId), 220);
+                    }
+                  }}
+                  onClose={() => setStarInboxOpen(false)}
+                />
+              </Suspense>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
         {!editingMoment &&
         !sideOpen &&
+        !starInboxOpen &&
         activeView === 'map' ? (
           <>
+            <GlobalInboxButton
+              unreadCount={unreadStarInboxCount}
+              onClick={openStarInbox}
+            />
             <GlobalMenuButton
               hasUnread={conversations.some((conversation) => conversation.unread)}
               onClick={() => setSideOpen(true)}
@@ -704,9 +784,9 @@ export function App() {
               moment={editingMoment}
               note={editingNote}
               onSave={saveNote}
-              onDeleteDraft={deleteNoteDraft}
               onClose={() => closeNoteEditor(editingMoment.id)}
               onToast={showToast}
+              cloudAuth={cloudSession.cloudAuth}
               photoAssistDelivery={photoAssistByMomentId[editingMoment.id] ?? null}
             />
           ) : null}

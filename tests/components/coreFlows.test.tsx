@@ -13,11 +13,13 @@ import { NoteEditorSheet } from '../../src/features/notes/NoteEditorSheet';
 import { SettingsScreen } from '../../src/features/settings/SettingsScreen';
 import { AiSettingsPanel } from '../../src/features/settings/AiSettingsPanel';
 import { EmotionMapMcpPanel } from '../../src/features/settings/EmotionMapMcpPanel';
-import type { EmotionMoment, EmotionNote } from '../../src/types';
+import type { Conversation, EmotionMoment, EmotionNote } from '../../src/types';
 import { renderWithLanguage } from '../renderWithLanguage';
 import { createGuidedAnswers } from '../../src/domain/notePrompts';
 import type { PhotoAssistDelivery } from '../../src/app/appTypes';
 import { SideDrawer } from '../../src/app/AppChrome';
+import { StarInboxScreen } from '../../src/features/inbox/StarInboxScreen';
+import { useChatDeliveryHandlers } from '../../src/app/useChatDeliveryHandlers';
 
 const draftNote: EmotionNote = {
   id: 'note-new',
@@ -68,7 +70,6 @@ const PhotoAssistHarness = () => {
         moment={{ ...draftMoment, source: 'photo' }}
         note={draftNote}
         onSave={() => undefined}
-        onDeleteDraft={() => undefined}
         onClose={() => undefined}
         onToast={() => undefined}
         photoAssistDelivery={delivery}
@@ -77,9 +78,44 @@ const PhotoAssistHarness = () => {
   );
 };
 
+const McpChatHarness = () => {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const { beginChat, completeChat, failChat } = useChatDeliveryHandlers({
+    setConversations,
+    fallbackTitle: '新的对话',
+  });
+  return (
+    <ChatScreen
+      notes={[]}
+      followUps={[]}
+      conversations={conversations}
+      activeConversationId="mcp-thread"
+      workspaceKey="real:user-a"
+      onAnswerFollowUp={vi.fn()}
+      onRevisitEmotion={vi.fn()}
+      cloudAuth={{
+        supabaseUrl: 'https://example.supabase.co',
+        publishableKey: 'public-key',
+        accessToken: 'access-token',
+        userId: 'user-a',
+      }}
+      cloudRevision={7}
+      cloudStatus="synced"
+      onBeginChat={beginChat}
+      onCompleteChat={completeChat}
+      onFailChat={failChat}
+      onNewConversation={vi.fn()}
+      onExitToMap={vi.fn()}
+      onToast={vi.fn()}
+    />
+  );
+};
+
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  window.sessionStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 describe('core component flows', () => {
@@ -91,7 +127,6 @@ describe('core component flows', () => {
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
-        onDeleteDraft={() => undefined}
         onClose={() => undefined}
         onToast={() => undefined}
       />,
@@ -112,7 +147,7 @@ describe('core component flows', () => {
       screen.getByRole('button', { name: '继续到引导问题' }),
     );
     await screen.findByRole('heading', { name: '你去这做什么？' });
-    await user.click(screen.getByRole('button', { name: '跳过' }));
+    await user.click(screen.getByRole('button', { name: '跳过问答' }));
     await user.click(await screen.findByRole('button', { name: '点击保存' }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -124,6 +159,47 @@ describe('core component flows', () => {
     expect(onSave.mock.calls[0][3]).toBe('safe');
   }, 10_000);
 
+  it('uses delete instead of a second skip control for optional questions', async () => {
+    const user = userEvent.setup();
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={draftMoment}
+        note={draftNote}
+        onSave={() => undefined}
+        onClose={() => undefined}
+        onToast={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '平静' }));
+    await user.click(await screen.findByTitle('很安心'));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '继续到引导问题' }),
+      ).toBeInTheDocument();
+    });
+    const followUpChoice = screen.getByRole('button', {
+      name: '愿意不定期后续回访',
+    });
+    expect(followUpChoice).toBeVisible();
+    expect(followUpChoice.closest('.place-rating-section')).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: '继续到引导问题' }));
+    expect(screen.getByRole('button', { name: '跳过问答' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
+    await screen.findByRole('heading', { name: '这里有什么让你注意到的？' });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '跳过问答' })).toBeNull();
+      expect(screen.getByRole('button', { name: '删除当前问题' })).toBeVisible();
+    });
+    await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
+    await screen.findByRole('heading', { name: '你想为以后留下什么？' });
+    const addButton = await screen.findByRole('button', { name: '新增问题' });
+    const deleteButton = screen.getByRole('button', { name: '删除当前问题' });
+    expect(deleteButton.closest('.prompt-center-actions')).toBe(
+      addButton.closest('.prompt-center-actions'),
+    );
+  });
+
   it('discards dirty edits to an existing record without saving', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -133,7 +209,6 @@ describe('core component flows', () => {
         moment={{ ...draftMoment, isNew: false, emotion: 'mixed', placeRating: 'neutral' }}
         note={{ ...draftNote, isDraft: false, emotion: 'mixed', placeRating: 'neutral' }}
         onSave={onSave}
-        onDeleteDraft={vi.fn()}
         onClose={onClose}
         onToast={() => undefined}
       />,
@@ -146,22 +221,21 @@ describe('core component flows', () => {
     await user.click(
       screen.getByRole('button', { name: '关闭' }),
     );
-    await user.click(screen.getByRole('button', { name: '放弃修改' }));
+    await user.click(screen.getByRole('button', { name: '退出' }));
     expect(onSave).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('deletes an untouched new draft instead of finalizing it', async () => {
+  it('exits an untouched new draft without deleting its star', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    const onDeleteDraft = vi.fn();
+    const onClose = vi.fn();
     renderWithLanguage(
       <NoteEditorSheet
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
-        onDeleteDraft={onDeleteDraft}
-        onClose={vi.fn()}
+        onClose={onClose}
         onToast={() => undefined}
       />,
     );
@@ -169,10 +243,10 @@ describe('core component flows', () => {
     await user.click(
       screen.getByRole('button', { name: '关闭' }),
     );
-    await user.click(screen.getByRole('button', { name: '删除星星' }));
+    await user.click(screen.getByRole('button', { name: '退出' }));
 
     expect(onSave).not.toHaveBeenCalled();
-    expect(onDeleteDraft).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('saves a partially completed new record when explicitly selected', async () => {
@@ -183,7 +257,6 @@ describe('core component flows', () => {
         moment={draftMoment}
         note={draftNote}
         onSave={onSave}
-        onDeleteDraft={vi.fn()}
         onClose={vi.fn()}
         onToast={() => undefined}
       />,
@@ -211,7 +284,6 @@ describe('core component flows', () => {
         moment={{ ...draftMoment, isNew: false }}
         note={{ ...draftNote, isDraft: false }}
         onSave={onSave}
-        onDeleteDraft={vi.fn()}
         onClose={vi.fn()}
         onToast={() => undefined}
       />,
@@ -222,7 +294,7 @@ describe('core component flows', () => {
       '保存这次',
     );
     await user.click(screen.getByRole('button', { name: '关闭' }));
-    await user.click(screen.getByRole('button', { name: '保存修改' }));
+    await user.click(screen.getByRole('button', { name: '保存' }));
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
@@ -234,7 +306,6 @@ describe('core component flows', () => {
         moment={{ ...draftMoment, isNew: false }}
         note={{ ...draftNote, isDraft: false }}
         onSave={onSave}
-        onDeleteDraft={vi.fn()}
         onClose={vi.fn()}
         onToast={() => undefined}
       />,
@@ -247,7 +318,7 @@ describe('core component flows', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: '继续编辑' }));
+    await user.click(screen.getByRole('button', { name: '返回' }));
 
     const backdrop = document.querySelector('.note-editor-overlay');
     expect(backdrop).not.toBeNull();
@@ -360,6 +431,8 @@ describe('core component flows', () => {
         themePalette={DEFAULT_THEME}
         onThemeTone={() => undefined}
         onThemeColor={() => undefined}
+        followUpIntervals={[3, 7, 14, 30]}
+        onFollowUpIntervals={() => undefined}
         onExportData={() => undefined}
         locationRequestState="idle"
         onRequestLocation={() => undefined}
@@ -423,10 +496,10 @@ describe('core component flows', () => {
       lastTestAt: '2026-08-02T00:00:00.000Z', lastErrorCode: null,
     }));
     const commonAiProps = {
-      styles: [] as string[],
       userPrompt: '',
-      onStyles: () => undefined,
+      contextMessageCount: 8,
       onUserPrompt: () => undefined,
+      onContextMessageCount: () => undefined,
       onPanel: () => undefined,
       onConnectMyLifeMemory,
       onTestMyLifeMemory: async () => null,
@@ -477,7 +550,8 @@ describe('core component flows', () => {
     expect(screen.getByText('Bearer output-access-once')).toBeInTheDocument();
   });
 
-  it('keeps grounded chat disabled until the user is safely signed in and synced', async () => {
+  it('keeps draft input available before sign-in while preventing an unavailable send', async () => {
+    const user = userEvent.setup();
     const onAnswer = vi.fn();
     renderWithLanguage(
       <ChatScreen
@@ -499,13 +573,184 @@ describe('core component flows', () => {
     );
 
     expect(document.querySelector('.message-bubble')).toBeNull();
-    expect(
-      screen.getByRole('textbox', { name: /请先在设置中登录/ }),
-    ).toBeDisabled();
+    const composer = screen.getByRole('textbox', { name: '输入消息…' });
+    expect(composer).toBeEnabled();
+    await user.type(composer, '先保留这条输入');
+    expect(composer).toHaveValue('先保留这条输入');
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '新的对话' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '返回地图并打开导航' })).toBeEnabled();
     expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it('sends with the last cloud revision while a new snapshot is syncing', async () => {
+    const user = userEvent.setup();
+    const onBeginChat = vi.fn();
+    const onCompleteChat = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        operation?: string;
+        requestId: string;
+        clientRevision: number;
+      };
+      if (body.operation === 'plan') {
+        return new Response(JSON.stringify({
+          status: 'planned',
+          requestId: body.requestId,
+          serverRevision: body.clientRevision,
+          source: 'emotion_map_local',
+          tools: [],
+          maxCalls: 0,
+          routingPlanToken: 'signed-plan-token',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        requestId: body.requestId,
+        serverRevision: body.clientRevision,
+        intent: 'reflection',
+        retrievalStatus: 'supported',
+        status: 'supported',
+        answer: '我已根据你的记录完成回应。',
+        evidence: [],
+        externalEvidence: [],
+        confidence: 'medium',
+        limitations: [],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+
+    renderWithLanguage(
+      <ChatScreen
+        notes={[]}
+        followUps={[]}
+        conversations={[]}
+        activeConversationId="send-thread"
+        workspaceKey="real:user-a"
+        onAnswerFollowUp={vi.fn()}
+        onRevisitEmotion={vi.fn()}
+        cloudAuth={{
+          supabaseUrl: 'https://example.supabase.co',
+          publishableKey: 'public-key',
+          accessToken: 'access-token',
+          userId: 'user-a',
+        }}
+        cloudRevision={7}
+        cloudStatus="syncing"
+        onBeginChat={onBeginChat}
+        onCompleteChat={onCompleteChat}
+        onFailChat={vi.fn()}
+        onNewConversation={vi.fn()}
+        onExitToMap={vi.fn()}
+        onToast={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByRole('textbox', { name: '输入消息…' }), '请回应我');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(onCompleteChat).toHaveBeenCalledTimes(1));
+    expect(onBeginChat).toHaveBeenCalledTimes(1);
+    expect(onCompleteChat.mock.calls[0][0]).toMatchObject({
+      conversationId: 'send-thread',
+      assistantBody: '我已根据你的记录完成回应。',
+    });
+  });
+
+  it('shows the real MCP call while pending and keeps its completion marker', async () => {
+    const user = userEvent.setup();
+    let resolveRequest: ((response: Response) => void) | undefined;
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        operation?: string;
+        requestId: string;
+        clientRevision: number;
+      };
+      if (body.operation === 'plan') {
+        return Promise.resolve(new Response(JSON.stringify({
+          status: 'planned',
+          requestId: body.requestId,
+          serverRevision: body.clientRevision,
+          source: 'both',
+          tools: ['research_memory_context'],
+          maxCalls: 1,
+          routingPlanToken: 'signed-mcp-plan-token',
+        }), { status: 200 }));
+      }
+      return new Promise<Response>((resolve) => {
+        resolveRequest = resolve;
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWithLanguage(<McpChatHarness />);
+
+    await user.type(
+      screen.getByRole('textbox', { name: '输入消息…' }),
+      '你调用mcp看看',
+    );
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    expect(await screen.findByText('正在调用 My Life Memory MCP…')).toBeVisible();
+
+    const requestBody = JSON.parse(String(
+      fetchMock.mock.calls[1][1]?.body,
+    )) as { requestId: string; clientRevision: number };
+    resolveRequest?.(new Response(JSON.stringify({
+      requestId: requestBody.requestId,
+      serverRevision: requestBody.clientRevision,
+      intent: 'lookup',
+      retrievalStatus: 'supported',
+      status: 'supported',
+      answer: '照片里能看到一片蓝色。',
+      evidence: [],
+      externalEvidence: [],
+      mcpCalls: [{
+        server: 'my_life_memory',
+        toolName: 'get_memory_images',
+        status: 'completed',
+      }],
+      confidence: 'low',
+      limitations: [],
+      clarificationOptions: [],
+    }), { status: 200 }));
+
+    expect(await screen.findByText('My Life Memory MCP · 调用完成')).toBeVisible();
+    expect(screen.getByText('照片里能看到一片蓝色。')).toBeVisible();
+    expect(document.querySelector('.ai-avatar')).toBeNull();
+  });
+
+  it('centers an editable conversation title and commits the rename', async () => {
+    const user = userEvent.setup();
+    const onRenameConversation = vi.fn();
+    renderWithLanguage(
+      <ChatScreen
+        notes={[]}
+        followUps={[]}
+        conversations={[{
+          id: 'rename-thread',
+          title: '旧标题',
+          preview: '',
+          kind: 'regular',
+          messages: [],
+        }]}
+        activeConversationId="rename-thread"
+        workspaceKey="real:user-a"
+        onAnswerFollowUp={vi.fn()}
+        onRevisitEmotion={vi.fn()}
+        cloudAuth={null}
+        cloudRevision={null}
+        cloudStatus="signed_out"
+        onBeginChat={vi.fn()}
+        onCompleteChat={vi.fn()}
+        onFailChat={vi.fn()}
+        onNewConversation={vi.fn()}
+        onRenameConversation={onRenameConversation}
+        onExitToMap={vi.fn()}
+        onToast={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '修改对话标题' }));
+    const input = screen.getByRole('textbox', { name: '对话标题' });
+    await user.clear(input);
+    await user.type(input, '新标题{enter}');
+    expect(onRenameConversation).toHaveBeenCalledWith('rename-thread', '新标题');
   });
 
   it('expands chat history from the primary row without opening a new chat', async () => {
@@ -523,11 +768,48 @@ describe('core component flows', () => {
     expect(onNavigate).not.toHaveBeenCalled();
   });
 
+  it('shows due revisit tasks in the star inbox and answers them there', async () => {
+    const user = userEvent.setup();
+    const onAnswerFollowUp = vi.fn();
+    renderWithLanguage(
+      <StarInboxScreen
+        notes={[{ ...draftNote, id: 'inbox-note', title: '安静角落', isDraft: false }]}
+        followUps={[{
+          id: 'follow-up-inbox',
+          noteId: 'inbox-note',
+          intervalDays: 3,
+          dueAt: '2026-08-01T00:00:00.000Z',
+          status: 'active',
+        }]}
+        onAnswerFollowUp={onAnswerFollowUp}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /安静角落/ }));
+    await waitFor(() => expect(
+      screen.getByText('现在回看“安静角落”，感觉有变化吗？'),
+    ).toBeVisible());
+    await user.click(screen.getByRole('button', { name: '轻了' }));
+    expect(onAnswerFollowUp).toHaveBeenCalledWith(
+      'follow-up-inbox',
+      '轻了',
+      'lighter',
+    );
+  });
+
   it('scrolls a long existing conversation exactly once on entry', async () => {
-    const scrollIntoView = vi.fn();
-    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true, value: scrollIntoView,
+    const scrollTo = vi.fn();
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight',
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true, value: scrollTo,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true, get: () => 4_200,
     });
     try {
       renderWithLanguage(
@@ -547,12 +829,22 @@ describe('core component flows', () => {
           onExitToMap={vi.fn()} onToast={vi.fn()}
         />,
       );
-      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+      expect(scrollTo).toHaveBeenCalledWith({ top: 4_200, behavior: 'instant' });
     } finally {
-      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
         configurable: true,
-        value: originalScrollIntoView,
+        value: originalScrollTo,
       });
+      if (originalScrollHeight) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          'scrollHeight',
+          originalScrollHeight,
+        );
+      } else {
+        delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+      }
     }
   });
 

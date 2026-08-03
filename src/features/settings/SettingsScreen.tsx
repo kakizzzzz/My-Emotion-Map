@@ -29,24 +29,23 @@ import { useDialogFocus } from '../../app/useDialogFocus';
 import { AiSettingsPanel } from './AiSettingsPanel';
 import { DataAccountSettingsPanel } from './DataAccountSettingsPanel';
 import { EmotionMapMcpPanel } from './EmotionMapMcpPanel';
+import { FollowUpSettingsPanel } from './FollowUpSettingsPanel';
 
 export function SettingsScreen({
   themeTone,
   themePalette,
   onThemeTone,
   onThemeColor,
+  followUpIntervals,
+  onFollowUpIntervals,
   onExportData,
   locationRequestState,
   onRequestLocation,
   onToast,
   cloudUserId,
   cloudAccount,
-  cloudStatus,
   onSignOut,
   onUpdatePassword,
-  onConfirmInitialUpload,
-  onUseRemoteVersion,
-  onOverwriteRemote,
   onIssueMcpToken,
   onGetMcpOutputStatus,
   onRevokeAllMcpTokens,
@@ -74,9 +73,11 @@ export function SettingsScreen({
       ? buildDefaultProfileName(cloudAccount, language)
       : initialSettings.profileName,
   );
-  const [aiStyles, setAiStyles] = useState(initialSettings.aiToneTags);
   const [aiUserPrompt, setAiUserPrompt] = useState(
     initialSettings.aiUserPrompt,
+  );
+  const [aiContextMessageCount, setAiContextMessageCount] = useState(
+    initialSettings.aiContextMessageCount,
   );
   const rows: Array<{
     id: SettingsPanel;
@@ -105,6 +106,8 @@ export function SettingsScreen({
                     ? copy.settings.language
                     : panel === 'location'
                       ? copy.location.settingsTitle
+                      : panel === 'follow-up'
+                        ? copy.settings.followUpSchedule
                       : panel === 'export'
                         ? copy.settings.exportData
                         : copy.settings.general;
@@ -115,15 +118,17 @@ export function SettingsScreen({
       avatarSrc,
       profileName,
       language,
-      aiToneTags: aiStyles,
       aiUserPrompt,
+      aiContextMessageCount,
+      followUpIntervals,
     }, cloudUserId);
-  }, [aiStyles, aiUserPrompt, avatarSrc, cloudUserId, language, profileName]);
+  }, [aiContextMessageCount, aiUserPrompt, avatarSrc, cloudUserId, followUpIntervals, language, profileName]);
 
   const closePanel = () => {
     if (
       panel === 'language' ||
       panel === 'location' ||
+      panel === 'follow-up' ||
       panel === 'export' ||
       panel === 'emotion-map-mcp'
     ) {
@@ -271,10 +276,10 @@ export function SettingsScreen({
               ) : panel === 'ai' || panel === 'my-life-memory-mcp' ? (
                 <AiSettingsPanel
                   mode={panel}
-                  styles={aiStyles}
                   userPrompt={aiUserPrompt}
-                  onStyles={setAiStyles}
+                  contextMessageCount={aiContextMessageCount}
                   onUserPrompt={setAiUserPrompt}
+                  onContextMessageCount={setAiContextMessageCount}
                   onPanel={setPanel}
                   onConnectMyLifeMemory={onConnectMyLifeMemory}
                   onTestMyLifeMemory={onTestMyLifeMemory}
@@ -283,11 +288,7 @@ export function SettingsScreen({
                 />
               ) : panel === 'data-account' ? (
                 <DataAccountSettingsPanel
-                  cloudStatus={cloudStatus}
                   onPanel={setPanel}
-                  onConfirmInitialUpload={onConfirmInitialUpload}
-                  onUseRemoteVersion={onUseRemoteVersion}
-                  onOverwriteRemote={onOverwriteRemote}
                 />
               ) : panel === 'emotion-map-mcp' ? (
                 <EmotionMapMcpPanel
@@ -296,6 +297,11 @@ export function SettingsScreen({
                   onRevokeTokens={onRevokeAllMcpTokens}
                   onListProposals={onListMcpProposals}
                   onResolveProposal={onResolveMcpProposal}
+                />
+              ) : panel === 'follow-up' ? (
+                <FollowUpSettingsPanel
+                  intervals={followUpIntervals}
+                  onIntervals={onFollowUpIntervals}
                 />
               ) : panel === 'export' ? (
                 <ExportDataPanel onExportData={onExportData} />

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createFollowUpForNote,
   getFollowUpOptions,
+  normalizeFollowUpCurve,
   promoteNextDueFollowUp,
 } from '../../src/domain/followUps';
-import type { FollowUpRecord } from '../../src/types';
+import type { EmotionNote, FollowUpRecord } from '../../src/types';
 
 const records: FollowUpRecord[] = [
   {
@@ -33,6 +35,29 @@ const records: FollowUpRecord[] = [
 ];
 
 describe('follow-up promotion', () => {
+  it('starts with three follow-up times and lets users add more', () => {
+    expect(normalizeFollowUpCurve(undefined)).toEqual([3, 7, 14]);
+  });
+
+  it('keeps a user-defined ordered curve within the supported bounds', () => {
+    expect(normalizeFollowUpCurve([30, 3, 7, 7, 0, 366])).toEqual([
+      3, 7, 30,
+    ]);
+  });
+
+  it('schedules a follow-up at a custom day instead of a fixed preset', () => {
+    const note = { id: 'note-custom' } as EmotionNote;
+    const record = createFollowUpForNote(
+      note,
+      'zh',
+      14,
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+
+    expect(record.intervalDays).toBe(14);
+    expect(record.dueAt).toBe('2026-08-15T00:00:00.000Z');
+  });
+
   it.each(['zh', 'en', 'ko'] as const)(
     'returns exactly the five canonical options in %s',
     (language) => {

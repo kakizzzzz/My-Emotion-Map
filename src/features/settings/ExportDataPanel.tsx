@@ -42,60 +42,77 @@ export function ExportDataPanel({
   };
 
   return (
-    <section className="copied-settings-card export-data-card">
-      <header>
-        <Download size={24} strokeWidth={2.2} />
-        <h2>{copy.settings.exportData}</h2>
-      </header>
-      <div className="export-mode-switch" role="group" aria-label={copy.settings.exportData}>
-        <button
-          className={mode === 'all' ? 'is-selected' : ''}
-          onClick={() => setMode('all')}
-          aria-pressed={mode === 'all'}
+    <div className="export-data-panel">
+      <section className="copied-settings-card export-data-card">
+        <header>
+          <Download size={22} strokeWidth={2.2} />
+          <h2>{copy.settings.exportData}</h2>
+        </header>
+        <div
+          className="export-mode-switch"
+          role="group"
+          aria-label={copy.settings.exportData}
         >
-          {copy.settings.exportAll}
-        </button>
-        <button
-          className={mode === 'range' ? 'is-selected' : ''}
-          onClick={() => setMode('range')}
-          aria-pressed={mode === 'range'}
-        >
-          {copy.settings.exportRange}
-        </button>
-      </div>
-      {mode === 'range' ? (
-        <div className="export-date-fields">
-          <label>
-            <span>{copy.settings.exportStartDate}</span>
-            <input
-              type="date"
-              value={startDate}
-              max={endDate || undefined}
-              onChange={(event) => setStartDate(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{copy.settings.exportEndDate}</span>
-            <input
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              onChange={(event) => setEndDate(event.target.value)}
-            />
-          </label>
+          <button
+            type="button"
+            className={mode === 'all' ? 'is-selected' : ''}
+            onClick={() => setMode('all')}
+            aria-pressed={mode === 'all'}
+          >
+            {copy.settings.exportAll}
+          </button>
+          <button
+            type="button"
+            className={mode === 'range' ? 'is-selected' : ''}
+            onClick={() => setMode('range')}
+            aria-pressed={mode === 'range'}
+          >
+            {copy.settings.exportRange}
+          </button>
         </div>
-      ) : null}
-      {rangeInvalid ? <small className="export-validation">{copy.settings.exportRangeInvalid}</small> : null}
-      <button className="export-submit" onClick={exportRecords} disabled={rangeInvalid}>
-        {copy.settings.exportReport}
-      </button>
-      {result ? (
-        <p className="export-result" role="status">
-          {result.recordCount
-            ? copy.settings.exportReady(result.recordCount)
-            : copy.settings.exportEmpty}
-        </p>
-      ) : null}
-    </section>
+        {mode === 'range' ? (
+          <div className="export-date-fields">
+            <label>
+              <span>{copy.settings.exportStartDate}</span>
+              <input
+                type="date"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>{copy.settings.exportEndDate}</span>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
+        {rangeInvalid ? (
+          <small className="export-validation">
+            {copy.settings.exportRangeInvalid}
+          </small>
+        ) : null}
+        <button
+          type="button"
+          className="export-submit"
+          onClick={exportRecords}
+          disabled={rangeInvalid}
+        >
+          {copy.settings.exportReport}
+        </button>
+        {result ? (
+          <p className="export-result" role="status">
+            {result.recordCount
+              ? copy.settings.exportReady(result.recordCount)
+              : copy.settings.exportEmpty}
+          </p>
+        ) : null}
+      </section>
+    </div>
   );
 }

@@ -94,6 +94,7 @@ export function MapScreen({
     aerial: copy.map.styles.aerial,
   };
   const starActionOverlayRef = useRef<HTMLDivElement | null>(null);
+  const starNavigationOverlayRef = useRef<HTMLDivElement | null>(null);
   const skipNextMapClickRef = useRef(false);
   const draggedMomentIdRef = useRef<string | null>(null);
   const momentPointerPressedRef = useRef(false);
@@ -114,6 +115,7 @@ export function MapScreen({
   const [activeSearchField, setActiveSearchField] = useState<'coordinate' | 'text'>('text');
   const [tagMode, setTagMode] = useState<'add' | 'remove' | null>(null);
   const [currentTagGroup, setCurrentTagGroup] = useState(() => Date.now());
+  const [activeTag, setActiveTag] = useState<{ order: number; groupId: number } | null>(null);
   const [activeStarTab, setActiveStarTab] = useState<'eye' | 'color' | null>(null);
   const [customPickerOpen, setCustomPickerOpen] = useState(false);
   const [customColor, setCustomColor] = useState('#D2936D');
@@ -146,7 +148,7 @@ export function MapScreen({
   const syncStarActionPosition = useCallback(() => {
     const map = mapRef.current;
     const overlay = starActionOverlayRef.current;
-    if (!map || !overlay || !selectedMoment || tagMode) return;
+    if (!map || !overlay || !selectedMoment) return;
 
     const point = map.project([
       selectedMoment.longitude,
@@ -155,11 +157,11 @@ export function MapScreen({
     overlay.style.left = `${point.x}px`;
     overlay.style.top = `${point.y + 36}px`;
     overlay.style.visibility = 'visible';
-  }, [mapRef, selectedMoment, tagMode]);
+  }, [mapRef, selectedMoment]);
 
   useLayoutEffect(() => {
     const overlay = starActionOverlayRef.current;
-    if (!overlay || !selectedMoment || tagMode) return;
+    if (!overlay || !selectedMoment) return;
 
     syncStarActionPosition();
     const frame = window.requestAnimationFrame(syncStarActionPosition);
@@ -169,7 +171,47 @@ export function MapScreen({
       window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', syncStarActionPosition);
     };
-  }, [selectedMoment, syncStarActionPosition, tagMode]);
+  }, [selectedMoment, syncStarActionPosition]);
+
+  const activeTagMoment = useMemo(
+    () => activeTag
+      ? moments.find((moment) =>
+          moment.tagGroupId === activeTag.groupId &&
+          moment.tagOrder === activeTag.order,
+        ) ?? null
+      : null,
+    [activeTag, moments],
+  );
+
+  const syncStarNavigationPosition = useCallback(() => {
+    const map = mapRef.current;
+    const overlay = starNavigationOverlayRef.current;
+    if (!map || !overlay || !activeTagMoment) return;
+    const point = map.project([
+      activeTagMoment.longitude,
+      activeTagMoment.latitude,
+    ]);
+    overlay.style.transform =
+      `translate3d(${point.x}px, ${point.y - 45}px, 0) translate(-50%, -50%)`;
+    overlay.style.visibility = 'visible';
+  }, [activeTagMoment, mapRef]);
+
+  useLayoutEffect(() => {
+    const overlay = starNavigationOverlayRef.current;
+    if (!overlay || !activeTagMoment) return;
+    syncStarNavigationPosition();
+    const frame = window.requestAnimationFrame(syncStarNavigationPosition);
+    window.addEventListener('resize', syncStarNavigationPosition);
+    const map = mapRef.current;
+    map?.on('move', syncStarNavigationPosition);
+    map?.on('zoom', syncStarNavigationPosition);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', syncStarNavigationPosition);
+      map?.off('move', syncStarNavigationPosition);
+      map?.off('zoom', syncStarNavigationPosition);
+    };
+  }, [activeTagMoment, mapRef, syncStarNavigationPosition]);
 
   useEffect(() => {
     try {
@@ -195,6 +237,7 @@ export function MapScreen({
     const frame = window.requestAnimationFrame(() => {
       moveMapTo([target.longitude, target.latitude], 17, 620);
       setSelectedId(null);
+      setActiveTag(null);
       setFocusMomentId(null);
     });
 
@@ -233,6 +276,7 @@ export function MapScreen({
           moved = true;
           draggedMomentIdRef.current = momentId;
           setSelectedId(null);
+          setActiveTag(null);
         }
         const map = mapRef.current;
         if (!map) return;
@@ -421,12 +465,35 @@ export function MapScreen({
     if (selectedId === id) {
       mapRef.current?.stop();
       setSelectedId(null);
+      setActiveTag(null);
       return;
     }
 
     const target = moments.find((moment) => moment.id === id);
     if (!target) return;
     setSelectedId(id);
+    setActiveTag(
+      target.tagOrder !== undefined && target.tagGroupId !== undefined
+        ? { order: target.tagOrder, groupId: target.tagGroupId }
+        : null,
+    );
+    flyMomentToCenter(target);
+  };
+
+  const navigateTaggedStar = (direction: 'previous' | 'next') => {
+    if (!activeTag) return;
+    const group = moments
+      .filter((moment) => moment.tagGroupId === activeTag.groupId && moment.tagOrder)
+      .sort((left, right) => (left.tagOrder ?? 0) - (right.tagOrder ?? 0));
+    if (!group.length) return;
+    const currentIndex = group.findIndex((moment) => moment.tagOrder === activeTag.order);
+    const nextIndex = direction === 'previous'
+      ? (currentIndex <= 0 ? group.length - 1 : currentIndex - 1)
+      : (currentIndex < 0 || currentIndex === group.length - 1 ? 0 : currentIndex + 1);
+    const target = group[nextIndex];
+    if (!target?.tagOrder || target.tagGroupId === undefined) return;
+    setActiveTag({ order: target.tagOrder, groupId: target.tagGroupId });
+    setSelectedId(target.id);
     flyMomentToCenter(target);
   };
 
@@ -449,6 +516,7 @@ export function MapScreen({
   const deleteMoment = (moment: EmotionMoment) => {
     onDeleteMoment(moment.id);
     setSelectedId(null);
+    setActiveTag(null);
     setActiveStarTab(null);
     setCustomPickerOpen(false);
     setMapChooserOpen(false);
@@ -581,13 +649,11 @@ export function MapScreen({
     handledLocationRequestRef.current = resolvedLocationRequest.id;
     const { intent, location } = resolvedLocationRequest;
     if (intent === 'place') {
-      onEditMoment(
-        addMomentAt(
-          location.lng,
-          location.lat,
-          copy.map.currentLocation,
-          { source: 'current-location' },
-        ),
+      addMomentAt(
+        location.lng,
+        location.lat,
+        copy.map.currentLocation,
+        { source: 'current-location' },
       );
     }
     moveMapTo(
@@ -599,7 +665,6 @@ export function MapScreen({
     addMomentAt,
     copy.map.currentLocation,
     moveMapTo,
-    onEditMoment,
     resolvedLocationRequest,
   ]);
 
@@ -634,7 +699,8 @@ export function MapScreen({
           importedAt: new Date().toISOString(),
         },
       );
-      onEditMoment(momentId);
+      setSelectedId(momentId);
+      setActiveTag(null);
       moveMapTo([metadata.longitude, metadata.latitude], 17, 650);
       onToast(copy.feedback.photoLocationCreated, {
         placement: 'top',
@@ -655,17 +721,9 @@ export function MapScreen({
               requestId: createRecordId('photo-assist'),
               result: delivery.result,
             });
-          } else if (cloudUserIdRef.current === requestUserId) {
-            onToast(copy.feedback.photoAssistUnavailable, {
-              placement: 'bottom',
-              durationMs: 2400,
-            });
           }
         } catch {
-          onToast(copy.feedback.photoAssistUnavailable, {
-            placement: 'bottom',
-            durationMs: 2400,
-          });
+          // Photo suggestions are optional; keep the created star without a notice.
         }
       }
     } catch {
@@ -716,8 +774,14 @@ export function MapScreen({
         }}
         onError={() => setMapLoadError(true)}
         cursor="grab"
-        onMove={syncStarActionPosition}
-        onResize={syncStarActionPosition}
+        onMove={() => {
+          syncStarActionPosition();
+          syncStarNavigationPosition();
+        }}
+        onResize={() => {
+          syncStarActionPosition();
+          syncStarNavigationPosition();
+        }}
         onMoveEnd={(event) =>
           onViewportChange({
             longitude: event.viewState.longitude,
@@ -733,6 +797,7 @@ export function MapScreen({
           const clickTarget = event.originalEvent.target;
           if (clickTarget instanceof Element && clickTarget.closest('.map-star-anchor')) return;
           setSelectedId(null);
+          setActiveTag(null);
         }}
       >
         <MapMarkers
@@ -758,7 +823,40 @@ export function MapScreen({
       </MapGL>
 
       <AnimatePresence>
-        {selectedMoment && !tagMode ? (
+        {activeTagMoment ? (
+          <div
+            ref={starNavigationOverlayRef}
+            className="star-navigation-overlay"
+            style={{
+              top: 0,
+              left: 0,
+              transform: 'translate3d(-100px, -100px, 0)',
+              willChange: 'transform',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => navigateTaggedStar('previous')}
+              aria-label={copy.common.back}
+            >
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="11 17 6 12 11 7" />
+                <polyline points="18 17 13 12 18 7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateTaggedStar('next')}
+              aria-label={copy.common.latest}
+            >
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="13 17 18 12 13 7" />
+                <polyline points="6 17 11 12 6 7" />
+              </svg>
+            </button>
+          </div>
+        ) : null}
+        {selectedMoment ? (
           <StarActionBar
             overlayRef={starActionOverlayRef}
             moment={selectedMoment}

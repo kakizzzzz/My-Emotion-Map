@@ -8,13 +8,16 @@ import type {
   FollowUpRecord,
 } from '../types';
 import type { PhotoAssistDelivery, ToastHandler } from './appTypes';
-import { createFollowUpForNote } from '../domain/followUps';
+import {
+  createFollowUpForNote,
+  normalizeFollowUpCurve,
+} from '../domain/followUps';
 
 export const useNoteEditorHandlers = ({
   language,
   starSavedMessage,
-  moments,
   followUps,
+  followUpIntervals,
   setMoments,
   setNotes,
   setFollowUps,
@@ -25,8 +28,8 @@ export const useNoteEditorHandlers = ({
 }: {
   language: AppLanguage;
   starSavedMessage: string;
-  moments: EmotionMoment[];
   followUps: FollowUpRecord[];
+  followUpIntervals: number[];
   setMoments: Dispatch<SetStateAction<EmotionMoment[]>>;
   setNotes: Dispatch<SetStateAction<EmotionNote[]>>;
   setFollowUps: Dispatch<SetStateAction<FollowUpRecord[]>>;
@@ -48,12 +51,6 @@ export const useNoteEditorHandlers = ({
   const closeNoteEditor = (momentId: string) => {
     setEditingMomentId(null);
     clearPhotoAssist(momentId);
-  };
-  const deleteNoteDraft = (momentId: string) => {
-    const noteId = moments.find((item) => item.id === momentId)?.noteId;
-    setMoments((current) => current.filter((item) => item.id !== momentId));
-    if (noteId) setNotes((current) => current.filter((item) => item.id !== noteId));
-    closeNoteEditor(momentId);
   };
   const saveNote = (
     momentId: string,
@@ -81,13 +78,34 @@ export const useNoteEditorHandlers = ({
         }
       : moment));
     setFollowUps((current) => {
-      const pending = current.some((record) => record.noteId === nextNote.id &&
-        (record.status === 'queued' || record.status === 'active'));
       if (!nextNote.followUpEnabled) {
         return current.filter((record) => record.noteId !== nextNote.id ||
           (record.status !== 'queued' && record.status !== 'active'));
       }
-      return pending ? current : [...current, createFollowUpForNote(nextNote, language)];
+      const curve = normalizeFollowUpCurve(followUpIntervals);
+      const desired = new Set(curve);
+      const pending = current.filter((record) => record.noteId === nextNote.id &&
+        (record.status === 'queued' || record.status === 'active'));
+      const existingIntervals = new Set(
+        pending.map((record) => record.intervalDays),
+      );
+      const consentedAt = pending[0]?.followUpConsentedAt
+        ? new Date(pending[0].followUpConsentedAt)
+        : new Date();
+      const retained = current.filter((record) =>
+        record.noteId !== nextNote.id ||
+        (record.status !== 'queued' && record.status !== 'active') ||
+        desired.has(record.intervalDays),
+      );
+      const additions = curve
+        .filter((interval) => !existingIntervals.has(interval))
+        .map((interval) => createFollowUpForNote(
+          nextNote,
+          language,
+          interval,
+          consentedAt,
+        ));
+      return [...retained, ...additions];
     });
     if (!nextNote.followUpEnabled && pendingFollowUpIds.size) {
       setConversations((current) => current.map((conversation) => ({
@@ -99,5 +117,5 @@ export const useNoteEditorHandlers = ({
     closeNoteEditor(momentId);
     showToast(starSavedMessage);
   };
-  return { closeNoteEditor, deleteNoteDraft, saveNote };
+  return { closeNoteEditor, saveNote };
 };

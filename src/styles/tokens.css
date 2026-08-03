@@ -103,12 +103,23 @@ textarea {
   font: inherit;
 }
 
+textarea {
+  resize: none;
+}
+
+textarea::-webkit-resizer {
+  display: none;
+}
+
 button {
   border: 0;
   cursor: pointer;
 }
 
-button:focus-visible,
+button:focus-visible {
+  outline: 0;
+}
+
 input:focus-visible,
 textarea:focus-visible {
   outline: 3px solid rgba(114, 151, 174, 0.44);

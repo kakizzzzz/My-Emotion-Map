@@ -11,7 +11,9 @@ export const validateEmotionChatRequest = (value: unknown) => {
   const allowed = new Set([
     'requestId', 'message', 'language', 'conversationId', 'explicitNoteIds',
     'conversationAnchorNoteIds',
-    'clientRevision', 'responseStyle', 'referenceConfirmation',
+    'clientRevision', 'stylePrompt',
+    'recentMessages', 'referenceConfirmation',
+    'routingPlanToken',
   ]);
   if (Object.keys(body).some((key) => !allowed.has(key))) return null;
   const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -32,13 +34,23 @@ export const validateEmotionChatRequest = (value: unknown) => {
     body.conversationAnchorNoteIds,
   );
   if (!explicitNoteIds || !conversationAnchorNoteIds) return null;
-  const responseStyle = Array.isArray(body.responseStyle)
-    ? [...new Set(body.responseStyle.filter((item): item is string =>
-      item === 'concise' || item === 'direct' || item === 'gentle' ||
-        item === 'sharp',
-      ))].slice(0, 3)
+  if (body.stylePrompt !== undefined && typeof body.stylePrompt !== 'string') return null;
+  const stylePrompt = typeof body.stylePrompt === 'string'
+    ? body.stylePrompt.trim().slice(0, 500)
+    : '';
+  const recentMessages = Array.isArray(body.recentMessages)
+    ? body.recentMessages.flatMap((raw) => {
+        const item = asObject(raw);
+        if (!item || (item.role !== 'user' && item.role !== 'assistant') ||
+          typeof item.body !== 'string') return [];
+        const message = item.body.trim().slice(0, 400);
+        return message ? [{
+          role: item.role as 'user' | 'assistant',
+          body: message,
+        }] : [];
+      }).slice(-20)
     : [];
-  if (body.responseStyle !== undefined && !Array.isArray(body.responseStyle)) return null;
+  if (body.recentMessages !== undefined && !Array.isArray(body.recentMessages)) return null;
   const clientRevision = typeof body.clientRevision === 'number' &&
     Number.isSafeInteger(body.clientRevision) && body.clientRevision >= 0
     ? body.clientRevision
@@ -58,12 +70,63 @@ export const validateEmotionChatRequest = (value: unknown) => {
     : undefined;
   if (body.referenceConfirmation !== undefined &&
     (!referenceConfirmation?.optionId || !referenceConfirmation.continuationToken)) return null;
+  const routingPlanToken = typeof body.routingPlanToken === 'string'
+    ? body.routingPlanToken.trim()
+    : '';
+  if (body.routingPlanToken !== undefined &&
+    (!routingPlanToken || routingPlanToken.length > 4_000)) return null;
   if (!/^[A-Za-z0-9:_-]{1,200}$/.test(requestId) ||
     !message || message.length > 1_200 || !conversationId ||
     conversationId.length > 200 || clientRevision === null) return null;
   return {
     requestId, message, language, conversationId, explicitNoteIds,
     conversationAnchorNoteIds,
-    clientRevision, responseStyle, referenceConfirmation,
+    clientRevision, stylePrompt,
+    recentMessages, referenceConfirmation,
+    routingPlanToken: routingPlanToken || undefined,
+  };
+};
+
+export const validateEmotionChatPlanRequest = (value: unknown) => {
+  const body = asObject(value);
+  if (!body) return null;
+  const allowed = new Set([
+    'operation', 'requestId', 'message', 'language', 'conversationId',
+    'clientRevision', 'recentMessages',
+  ]);
+  if (Object.keys(body).some((key) => !allowed.has(key)) ||
+    body.operation !== 'plan') return null;
+  const requestId = typeof body.requestId === 'string' ? body.requestId.trim() : '';
+  const message = typeof body.message === 'string' ? body.message.trim() : '';
+  const conversationId = typeof body.conversationId === 'string'
+    ? body.conversationId.trim()
+    : '';
+  if (body.language !== 'zh' && body.language !== 'en' && body.language !== 'ko') return null;
+  const clientRevision = typeof body.clientRevision === 'number' &&
+    Number.isSafeInteger(body.clientRevision) && body.clientRevision >= 0
+    ? body.clientRevision
+    : null;
+  if (!Array.isArray(body.recentMessages)) return null;
+  const recentMessages = body.recentMessages.flatMap((raw) => {
+    const item = asObject(raw);
+    if (!item || (item.role !== 'user' && item.role !== 'assistant') ||
+      typeof item.body !== 'string') return [];
+    const text = item.body.trim().slice(0, 400);
+    return text ? [{ role: item.role as 'user' | 'assistant', body: text }] : [];
+  }).slice(-20);
+  if (
+    !/^[A-Za-z0-9:_-]{1,200}$/.test(requestId) ||
+    !message || message.length > 1_200 ||
+    !conversationId || conversationId.length > 200 ||
+    clientRevision === null
+  ) return null;
+  return {
+    operation: 'plan' as const,
+    requestId,
+    message,
+    language: body.language as ChatLanguage,
+    conversationId,
+    clientRevision,
+    recentMessages,
   };
 };

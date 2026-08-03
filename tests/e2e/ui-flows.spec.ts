@@ -174,6 +174,7 @@ test('first real workspace asks for location immediately without creating record
   await page.goto('/');
   const locationPrompt = page.getByRole('dialog', { name: '使用定位？' });
   await expect(locationPrompt).toBeVisible();
+  await expect(locationPrompt.getByRole('button', { name: '关闭' })).toHaveCount(0);
   await expect(page.getByRole('dialog', { name: '留下一颗星星' })).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(0);
   const snapshot = await page.evaluate((key) =>
@@ -181,6 +182,31 @@ test('first real workspace asks for location immediately without creating record
   );
   expect(snapshot.moments).toEqual([]);
   expect(snapshot.notes).toEqual([]);
+});
+
+test('adding at the current location creates the star without opening the editor', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 37.558, longitude: 127 });
+  await seedAuthenticatedSession(page, true);
+  await page.goto('/');
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '允许' }).click();
+  await expandMapTools(page);
+  await page.getByRole('button', {
+    name: '点击在当前位置添加星星，或拖到地图上放置',
+  }).click();
+
+  await expect(page.locator('.map-star-button')).toHaveCount(1);
+  await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.moments?.[0]
+      ? [snapshot.moments[0].latitude, snapshot.moments[0].longitude]
+      : null;
+  }, STORAGE_KEY)).toEqual([37.558, 127]);
 });
 
 test('authenticated identity opens an empty real workspace', async ({
@@ -286,7 +312,7 @@ test('blank new user, keyboard sheets, and accessibility smoke', async ({
   expect(results.violations).toEqual([]);
 });
 
-test('add, complete, reopen, revisit, persist, delete and undo', async ({
+test('add, complete, reopen, revisit, persist, and permanently delete', async ({
   page,
 }) => {
   test.setTimeout(75_000);
@@ -441,11 +467,18 @@ test('add, complete, reopen, revisit, persist, delete and undo', async ({
   await expect(
     page.getByRole('button', { name: '删除星星' }),
   ).toBeVisible();
-  page.once('dialog', (dialog) => dialog.accept());
+  let deleteDialogShown = false;
+  page.once('dialog', async (dialog) => {
+    deleteDialogShown = true;
+    await dialog.dismiss();
+  });
   await page.getByRole('button', { name: '删除星星' }).click();
+  expect(deleteDialogShown).toBe(false);
   await expect(page.locator('.map-star-button')).toHaveCount(0);
-  await page.getByRole('button', { name: '撤销' }).click();
-  await expect(page.locator('.map-star-button')).toHaveCount(1);
+  await page.reload();
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
+  await expect(page.locator('.map-star-button')).toHaveCount(0);
 });
 
 test('320px core flow and reduced-motion map behavior', async ({ page }) => {
@@ -543,6 +576,8 @@ test('regular conversation rows reveal a real delete action on left swipe', asyn
 test('an emotionless star changes color immediately', async ({ page }) => {
   await startBlank(page);
   await dragNewStarToMap(page);
+  await expect(page.locator('.map-star-button .star-marker-glyph stop').first())
+    .toHaveAttribute('stop-color', '#EDC727');
   await page.locator('.map-star-button').click();
   await page.getByRole('button', { name: '选择心情颜色' }).click();
   await page.getByRole('button', { name: '使用颜色 #D2936D' }).click();
@@ -566,28 +601,38 @@ test('an emotionless star changes color immediately', async ({ page }) => {
 });
 
 test('touching stars in connection mode assigns visible order numbers', async ({ page }) => {
-  await startBlank(page);
-  await page.evaluate((storageKey) => {
+  const seededMoments = [
+    { id: 'moment-tag-1', noteId: 'note-tag-1', emotion: null, intensity: 0,
+      place: 'A', date: '2026-08-03', time: '10:00', longitude: 126.998,
+      latitude: 37.558, placeRating: null, isNew: true, source: 'manual' },
+    { id: 'moment-tag-2', noteId: 'note-tag-2', emotion: null, intensity: 0,
+      place: 'B', date: '2026-08-03', time: '10:01', longitude: 127.002,
+      latitude: 37.56, placeRating: null, isNew: true, source: 'manual' },
+  ];
+  const seededNotes = seededMoments.map((moment) => ({
+    id: moment.noteId, title: moment.place, titleSource: 'fallback',
+    place: moment.place, date: moment.date, time: moment.time, emotion: null,
+    placeRating: null, answers: [], excerpt: '', isDraft: true,
+    followUpEnabled: false,
+  }));
+  await seedAuthenticatedSession(page, true);
+  await page.addInitScript(({ storageKey, moments, notes }) => {
     const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
-    snapshot.moments = [
-      { id: 'moment-tag-1', noteId: 'note-tag-1', emotion: null, intensity: 0,
-        place: 'A', date: '2026-08-03', time: '10:00', longitude: 126.998,
-        latitude: 37.558, placeRating: null, isNew: true, source: 'manual' },
-      { id: 'moment-tag-2', noteId: 'note-tag-2', emotion: null, intensity: 0,
-        place: 'B', date: '2026-08-03', time: '10:01', longitude: 127.002,
-        latitude: 37.56, placeRating: null, isNew: true, source: 'manual' },
-    ];
-    snapshot.notes = snapshot.moments.map((moment: { id: string; noteId: string; place: string; date: string; time: string }) => ({
-      id: moment.noteId, title: moment.place, titleSource: 'fallback',
-      place: moment.place, date: moment.date, time: moment.time, emotion: null,
-      placeRating: null, answers: [], excerpt: '', isDraft: true,
-      followUpEnabled: false,
-    }));
+    snapshot.moments = moments;
+    snapshot.notes = notes;
     window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
-  }, STORAGE_KEY);
-  await page.reload();
+  }, {
+    storageKey: STORAGE_KEY,
+    moments: seededMoments,
+    notes: seededNotes,
+  });
+  await page.goto('/');
   await page.getByRole('dialog', { name: '使用定位？' })
     .getByRole('button', { name: '暂不' }).click();
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.moments?.map((moment: { id: string }) => moment.id) ?? [];
+  }, STORAGE_KEY)).toEqual(['moment-tag-1', 'moment-tag-2']);
   await expect(page.locator('.map-star-button')).toHaveCount(2);
   await expandMapTools(page);
   await page.getByRole('button', { name: '标记并连接星星' }).click();
@@ -613,6 +658,17 @@ test('touching stars in connection mode assigns visible order numbers', async ({
     const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
     return snapshot.moments.map((moment: { tagOrder?: number }) => moment.tagOrder);
   }, STORAGE_KEY)).toEqual([1, 2]);
+
+  await page.getByRole('button', { name: '收起标记工具' }).click();
+  await page.locator('.map-star-button').last().click();
+  await expect(page.locator('.star-navigation-overlay')).toBeVisible();
+  await expect(page.locator('.star-action-overlay')).toBeVisible();
+
+  await page.getByRole('button', { name: '标记并连接星星' }).click();
+  await expect(page.locator('.star-action-overlay')).toBeVisible();
+  await page.locator('.star-navigation-overlay button').nth(1).click();
+  await expect(page.locator('.map-star-button').first().locator('.emotion-star'))
+    .toHaveClass(/is-selected/);
 });
 
 test('tablet, landscape, desktop, and 200% zoom layouts stay usable', async ({

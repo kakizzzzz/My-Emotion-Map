@@ -1,6 +1,7 @@
 /* Note editor */
 
 .note-editor-overlay {
+  z-index: calc(var(--em-layer-sheet) + 10);
   display: flex;
   align-items: flex-end;
   justify-content: center;

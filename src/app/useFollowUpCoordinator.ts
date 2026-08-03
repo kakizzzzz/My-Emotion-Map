@@ -122,6 +122,7 @@ export function useFollowUpCoordinator({
       followUpId: string,
       label: string,
       kind: ChatOption['responseKind'],
+      source: 'chat' | 'inbox' = 'chat',
     ) => {
       if (answeringRef.current.has(followUpId)) return;
       const record = followUps.find((item) => item.id === followUpId);
@@ -146,6 +147,7 @@ export function useFollowUpCoordinator({
                 responseOptionId: kind,
                 answerCommandId,
                 answeredAt,
+                answeredVia: source,
                 assistantReply,
                 seenAt: item.seenAt ?? answeredAt,
               }
@@ -163,40 +165,42 @@ export function useFollowUpCoordinator({
         ));
       }
 
-      setConversations((current) =>
-        current.map((conversation) =>
-          conversation.id === FOLLOW_UP_CONVERSATION_ID
-            ? {
-                ...conversation,
-                unread: false,
-                preview: assistantReply,
-                messages: [
-                  ...conversation.messages.map((message) =>
-                    message.followUpId === followUpId
-                      ? { ...message, options: undefined }
-                      : message,
-                  ),
-                  {
-                    id: createRecordId('follow-up-response'),
-                    role: 'user',
-                    kind: 'followup_answer',
-                    body: label,
-                    followUpId,
-                    createdAt: answeredAt,
-                  },
-                  {
-                    id: createRecordId('follow-up-reply'),
-                    role: 'assistant',
-                    kind: 'followup_reply',
-                    body: assistantReply,
-                    followUpId,
-                    createdAt: answeredAt,
-                  },
-                ],
-              }
-            : conversation,
-        ),
-      );
+      if (source === 'chat') {
+        setConversations((current) =>
+          current.map((conversation) =>
+            conversation.id === FOLLOW_UP_CONVERSATION_ID
+              ? {
+                  ...conversation,
+                  unread: false,
+                  preview: assistantReply,
+                  messages: [
+                    ...conversation.messages.map((message) =>
+                      message.followUpId === followUpId
+                        ? { ...message, options: undefined }
+                        : message,
+                    ),
+                    {
+                      id: createRecordId('follow-up-response'),
+                      role: 'user',
+                      kind: 'followup_answer',
+                      body: label,
+                      followUpId,
+                      createdAt: answeredAt,
+                    },
+                    {
+                      id: createRecordId('follow-up-reply'),
+                      role: 'assistant',
+                      kind: 'followup_reply',
+                      body: assistantReply,
+                      followUpId,
+                      createdAt: answeredAt,
+                    },
+                  ],
+                }
+              : conversation,
+          ),
+        );
+      }
     },
     [
       followUps,
