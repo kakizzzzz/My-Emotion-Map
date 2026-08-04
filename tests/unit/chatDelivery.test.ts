@@ -67,6 +67,40 @@ describe('canonical chat delivery', () => {
     });
   });
 
+  it('consumes clarification buttons when one candidate is selected', () => {
+    const submitted = submitChatRequest(empty, {
+      conversationId: 'conversation-1', requestId: 'chat-request-1',
+      body: '那次是什么？', fallbackTitle: '新的对话',
+      createdAt: '2026-08-02T12:00:00.000Z',
+    });
+    const completed = completeChatRequest(submitted, {
+      conversationId: 'conversation-1', requestId: 'chat-request-1',
+      assistantBody: '请选择一条记录。', noteIds: [],
+      clarificationOptions: [{
+        optionId: 'candidate-1', label: '图书馆 · 2026-08-01',
+        continuationToken: 'signed-token',
+      }], createdAt: '2026-08-02T12:00:01.000Z',
+    });
+    const selected = submitChatRequest(completed, {
+      conversationId: 'conversation-1', requestId: 'chat-request-2',
+      body: '图书馆 · 2026-08-01', fallbackTitle: '新的对话',
+      createdAt: '2026-08-02T12:00:02.000Z',
+      referenceConfirmation: {
+        optionId: 'candidate-1',
+        continuationToken: 'signed-token',
+      },
+    });
+
+    expect(selected[0].messages[1].clarificationOptions).toBeUndefined();
+    expect(selected[0].messages[2]).toMatchObject({
+      requestId: 'chat-request-2',
+      referenceConfirmation: {
+        optionId: 'candidate-1',
+        continuationToken: 'signed-token',
+      },
+    });
+  });
+
   it('stores external evidence separately from local note ids', () => {
     const submitted = submitChatRequest(empty, {
       conversationId: 'conversation-1', requestId: 'chat-request-1',
