@@ -20,6 +20,23 @@ type SubmitChatRequest = {
   };
 };
 
+const consumeSelectedClarification = (
+  conversation: Conversation,
+  confirmation: SubmitChatRequest['referenceConfirmation'],
+): Conversation['messages'] => {
+  if (!confirmation) return conversation.messages;
+  return conversation.messages.map((message) => {
+    const selected = message.clarificationOptions?.some(
+      (option) =>
+        option.optionId === confirmation.optionId &&
+        option.continuationToken === confirmation.continuationToken,
+    );
+    return selected
+      ? { ...message, clarificationOptions: undefined }
+      : message;
+  });
+};
+
 export const submitChatRequest = (
   conversations: Conversation[],
   input: SubmitChatRequest,
@@ -57,7 +74,13 @@ export const submitChatRequest = (
         ? {
             ...conversation,
             preview: input.body.slice(0, 120),
-            messages: [...conversation.messages, userMessage],
+            messages: [
+              ...consumeSelectedClarification(
+                conversation,
+                input.referenceConfirmation,
+              ),
+              userMessage,
+            ],
           }
         : conversation,
     );
