@@ -52,7 +52,11 @@
 }
 
 .cloud-sync-toast {
-  bottom: var(--em-chrome-bottom);
+  top: max(
+    12px,
+    calc(env(safe-area-inset-top) + 12px)
+  );
+  bottom: auto;
   flex-wrap: wrap;
 }
 
@@ -75,6 +79,19 @@
   min-height: 32px;
   padding: 0 10px;
   text-decoration: none;
+}
+
+.cloud-sync-toast__actions .cloud-sync-toast__primary {
+  background: white;
+  color: var(--em-dark);
+}
+
+.cloud-sync-toast__advanced {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
 }
 
 /* Location permission */

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   applyMutations: vi.fn(),
   applyChanges: vi.fn(),
   enqueue: vi.fn(),
+  readOutbox: vi.fn(),
   clear: vi.fn(),
   writeRecovery: vi.fn(),
   discardAfterRecovery: vi.fn(),
@@ -39,6 +40,11 @@ vi.mock('../../src/services/normalizedSync/emotionRepository', () => ({
 vi.mock('../../src/services/normalizedSync/emotionOutbox', () => ({
   clearEmotionMutationOutbox: mocks.clear,
   enqueueEmotionMutations: mocks.enqueue,
+  readEmotionMutationOutbox: mocks.readOutbox,
+  newestEmotionOutboxForUser: (
+    first: EmotionMutationOutbox | null,
+    second: EmotionMutationOutbox | null,
+  ) => first ?? second,
   writeEmotionRecoveryBundle: mocks.writeRecovery,
   discardEmotionOutboxAfterRecovery: mocks.discardAfterRecovery,
 }));
@@ -92,6 +98,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal('BroadcastChannel', undefined);
   mocks.clear.mockResolvedValue(undefined);
+  mocks.readOutbox.mockResolvedValue(null);
   mocks.writeRecovery.mockResolvedValue(undefined);
   mocks.applyChanges.mockImplementation((_: unknown, value: { snapshot: unknown }) =>
     value.snapshot);
@@ -132,6 +139,136 @@ afterEach(() => {
 });
 
 describe('cross-device foreground normalized refresh', () => {
+  it('queues edits made while the initial cloud bootstrap is still loading', async () => {
+    const baseApp = createEmptyAppData();
+    const base = normalized(baseApp);
+    const { moment, note } = createRecord({
+      longitude: 121.544,
+      latitude: 29.8683,
+      place: '启动时放下的星星',
+      language: 'zh',
+      source: 'manual',
+    });
+    const localApp = {
+      ...baseApp,
+      moments: [moment],
+      notes: [{ ...note, isDraft: false }],
+    };
+    let finishBootstrap!: (value: ReturnType<typeof loaded>) => void;
+    mocks.bootstrap.mockImplementationOnce(() => new Promise((resolve) => {
+      finishBootstrap = resolve;
+    }));
+    const applySnapshot = vi.fn();
+    const { rerender } = renderHook(
+      ({ snapshot }) => useCloudSync({ client, session, snapshot, applySnapshot }),
+      { initialProps: { snapshot: baseApp } },
+    );
+
+    rerender({ snapshot: localApp });
+    await act(async () => { finishBootstrap(loaded(base, 0)); });
+
+    await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(applySnapshot).toHaveBeenCalled());
+    expect(applySnapshot.mock.calls.at(-1)?.[0].moments).toHaveLength(1);
+  });
+
+  it('does not let an old remote snapshot overwrite a local edit awaiting enqueue', async () => {
+    const baseApp = createEmptyAppData();
+    const base = normalized(baseApp);
+    const { moment, note } = createRecord({
+      longitude: 121.544,
+      latitude: 29.8683,
+      place: '刚放下的星星',
+      language: 'zh',
+      source: 'manual',
+    });
+    const localApp = {
+      ...baseApp,
+      moments: [moment],
+      notes: [{ ...note, isDraft: false }],
+    };
+    mocks.bootstrap.mockResolvedValue(loaded(base, 0));
+    mocks.loadChanges.mockResolvedValue(changes(base, 0));
+    mocks.enqueue.mockImplementationOnce(() => new Promise(() => undefined));
+    const applySnapshot = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ snapshot }) => useCloudSync({ client, session, snapshot, applySnapshot }),
+      { initialProps: { snapshot: baseApp } },
+    );
+    await waitFor(() => expect(result.current.status).toBe('synced'));
+    applySnapshot.mockClear();
+
+    rerender({ snapshot: localApp });
+    await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledTimes(1));
+    act(() => window.dispatchEvent(new Event('focus')));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(applySnapshot).not.toHaveBeenCalled();
+  });
+
+  it('does not apply a draft upload receipt over a final save awaiting enqueue', async () => {
+    const baseApp = createEmptyAppData();
+    const base = normalized(baseApp);
+    const { moment, note } = createRecord({
+      longitude: 121.544,
+      latitude: 29.8683,
+      place: '先上传草稿的星星',
+      language: 'zh',
+      source: 'manual',
+    });
+    const draftApp = {
+      ...baseApp,
+      moments: [moment],
+      notes: [note],
+    };
+    const finalApp = {
+      ...draftApp,
+      moments: [{ ...moment, isNew: false, emotion: 'calm' as const }],
+      notes: [{
+        ...note,
+        title: '已经正式保存',
+        titleSource: 'user' as const,
+        isDraft: false,
+        emotion: 'calm' as const,
+      }],
+    };
+    const remoteDraft = normalized(draftApp);
+    mocks.bootstrap.mockResolvedValue(loaded(base, 0));
+    mocks.loadChanges.mockResolvedValue(changes(remoteDraft, 1));
+    let finishFirstUpload!: (value: { saved: true; revision: number }) => void;
+    mocks.applyMutations.mockImplementationOnce(() => new Promise((resolve) => {
+      finishFirstUpload = resolve;
+    }));
+    const applySnapshot = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ snapshot }) => useCloudSync({ client, session, snapshot, applySnapshot }),
+      { initialProps: { snapshot: baseApp } },
+    );
+    await waitFor(() => expect(result.current.status).toBe('synced'));
+    applySnapshot.mockClear();
+
+    rerender({ snapshot: draftApp });
+    await waitFor(() => expect(mocks.applyMutations).toHaveBeenCalledTimes(1));
+    let finishFinalEnqueue!: () => void;
+    mocks.enqueue.mockImplementationOnce(({
+      expectedRevision,
+      mutations,
+    }: {
+      expectedRevision: number;
+      mutations: EmotionMutation[];
+    }) => new Promise((resolve) => {
+      finishFinalEnqueue = () => resolve(outbox(mutations, expectedRevision));
+    }));
+    rerender({ snapshot: finalApp });
+    await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledTimes(2));
+    await act(async () => { finishFirstUpload({ saved: true, revision: 1 }); });
+    await waitFor(() => expect(mocks.loadChanges).toHaveBeenCalledTimes(1));
+
+    expect(applySnapshot).not.toHaveBeenCalled();
+    await act(async () => { finishFinalEnqueue(); });
+    await waitFor(() => expect(mocks.applyMutations).toHaveBeenCalledTimes(2));
+  });
+
   it('loads a remote star and follow-up chat when the app regains focus', async () => {
     const baseApp = createEmptyAppData();
     const base = normalized(baseApp);

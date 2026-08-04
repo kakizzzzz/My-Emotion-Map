@@ -21,6 +21,8 @@ const COPY: Record<AppLanguage, {
   useRemote: string;
   keepLocal: string;
   downloadRecovery: string;
+  moreOptions: string;
+  lessOptions: string;
 }> = {
   zh: {
     checking: '正在检查云端…',
@@ -39,6 +41,8 @@ const COPY: Record<AppLanguage, {
     useRemote: '载入云端',
     keepLocal: '保留本机',
     downloadRecovery: '下载恢复副本',
+    moreOptions: '更多选项',
+    lessOptions: '收起选项',
   },
   en: {
     checking: 'Checking cloud…',
@@ -57,6 +61,8 @@ const COPY: Record<AppLanguage, {
     useRemote: 'Load cloud',
     keepLocal: 'Keep this device',
     downloadRecovery: 'Download recovery',
+    moreOptions: 'More options',
+    lessOptions: 'Fewer options',
   },
   ko: {
     checking: '클라우드를 확인하는 중…',
@@ -75,6 +81,8 @@ const COPY: Record<AppLanguage, {
     useRemote: '클라우드 불러오기',
     keepLocal: '이 기기 유지',
     downloadRecovery: '복구 사본 다운로드',
+    moreOptions: '다른 선택',
+    lessOptions: '선택 접기',
   },
 };
 
@@ -98,6 +106,7 @@ export function CloudSyncNotice({
   onDownloadRecovery: () => void;
 }) {
   const [showSynced, setShowSynced] = useState(false);
+  const [showConflictOptions, setShowConflictOptions] = useState(false);
 
   useEffect(() => {
     if (status !== 'synced' || !isUserOperationSync) {
@@ -108,6 +117,10 @@ export function CloudSyncNotice({
     const timer = window.setTimeout(() => setShowSynced(false), 900);
     return () => window.clearTimeout(timer);
   }, [isUserOperationSync, status]);
+
+  useEffect(() => {
+    if (status !== 'conflict') setShowConflictOptions(false);
+  }, [status]);
 
   const requiresAttention =
     status === 'conflict' ||
@@ -172,18 +185,37 @@ export function CloudSyncNotice({
           <span>{message}</span>
           {visibleStatus === 'conflict' ? (
             <span className="cloud-sync-toast__actions">
-              <button type="button" onClick={onSafeMerge}>
+              <button
+                type="button"
+                className="cloud-sync-toast__primary"
+                onClick={onSafeMerge}
+              >
                 {copy.safeMerge}
               </button>
-              <button type="button" onClick={onKeepLocal}>
-                {copy.keepLocal}
+              <button
+                type="button"
+                aria-expanded={showConflictOptions}
+                aria-controls="cloud-sync-advanced-actions"
+                onClick={() => setShowConflictOptions((value) => !value)}
+              >
+                {showConflictOptions ? copy.lessOptions : copy.moreOptions}
               </button>
-              <button type="button" onClick={onUseRemote}>
-                {copy.useRemote}
-              </button>
-              <button type="button" onClick={onDownloadRecovery}>
-                {copy.downloadRecovery}
-              </button>
+              {showConflictOptions ? (
+                <span
+                  id="cloud-sync-advanced-actions"
+                  className="cloud-sync-toast__advanced"
+                >
+                  <button type="button" onClick={onKeepLocal}>
+                    {copy.keepLocal}
+                  </button>
+                  <button type="button" onClick={onUseRemote}>
+                    {copy.useRemote}
+                  </button>
+                  <button type="button" onClick={onDownloadRecovery}>
+                    {copy.downloadRecovery}
+                  </button>
+                </span>
+              ) : null}
             </span>
           ) : null}
         </motion.div>

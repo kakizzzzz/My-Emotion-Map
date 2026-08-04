@@ -5,6 +5,46 @@ const asObject = (value: unknown): Record<string, unknown> | null =>
     ? value as Record<string, unknown>
     : null;
 
+const isValidLocalDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+};
+
+const readClientContext = (value: unknown) => {
+  const context = asObject(value);
+  if (!context || Object.keys(context).some((key) => ![
+    'localDate', 'localTime', 'timeZone', 'utcOffsetMinutes',
+  ].includes(key))) return null;
+  const localDate = typeof context.localDate === 'string'
+    ? context.localDate.trim()
+    : '';
+  const localTime = typeof context.localTime === 'string'
+    ? context.localTime.trim()
+    : '';
+  const timeZone = context.timeZone === null
+    ? null
+    : typeof context.timeZone === 'string'
+      ? context.timeZone.trim()
+      : '';
+  const utcOffsetMinutes = context.utcOffsetMinutes;
+  if (
+    !isValidLocalDate(localDate) ||
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(localTime) ||
+    (timeZone !== null && !/^[A-Za-z0-9_+\-/]{1,80}$/.test(timeZone)) ||
+    typeof utcOffsetMinutes !== 'number' ||
+    !Number.isInteger(utcOffsetMinutes) ||
+    utcOffsetMinutes < -840 || utcOffsetMinutes > 840
+  ) return null;
+  return { localDate, localTime, timeZone, utcOffsetMinutes };
+};
+
 export const validateEmotionChatRequest = (value: unknown) => {
   const body = asObject(value);
   if (!body) return null;
@@ -14,6 +54,7 @@ export const validateEmotionChatRequest = (value: unknown) => {
     'clientRevision', 'stylePrompt',
     'recentMessages', 'referenceConfirmation',
     'routingPlanToken',
+    'clientContext',
   ]);
   if (Object.keys(body).some((key) => !allowed.has(key))) return null;
   const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -75,6 +116,10 @@ export const validateEmotionChatRequest = (value: unknown) => {
     : '';
   if (body.routingPlanToken !== undefined &&
     (!routingPlanToken || routingPlanToken.length > 4_000)) return null;
+  const clientContext = body.clientContext === undefined
+    ? undefined
+    : readClientContext(body.clientContext);
+  if (body.clientContext !== undefined && !clientContext) return null;
   if (!/^[A-Za-z0-9:_-]{1,200}$/.test(requestId) ||
     !message || message.length > 1_200 || !conversationId ||
     conversationId.length > 200 || clientRevision === null) return null;
@@ -84,6 +129,7 @@ export const validateEmotionChatRequest = (value: unknown) => {
     clientRevision, stylePrompt,
     recentMessages, referenceConfirmation,
     routingPlanToken: routingPlanToken || undefined,
+    clientContext,
   };
 };
 

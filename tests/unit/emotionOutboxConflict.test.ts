@@ -141,6 +141,43 @@ describe('durable emotion mutation outbox', () => {
     ).records).toEqual([]);
   });
 
+  it('rebases a trailing edit after the server canonicalizes a confirmed create', () => {
+    const empty = normalized(createEmptyAppData());
+    const draftApp = recordSnapshot();
+    const draft = normalized(draftApp);
+    const finalApp = structuredClone(draftApp);
+    finalApp.moments[0].isNew = false;
+    finalApp.moments[0].emotion = 'calm';
+    finalApp.notes[0].title = '正式保存';
+    finalApp.notes[0].titleSource = 'user';
+    finalApp.notes[0].isDraft = false;
+    finalApp.notes[0].emotion = 'calm';
+    const final = normalized(finalApp);
+    const confirmedCreate = diffEmotionState(empty, draft);
+    const trailingSave = diffEmotionState(draft, final);
+    const canonicalRemote = structuredClone(draft);
+    canonicalRemote.records[0].longitude = Number(
+      canonicalRemote.records[0].longitude.toFixed(14),
+    );
+    canonicalRemote.records[0].occurredAtUtc =
+      canonicalRemote.records[0].occurredAtUtc?.replace('.000Z', '+00:00') ?? null;
+
+    const reconciled = reconcileEmotionMutationsAfterRemoteAdvance({
+      pendingMutations: trailingSave,
+      inFlightMutations: [],
+      confirmedMutations: confirmedCreate,
+      remote: canonicalRemote,
+    });
+
+    expect(reconciled.conflicts).toEqual([]);
+    expect(reconciled.safeMutations).toHaveLength(1);
+    expect(reconciled.safeMutations[0]).toMatchObject({
+      type: 'record_upsert',
+      payload: { title: '正式保存', isDraft: false },
+      base: canonicalRemote.records[0],
+    });
+  });
+
   it('uses the required isolated IndexedDB and per-account key path', () => {
     expect(EMOTION_SYNC_DB_NAME).toBe('my-emotion-map-sync-v2');
     expect(EMOTION_OUTBOX_STORE_NAME).toBe('emotion-mutation-outbox');

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CloudSyncNotice } from '../../src/app/CloudSyncNotice';
 
@@ -48,5 +48,27 @@ describe('cloud sync notice visibility', () => {
     );
 
     expect(screen.getByText(/云端权限已失效/)).toBeInTheDocument();
+  });
+
+  it('keeps the safe merge prominent and hides advanced conflict choices', () => {
+    render(
+      <CloudSyncNotice
+        status="conflict"
+        isUserOperationSync={false}
+        language="zh"
+        {...actions}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '安全合并' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '载入云端' })).toBeNull();
+    const more = screen.getByRole('button', { name: '更多选项' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(more);
+
+    expect(screen.getByRole('button', { name: '载入云端' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保留本机' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下载恢复副本' })).toBeInTheDocument();
   });
 });

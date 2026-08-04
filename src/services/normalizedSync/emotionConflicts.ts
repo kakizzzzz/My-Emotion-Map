@@ -98,15 +98,20 @@ export const rebaseEmotionMutationBases = (
 export const reconcileEmotionMutationsAfterRemoteAdvance = ({
   pendingMutations,
   inFlightMutations,
+  confirmedMutations = [],
   remote,
 }: {
   pendingMutations: EmotionMutation[];
   inFlightMutations: EmotionMutation[];
+  confirmedMutations?: EmotionMutation[];
   remote: NormalizedEmotionSnapshot;
 }) => {
-  const appliedKeys = new Set(inFlightMutations
-    .filter((mutation) => mutationMatchesRemote(mutation, remote))
-    .map(emotionMutationKey));
+  const appliedKeys = new Set([
+    ...confirmedMutations.map(emotionMutationKey),
+    ...inFlightMutations
+      .filter((mutation) => mutationMatchesRemote(mutation, remote))
+      .map(emotionMutationKey),
+  ]);
   const replayableInFlightKeys = new Set(inFlightMutations
     .filter((mutation) => {
       if (mutationMatchesRemote(mutation, remote)) return false;

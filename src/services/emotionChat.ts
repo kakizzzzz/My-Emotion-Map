@@ -1,6 +1,10 @@
 import type { AppLanguage } from '../i18n';
 import type { ClarificationOption, McpCallReference } from '../types';
 import { sanitizeMcpCalls } from '../domain/query/mcpCalls';
+import {
+  createDeviceTemporalContext,
+  type DeviceTemporalContext,
+} from '../domain/time/temporal';
 import type { CloudAuth } from './supabaseClient';
 
 export type PublicEvidence = {
@@ -271,6 +275,7 @@ export const requestEmotionChat = async ({
   clientRevision,
   routingPlanToken,
   referenceConfirmation,
+  clientContext = createDeviceTemporalContext(),
   signal,
 }: {
   auth: CloudAuth;
@@ -288,6 +293,7 @@ export const requestEmotionChat = async ({
     optionId: string;
     continuationToken: string;
   };
+  clientContext?: DeviceTemporalContext;
   signal: AbortSignal;
 }) => {
   const requestPayload = {
@@ -305,6 +311,7 @@ export const requestEmotionChat = async ({
     clientRevision,
     routingPlanToken,
     referenceConfirmation,
+    clientContext,
   };
   let body = JSON.stringify(requestPayload);
   let retriedWithLegacyPayload = false;
@@ -324,7 +331,8 @@ export const requestEmotionChat = async ({
       (
         requestPayload.recentMessages.length > 0 ||
         Boolean(requestPayload.stylePrompt) ||
-        Boolean(requestPayload.routingPlanToken)
+        Boolean(requestPayload.routingPlanToken) ||
+        Boolean(requestPayload.clientContext)
       ) &&
       !retriedWithLegacyPayload
     ) {
@@ -333,6 +341,7 @@ export const requestEmotionChat = async ({
         recentMessages: _recentMessages,
         stylePrompt: _stylePrompt,
         routingPlanToken: _routingPlanToken,
+        clientContext: _clientContext,
         ...legacyPayload
       } = requestPayload;
       body = JSON.stringify(legacyPayload);

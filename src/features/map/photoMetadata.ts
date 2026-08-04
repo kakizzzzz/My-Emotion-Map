@@ -1,5 +1,3 @@
-import { parse } from 'exifr';
-
 export type PhotoMetadata = {
   latitude: number;
   longitude: number;
@@ -161,20 +159,26 @@ export const readPhotoMetadata = async (file: File): Promise<PhotoMetadata | nul
   const coordinates = await readPhotoGpsCoordinates(file);
   if (!coordinates) return null;
   const [latitude, longitude] = coordinates;
-  let tags: Awaited<ReturnType<typeof parse>> | undefined;
+  let tags: {
+    DateTimeOriginal?: unknown;
+    CreateDate?: unknown;
+    OffsetTimeOriginal?: unknown;
+    OffsetTimeDigitized?: unknown;
+  } | undefined;
   try {
+    const { parse } = await import('exifr');
     tags = await parse(file, {
       exif: true,
       ifd0: {},
       translateValues: false,
       reviveValues: false,
       pick: ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal', 'OffsetTimeDigitized'],
-    });
+    }) as typeof tags;
   } catch {
     return { latitude, longitude };
   }
   const source = typeof tags?.DateTimeOriginal === 'string' ? 'DateTimeOriginal' : typeof tags?.CreateDate === 'string' ? 'CreateDate' : undefined;
-  const wall = source ? parseExifWallTime(tags[source]) : null;
+  const wall = source ? parseExifWallTime(tags?.[source]) : null;
   if (!source || !wall) return { latitude, longitude };
   const candidateOffset = tags?.OffsetTimeOriginal ?? tags?.OffsetTimeDigitized;
   const offset = typeof candidateOffset === 'string' && OFFSET.test(candidateOffset) ? candidateOffset : undefined;

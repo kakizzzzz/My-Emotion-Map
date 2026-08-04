@@ -306,11 +306,14 @@ export function App() {
     () => prepareCloudSnapshot(workspaceSnapshot),
     [workspaceSnapshot],
   );
+  const applyCloudSnapshot = useCallback((next: typeof cloudSnapshot) => {
+    applySnapshot(next, { preserveTransientState: true });
+  }, [applySnapshot]);
   const cloudSync = useCloudSync({
     client: cloudSession.client,
     session: workspaceReady ? cloudSession.session : null,
     snapshot: cloudSnapshot,
-    applySnapshot,
+    applySnapshot: applyCloudSnapshot,
     blockedByFutureSchema: workspaceUpgradeRequired,
     pauseRemoteRefresh: hasPendingChatRequest,
   });
@@ -740,13 +743,12 @@ export function App() {
                   onAnswerFollowUp={(followUpId, label, kind) => {
                     const followUp = followUps.find((record) => record.id === followUpId);
                     answerFollowUp(followUpId, label, kind, 'inbox');
+                    if (kind === 'skip' || !followUp) return;
                     setStarInboxOpen(false);
-                    if (kind !== 'skip' && followUp) {
-                      window.setTimeout(() => {
-                        setRevisitFollowUpId(followUp.id);
-                        setRevisitNoteId(followUp.noteId);
-                      }, 220);
-                    }
+                    window.setTimeout(() => {
+                      setRevisitFollowUpId(followUp.id);
+                      setRevisitNoteId(followUp.noteId);
+                    }, 220);
                   }}
                   onClose={() => setStarInboxOpen(false)}
                 />

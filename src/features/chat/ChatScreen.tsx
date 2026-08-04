@@ -44,6 +44,7 @@ import type { ToastHandler } from '../../app/appTypes';
 import { loadLocalSettings } from '../../app/profilePreferences';
 import { chatDraftKey } from '../../app/workspace/chatDraftStorage';
 import { createRecordId } from '../../app/createRecordId';
+import { createDeviceTemporalContext } from '../../domain/time/temporal';
 import type {
   BeginChatInput,
   CompleteChatInput,
@@ -342,6 +343,7 @@ export function ChatScreen({
               clientRevision: cloudRevision,
               routingPlanToken: plan.routingPlanToken,
               referenceConfirmation,
+              clientContext: createDeviceTemporalContext(),
               signal: controller.signal,
             });
           })()

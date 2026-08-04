@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { ACCOUNT_PREFERENCES_CHANGED_EVENT, loadLocalSettings } from '../../app/profilePreferences';
 import { normalizeEmotionSnapshot } from '../../domain/storage/normalizedEmotionSnapshot';
 import type { AppDataSnapshot } from '../../types';
 import { clearEmotionMutationOutbox, enqueueEmotionMutations,
+  newestEmotionOutboxForUser, readEmotionMutationOutbox,
   writeEmotionRecoveryBundle,
   type EmotionMutationOutbox,
   type EmotionRecoveryBundle, type EmotionSyncErrorInfo,
@@ -23,7 +24,11 @@ import { bootstrapNormalizedEmotionSync } from './emotionSyncBootstrap';
 import { createEmotionRecoveryBundle, downloadEmotionRecoveryBundle,
   normalizedEmotionDeviceSnapshot, persistNormalizedEmotionPreferences,
 } from './emotionSyncRuntime';
-import type { CloudSyncStatus, NormalizedEmotionSnapshot } from './emotionSyncTypes';
+import type {
+  CloudSyncStatus,
+  EmotionMutation,
+  NormalizedEmotionSnapshot,
+} from './emotionSyncTypes';
 import { nextEmotionMutationBatch } from './emotionMutationBatching';
 export type { CloudSyncStatus } from './emotionSyncTypes';
 const online = () => typeof navigator === 'undefined' || navigator.onLine;
@@ -66,9 +71,12 @@ export function useNormalizedCloudSync({
   const refreshingRef = useRef(false);
   const deferredRefreshRef = useRef(false);
   const suppressPreferenceEventRef = useRef(false);
+  const pendingLocalEnqueueCountRef = useRef(0);
   const localQueueRef = useRef(Promise.resolve());
-  useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
-  useEffect(() => { applySnapshotRef.current = applySnapshot; }, [applySnapshot]);
+  useLayoutEffect(() => {
+    snapshotRef.current = snapshot;
+    applySnapshotRef.current = applySnapshot;
+  }, [applySnapshot, snapshot]);
   const setRemoteRevision = useCallback((next: number | null) => {
     revisionRef.current = next;
     setRevision(next);
@@ -93,6 +101,18 @@ export function useNormalizedCloudSync({
     else if (error.kind === 'upgrade_required') setStatus('upgrade_required');
     else if (error.kind === 'network' || !online()) setStatus('offline');
     else setStatus('error');
+  }, []);
+  const hasUnqueuedLocalChanges = useCallback((userId: string) => {
+    if (pendingLocalEnqueueCountRef.current > 0) return true;
+    if (outboxRef.current?.mutations.length) return false;
+    if (!observedLocalRef.current) {
+      return false;
+    }
+    const local = normalizeEmotionSnapshot(
+      snapshotRef.current,
+      loadLocalSettings(userId),
+    ).snapshot;
+    return diffEmotionState(observedLocalRef.current, local).length > 0;
   }, []);
   const saveConflict = useCallback(async (
     userId: string,
@@ -120,6 +140,7 @@ export function useNormalizedCloudSync({
     userId: string,
     remote: NormalizedEmotionSnapshot,
     nextRevision: number,
+    confirmedMutations: EmotionMutation[] = [],
   ) => {
     remoteRef.current = remote;
     setRemoteRevision(nextRevision);
@@ -134,6 +155,7 @@ export function useNormalizedCloudSync({
     }
     const reconciled = reconcileEmotionMutationsAfterRemoteAdvance({
       pendingMutations: outbox.mutations,
+      confirmedMutations,
       inFlightMutations: outbox.inFlightBatch?.mutations ?? [],
       remote,
     });
@@ -173,6 +195,10 @@ export function useNormalizedCloudSync({
       deferredRefreshRef.current = true;
       return;
     }
+    if (hasUnqueuedLocalChanges(userId)) {
+      deferredRefreshRef.current = true;
+      return;
+    }
     refreshingRef.current = true;
     const requestGeneration = generationRef.current;
     if (!outboxRef.current?.mutations.length) {
@@ -190,6 +216,10 @@ export function useNormalizedCloudSync({
       const remote = 'records' in loaded
         ? applyEmotionChanges(currentRemote as NormalizedEmotionSnapshot, loaded)
         : loaded.snapshot;
+      if (hasUnqueuedLocalChanges(userId)) {
+        deferredRefreshRef.current = true;
+        return;
+      }
       await acceptRemoteAdvance(userId, remote, loaded.revision);
     } catch (error) {
       if (generationRef.current === requestGeneration) handleError(error);
@@ -197,8 +227,8 @@ export function useNormalizedCloudSync({
       refreshingRef.current = false;
       deferredRefreshRef.current = false;
     }
-  }, [acceptRemoteAdvance, client, handleError, pauseRemoteRefresh,
-    session?.user.id, status]);
+  }, [acceptRemoteAdvance, client, handleError, hasUnqueuedLocalChanges,
+    pauseRemoteRefresh, session?.user.id, status]);
 
   const flushOutbox = useCallback(async () => {
     const userId = session?.user.id;
@@ -207,6 +237,7 @@ export function useNormalizedCloudSync({
       status === 'setup_required') return;
     flushingRef.current = true;
     const requestGeneration = generationRef.current;
+    let completedNormally = false;
     try {
       while (outboxRef.current?.mutations.length) {
         let outbox = outboxRef.current;
@@ -241,19 +272,42 @@ export function useNormalizedCloudSync({
           remoteRef.current as NormalizedEmotionSnapshot,
           changes,
         );
-        await acceptRemoteAdvance(userId, remote, changes.revision);
+        if (hasUnqueuedLocalChanges(userId)) {
+          if (pendingLocalEnqueueCountRef.current > 0) {
+            await localQueueRef.current;
+            await acceptRemoteAdvance(userId, remote, changes.revision, batch);
+          } else {
+            remoteRef.current = remote;
+            setRemoteRevision(changes.revision);
+            deferredRefreshRef.current = true;
+          }
+          continue;
+        }
+        await acceptRemoteAdvance(userId, remote, changes.revision, batch);
         channelRef.current?.postMessage({
           type: 'normalized_revision', userId, revision: changes.revision,
         });
         if (conflictRemoteRef.current) return;
       }
+      await localQueueRef.current;
+      outboxRef.current = newestEmotionOutboxForUser(
+        outboxRef.current,
+        await readEmotionMutationOutbox(userId),
+        userId,
+      );
+      completedNormally = true;
     } catch (error) {
       handleError(error);
     } finally {
       flushingRef.current = false;
+      if (completedNormally && outboxRef.current?.mutations.length &&
+        !conflictRemoteRef.current) {
+        setStatus('local');
+        setOutboxVersion((value) => value + 1);
+      }
     }
-  }, [acceptRemoteAdvance, client, handleError, refreshRemote,
-    session?.user.id, status]);
+  }, [acceptRemoteAdvance, client, handleError, hasUnqueuedLocalChanges,
+    refreshRemote, session?.user.id, setRemoteRevision, status]);
 
   const enqueueCurrentLocal = useCallback(() => {
     const userId = session?.user.id;
@@ -267,17 +321,25 @@ export function useNormalizedCloudSync({
     observedLocalRef.current = local;
     if (!mutations.length) return;
     setIsUserOperationSync(true);
+    pendingLocalEnqueueCountRef.current += 1;
     localQueueRef.current = localQueueRef.current.then(async () => {
-      const next = await enqueueEmotionMutations({
-        userId,
-        expectedRevision: revisionRef.current ?? 0,
-        mutations,
-        language: loadLocalSettings(userId).language,
-      });
-      outboxRef.current = next;
-      setErrorInfo(null);
-      setStatus('local');
-      setOutboxVersion((value) => value + 1);
+      try {
+        const next = await enqueueEmotionMutations({
+          userId,
+          expectedRevision: revisionRef.current ?? 0,
+          mutations,
+          language: loadLocalSettings(userId).language,
+        });
+        outboxRef.current = next;
+        setErrorInfo(null);
+        setStatus('local');
+        setOutboxVersion((value) => value + 1);
+      } finally {
+        pendingLocalEnqueueCountRef.current = Math.max(
+          0,
+          pendingLocalEnqueueCountRef.current - 1,
+        );
+      }
     }).catch(handleError);
   }, [handleError, session?.user.id]);
 
@@ -382,8 +444,24 @@ export function useNormalizedCloudSync({
         const { loaded, local, decision } = bootstrapped;
         remoteRef.current = loaded.snapshot;
         setRemoteRevision(loaded.revision);
-        observedLocalRef.current = local;
-        const outbox = bootstrapped.outbox;
+        const latestLocal = normalizeEmotionSnapshot(
+          snapshotRef.current,
+          loadLocalSettings(userId),
+        ).snapshot;
+        const changesDuringBootstrap = diffEmotionState(local, latestLocal);
+        let outbox = bootstrapped.outbox;
+        if (changesDuringBootstrap.length) {
+          setIsUserOperationSync(true);
+          outbox = await enqueueEmotionMutations({
+            userId,
+            expectedRevision: outbox?.expectedRevision ?? loaded.revision,
+            mutations: changesDuringBootstrap,
+            language: loadLocalSettings(userId).language,
+          });
+        }
+        observedLocalRef.current = changesDuringBootstrap.length
+          ? latestLocal
+          : local;
         outboxRef.current = outbox;
         readyRef.current = true;
         if (outbox?.mutations.length) {
@@ -446,7 +524,10 @@ export function useNormalizedCloudSync({
     isUserOperationSync,
     errorInfo,
     datasetRevision: revision ?? 0,
-    revision: status === 'synced' ? revision : null,
+    // Keep chat usable after a successful bootstrap even while local changes
+    // are queued or a retryable sync error is visible. Record-aware answers
+    // remain bounded to this last server-confirmed revision.
+    revision,
     safeMerge: () => { void resolveConflict('safe'); },
     useRemoteVersion: () => { void resolveConflict('remote'); },
     overwriteRemoteWithLocal: () => { void resolveConflict('local'); },

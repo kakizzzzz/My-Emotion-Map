@@ -26,12 +26,24 @@ describe('emotion-chat request boundary', () => {
     expect(validateEmotionChatRequest({
       ...valid,
       stylePrompt: ' 像熟悉的朋友一样自然交流 ',
+      clientContext: {
+        localDate: '2026-08-04',
+        localTime: '21:37',
+        timeZone: 'America/New_York',
+        utcOffsetMinutes: -240,
+      },
       recentMessages: Array.from({ length: 24 }, (_, index) => ({
         role: index % 2 ? 'assistant' : 'user',
         body: ` 第 ${index + 1} 条 `,
       })),
     })).toMatchObject({
       stylePrompt: '像熟悉的朋友一样自然交流',
+      clientContext: {
+        localDate: '2026-08-04',
+        localTime: '21:37',
+        timeZone: 'America/New_York',
+        utcOffsetMinutes: -240,
+      },
       recentMessages: expect.arrayContaining([
         { role: 'user', body: '第 5 条' },
         { role: 'assistant', body: '第 24 条' },
@@ -51,6 +63,14 @@ describe('emotion-chat request boundary', () => {
       { casualChatEnabled: false },
       { responseStyle: ['sharp'] },
       { selectedNoteIds: ['legacy-ambiguous-field'] },
+      { clientContext: {
+        localDate: '2026-02-31', localTime: '12:00',
+        timeZone: 'Asia/Shanghai', utcOffsetMinutes: 480,
+      } },
+      { clientContext: {
+        localDate: '2026-08-04', localTime: '12:00',
+        timeZone: 'Asia/Shanghai;ignore-system', utcOffsetMinutes: 480,
+      } },
     ]) {
       expect(validateEmotionChatRequest({ ...valid, ...forbidden })).toBeNull();
     }
@@ -343,6 +363,43 @@ describe('emotion-chat request boundary', () => {
     const legacyBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
     expect(legacyBody).not.toHaveProperty('recentMessages');
     expect(legacyBody).not.toHaveProperty('stylePrompt');
+    expect(legacyBody).not.toHaveProperty('clientContext');
+  });
+
+  it('sends a bounded device-local date, time and time zone to the AI runtime', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      requestId: valid.requestId,
+      serverRevision: valid.clientRevision,
+      intent: 'casual', retrievalStatus: 'supported', status: 'supported',
+      answer: '今天是 2026 年 8 月 4 日。', evidence: [], externalEvidence: [],
+      mcpCalls: [], confidence: 'none', limitations: [], clarificationOptions: [],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await requestEmotionChat({
+      auth: {
+        supabaseUrl: 'https://project.supabase.co',
+        publishableKey: 'publishable', accessToken: 'access', userId: 'user-a',
+      },
+      requestId: valid.requestId,
+      message: '今天是几号？',
+      language: 'zh',
+      conversationId: valid.conversationId,
+      conversationAnchorNoteIds: [],
+      clientRevision: valid.clientRevision,
+      clientContext: {
+        localDate: '2026-08-04', localTime: '21:37',
+        timeZone: 'America/New_York', utcOffsetMinutes: -240,
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      clientContext: {
+        localDate: '2026-08-04', localTime: '21:37',
+        timeZone: 'America/New_York', utcOffsetMinutes: -240,
+      },
+    });
   });
 
   it('accepts a bounded casual-chat response', async () => {

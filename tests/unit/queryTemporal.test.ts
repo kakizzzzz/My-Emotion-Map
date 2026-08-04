@@ -7,7 +7,11 @@ import {
   rankLocalSearch,
 } from '../../src/domain/query/rankRecords';
 import { resolveRetrievalStatus } from '../../src/domain/query/retrievalStatus';
-import { createTemporalFields, migrateLegacyTemporalFields } from '../../src/domain/time/temporal';
+import {
+  createDeviceTemporalContext,
+  createTemporalFields,
+  migrateLegacyTemporalFields,
+} from '../../src/domain/time/temporal';
 import type { EmotionMoment, EmotionNote } from '../../src/types';
 import {
   normalized as normalizeEdgeQuery,
@@ -102,6 +106,16 @@ describe('v4 query and temporal contracts', () => {
     expect(migrateLegacyTemporalFields({
       date: '2026-03-08', time: '02:30', eventTimeSource: 'legacy',
     })).toMatchObject({ occurredAtUtc: null, timeZone: null, utcOffsetMinutes: null });
+  });
+
+  it('reports the device local calendar time without assuming a fixed region', () => {
+    const date = new Date(2026, 7, 4, 21, 37);
+    expect(createDeviceTemporalContext(date)).toEqual({
+      localDate: '2026-08-04',
+      localTime: '21:37',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+      utcOffsetMinutes: -date.getTimezoneOffset(),
+    });
   });
 
   it('never returns recent records for a query with no matching term', () => {

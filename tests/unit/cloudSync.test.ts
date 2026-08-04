@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   applyMutations: vi.fn(),
   applyChanges: vi.fn(),
   enqueue: vi.fn(),
+  readOutbox: vi.fn(),
   clear: vi.fn(),
   writeRecovery: vi.fn(),
   discardAfterRecovery: vi.fn(),
@@ -43,6 +44,11 @@ vi.mock('../../src/services/normalizedSync/emotionRepository', () => ({
 vi.mock('../../src/services/normalizedSync/emotionOutbox', () => ({
   clearEmotionMutationOutbox: mocks.clear,
   enqueueEmotionMutations: mocks.enqueue,
+  readEmotionMutationOutbox: mocks.readOutbox,
+  newestEmotionOutboxForUser: (
+    first: EmotionMutationOutbox | null,
+    second: EmotionMutationOutbox | null,
+  ) => first ?? second,
   writeEmotionRecoveryBundle: mocks.writeRecovery,
   discardEmotionOutboxAfterRecovery: mocks.discardAfterRecovery,
 }));
@@ -124,6 +130,7 @@ describe('normalized cloud sync', () => {
     BroadcastChannelStub.instances = [];
     vi.clearAllMocks();
     mocks.clear.mockResolvedValue(undefined);
+    mocks.readOutbox.mockResolvedValue(null);
     mocks.writeRecovery.mockResolvedValue(undefined);
     mocks.discardAfterRecovery.mockResolvedValue(undefined);
     mocks.applyChanges.mockImplementation((_: unknown, changes: { snapshot: unknown }) =>
@@ -251,8 +258,10 @@ describe('normalized cloud sync', () => {
       ...createEmptyAppData(), moments: [moment], notes: [{ ...note, isDraft: false }],
     };
     const base = normalized(baseApp);
-    const local = structuredClone(base);
-    local.records[0].place = '本机地点';
+    const localApp = structuredClone(baseApp);
+    localApp.moments[0].place = '本机地点';
+    localApp.notes[0].place = '本机地点';
+    const local = normalized(localApp);
     const remote = structuredClone(base);
     remote.records[0].place = '云端地点';
     const pending = outbox(diffEmotionState(base, local), 7);
@@ -260,7 +269,7 @@ describe('normalized cloud sync', () => {
     const applySnapshot = vi.fn();
 
     const { result } = renderHook(() => useCloudSync({
-      client, session, snapshot: baseApp, applySnapshot,
+      client, session, snapshot: localApp, applySnapshot,
     }));
 
     await waitFor(() => expect(result.current.status).toBe('conflict'));

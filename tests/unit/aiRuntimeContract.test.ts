@@ -35,6 +35,8 @@ describe('AI runtime contracts', () => {
     expect(chat).toContain('if (casualEligible)');
     expect(chat).not.toContain('if (!evidence.length && casualEligible)');
     expect(chat).toContain("For a question about current external facts such as today's weather");
+    expect(chat).toContain('The only current clock context you may use is this device-reported value');
+    expect(chat).toContain('deviceLocalContext: clientContext ?? null');
     expect(chat).not.toContain('casualFallback(');
     expect(chat).not.toContain('casualQuickReply(');
   });

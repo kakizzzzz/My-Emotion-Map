@@ -123,7 +123,11 @@ async function expandMapTools(page: Page) {
   await expect(collapse).toBeVisible();
 }
 
-async function dragNewStarToMap(page: Page) {
+async function dragNewStarToMap(
+  page: Page,
+  target = { x: 180, y: 360 },
+  expectedCount = 1,
+) {
   await expandMapTools(page);
   const star = page.getByRole('button', {
     name: '点击在当前位置添加星星，或拖到地图上放置',
@@ -149,9 +153,9 @@ async function dragNewStarToMap(page: Page) {
       pointerId: 1, pointerType: 'mouse', isPrimary: true,
       button: 0, clientX: x, clientY: y,
     }));
-  }, { x: 180, y: 360 });
+  }, target);
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
-  await expect(page.locator('.map-star-button')).toHaveCount(1);
+  await expect(page.locator('.map-star-button')).toHaveCount(expectedCount);
 }
 
 async function completeEditor(page: Page, title: string) {
@@ -546,6 +550,193 @@ test('add, complete, reopen, revisit, persist, and permanently delete', async ({
   await expect(page.locator('.map-star-button')).toHaveCount(0);
 });
 
+test('five-star neurodiversity journey covers choices, skips, revisits, inbox, calendar, history and chat tools', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'chromium-mobile',
+    'The full five-record journey runs once; shared flows still run in WebKit.',
+  );
+  test.setTimeout(150_000);
+  const chatRequests: Array<Record<string, unknown>> = [];
+  await page.route(
+    'https://uifgpmmlvmfrauzbbrem.supabase.co/functions/v1/emotion-chat',
+    async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      chatRequests.push(body);
+      const message = String(body.message ?? '');
+      const clientRevision = Number(body.clientRevision ?? 0);
+      const requestId = String(body.requestId ?? '');
+      const usesMemory = /日本|旅行|記録|记录/.test(message);
+      if (body.operation === 'plan') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'planned', requestId, serverRevision: clientRevision,
+            source: usesMemory ? 'both' : 'emotion_map_local',
+            tools: usesMemory ? ['research_memory_context'] : [],
+            maxCalls: usesMemory ? 1 : 0,
+            routingPlanToken: `e2e-plan-${requestId}`,
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          requestId, serverRevision: clientRevision,
+          intent: usesMemory ? 'lookup' : 'casual',
+          retrievalStatus: 'supported', status: 'supported',
+          answer: usesMemory
+            ? '我接上了这段对话，并查过已连接的记忆工具。'
+            : `我知道你设备上的今天是 ${
+                (body.clientContext as { localDate?: string } | undefined)?.localDate ?? '未知日期'
+              }。`,
+          evidence: [],
+          externalEvidence: usesMemory ? [{
+            referenceId: 'external-e2e-1', title: '日本旅行',
+            date: '2026-07-01', place: '东京',
+            matchReason: 'my_life_memory:research',
+            source: 'my_life_memory_external',
+          }] : [],
+          mcpCalls: usesMemory ? [{
+            server: 'my_life_memory',
+            toolName: 'research_memory_context', status: 'completed',
+          }] : [],
+          confidence: usesMemory ? 'medium' : 'none',
+          limitations: [], clarificationOptions: [],
+        }),
+      });
+    },
+  );
+
+  await startBlank(page);
+  const scenarios = [
+    { title: '五条测试·平静', emotion: '平静', rating: '很安心', skip: false },
+    { title: '五条测试·开心', emotion: '开心', rating: '比较舒服', skip: true },
+    { title: '五条测试·低落', emotion: '低落', rating: '没特别感觉', skip: false },
+    { title: '五条测试·过载', emotion: '过载', rating: '有点不舒服', skip: true },
+    { title: '五条测试·混合', emotion: '混合', rating: '很难受', skip: false },
+  ] as const;
+  const targets = [
+    { x: 92, y: 260 }, { x: 178, y: 286 }, { x: 266, y: 315 },
+    { x: 118, y: 410 }, { x: 246, y: 446 },
+  ];
+
+  for (const [index, scenario] of scenarios.entries()) {
+    await dragNewStarToMap(page, targets[index], index + 1);
+    await page.locator('.map-star-button').nth(index).click();
+    await page.getByRole('button', { name: '记录这颗星星' }).click();
+    await page.getByRole('textbox', { name: '给这一刻起个名字' })
+      .fill(scenario.title);
+    await page.getByRole('button', { name: scenario.emotion }).click();
+    await page.getByTitle(scenario.rating).click();
+    await page.getByRole('button', { name: '愿意不定期后续回访' }).click();
+    await page.getByRole('button', { name: '继续到引导问题' }).click();
+    if (scenario.skip) {
+      await page.getByRole('button', { name: '跳过问答' }).click();
+    } else {
+      for (const [questionIndex, [question, answer]] of [
+        ['你去这做什么？', `${scenario.title}的来访目的。`],
+        ['这里有什么让你注意到的？', `${scenario.title}里最明显的感受。`],
+        ['你想为以后留下什么？', `${scenario.title}以后可以回看。`],
+      ].entries()) {
+        await page.getByRole('textbox', { name: question }).fill(answer);
+        await page.getByRole('button', {
+          name: questionIndex === 2 ? '完成引导问题' : '下一题',
+        }).click();
+      }
+    }
+    await page.getByRole('button', { name: '点击保存' }).click();
+    await expect(page.getByText('这颗星星已经记下来了')).toBeVisible();
+    await page.locator('.maplibregl-canvas').click({ position: { x: 36, y: 150 } });
+  }
+
+  await expect(page.locator('.map-star-button')).toHaveCount(5);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return {
+      emotions: snapshot.notes.map((note: { emotion: string | null }) => note.emotion),
+      drafts: snapshot.notes.filter((note: { isDraft?: boolean }) => note.isDraft).length,
+      followUps: snapshot.followUps.length,
+      answeredQuestions: snapshot.notes.map(
+        (note: { answers: Array<{ answer: string }> }) =>
+          note.answers.filter((answer) => answer.answer.trim()).length,
+      ),
+    };
+  }, STORAGE_KEY)).toEqual({
+    emotions: ['calm', 'joy', 'heavy', 'overwhelmed', 'mixed'],
+    drafts: 0,
+    followUps: 15,
+    answeredQuestions: [3, 0, 3, 0, 3],
+  });
+
+  await openCalendar(page);
+  await page.getByRole('button', { name: /5条记录/ }).first().click();
+  for (const scenario of scenarios) {
+    await expect(page.getByRole('button', { name: new RegExp(scenario.title) }))
+      .toBeVisible();
+  }
+  await page.getByRole('dialog', { name: '记录日历' })
+    .getByRole('button', { name: '关闭' }).click();
+
+  await page.clock.setFixedTime(new Date('2030-08-04T12:34:00.000Z'));
+  await page.reload();
+  await page.getByRole('dialog', { name: '使用定位？' })
+    .getByRole('button', { name: '暂不' }).click();
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  const navigation = page.getByRole('dialog', { name: '页面导航' });
+  await navigation.getByRole('button', { name: '交流回访', exact: true }).click();
+  await navigation.locator('.side-ai-list')
+    .getByRole('button', { name: '交流回访' }).click();
+  await expect(page.locator('.message-options > button')).toHaveCount(5);
+  await page.getByRole('button', { name: '轻了' }).click();
+  await expect(page.getByText('已保存这次回访')).toBeVisible();
+
+  const composer = page.locator('.chat-composer');
+  await composer.getByRole('textbox').fill('今天是几号？');
+  await composer.getByRole('button', { name: '发送' }).click();
+  await expect(page.getByText(/我知道你设备上的今天是/)).toBeVisible();
+  await composer.getByRole('textbox').fill('接着聊，并看看我以前的日本旅行记录');
+  await composer.getByRole('button', { name: '发送' }).click();
+  await expect(page.getByText('My Life Memory MCP · 调用完成')).toBeVisible();
+  await expect(page.getByText('我接上了这段对话，并查过已连接的记忆工具。'))
+    .toBeVisible();
+
+  const chatPayload = chatRequests.find((body) =>
+    body.operation === undefined && body.message === '今天是几号？'
+  );
+  const expectedClock = await page.evaluate(() => {
+    const now = new Date();
+    return {
+      localDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+      localTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+      utcOffsetMinutes: -now.getTimezoneOffset(),
+    };
+  });
+  expect(chatPayload?.clientContext).toMatchObject(expectedClock);
+
+  await page.getByRole('button', { name: '返回地图并打开导航' }).click();
+  await page.keyboard.press('Escape');
+  await page.locator('.global-inbox-button').click();
+  await expect(page.getByRole('dialog', { name: '星星信箱' })).toBeVisible();
+  await expect(page.locator('.star-inbox-entry')).toHaveCount(14);
+  await page.locator('.star-inbox-card').first().click();
+  await page.locator('.star-inbox-entry').first()
+    .getByRole('button', { name: '跳过' }).click();
+  await expect(page.locator('.star-inbox-entry')).toHaveCount(13);
+  await page.getByRole('dialog', { name: '星星信箱' })
+    .getByRole('button', { name: '关闭' }).click();
+
+  await page.locator('.map-star-button').first().click();
+  await page.getByRole('button', { name: '查看星星记录' }).click();
+  await page.getByRole('button', { name: '回访记录' }).click();
+  await expect(page.getByText(/3 天回访/)).toBeVisible();
+  await expect(page.getByText(/轻了|这次已略过/).first()).toBeVisible();
+});
+
 test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -574,12 +765,13 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
   await page.getByRole('button', { name: '关闭' }).click();
   await expect(page.getByRole('alertdialog')).toBeVisible();
   await page.getByRole('button', { name: '保存' }).click();
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(1);
   await expect(page.locator('.map-star-button .emotion-star__expression')).toHaveCount(1);
   await expect(page.locator('.map-star-button .star-marker-glyph stop').first())
     .toHaveAttribute('stop-color', '#7F9E91');
-  await expect.poll(() => page.evaluate((storageKey) => {
+  expect(await page.evaluate((storageKey) => {
     const raw = window.localStorage.getItem(storageKey);
     const data = raw ? JSON.parse(raw) : null;
     return data?.notes?.[0]?.title ?? null;

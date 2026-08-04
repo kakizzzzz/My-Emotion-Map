@@ -79,7 +79,7 @@ describe('map visual geometry contracts', () => {
     expect(loadError).toContain('translate: -50% -50%;');
   });
 
-  it('places global notices between the bottom menu and inbox controls', async () => {
+  it('keeps general notices clear of bottom chrome and cloud sync at the top', async () => {
     const feedbackCss = await readSource('src/styles/feedback.css');
 
     expect(feedbackCss).toContain(
@@ -89,7 +89,7 @@ describe('map visual geometry contracts', () => {
       /\.toast--top,\s*\.toast--bottom\s*\{[^}]*bottom: var\(--em-chrome-bottom\);/s,
     );
     expect(feedbackCss).toMatch(
-      /\.cloud-sync-toast\s*\{[^}]*bottom: var\(--em-chrome-bottom\);/s,
+      /\.cloud-sync-toast\s*\{[^}]*top: max\([\s\S]*?env\(safe-area-inset-top\)[\s\S]*?bottom: auto;/s,
     );
   });
 

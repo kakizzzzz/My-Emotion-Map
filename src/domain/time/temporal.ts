@@ -22,6 +22,28 @@ const safeTimeZone = () => {
 export const currentUtcOffsetMinutes = (date = new Date()) =>
   -date.getTimezoneOffset();
 
+export type DeviceTemporalContext = {
+  localDate: string;
+  localTime: string;
+  timeZone: string | null;
+  utcOffsetMinutes: number;
+};
+
+const twoDigits = (value: number) => String(value).padStart(2, '0');
+
+export const createDeviceTemporalContext = (
+  date = new Date(),
+): DeviceTemporalContext => ({
+  localDate: [
+    date.getFullYear(),
+    twoDigits(date.getMonth() + 1),
+    twoDigits(date.getDate()),
+  ].join('-'),
+  localTime: [twoDigits(date.getHours()), twoDigits(date.getMinutes())].join(':'),
+  timeZone: safeTimeZone(),
+  utcOffsetMinutes: currentUtcOffsetMinutes(date),
+});
+
 export const createTemporalFields = ({
   localDate,
   localTime,

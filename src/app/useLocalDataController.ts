@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   type Dispatch,
@@ -160,6 +161,33 @@ export function useLocalDataController({
       activeConversationId,
     ],
   );
+  const latestSnapshotRef = useRef(snapshot);
+  const latestUserIdRef = useRef(userId);
+  useLayoutEffect(() => {
+    latestSnapshotRef.current = snapshot;
+    latestUserIdRef.current = userId;
+  }, [snapshot, userId]);
+
+  useEffect(() => {
+    if (!persistenceEnabled) return;
+    const flushLatestSnapshot = () => {
+      const latestSnapshot = latestSnapshotRef.current;
+      const digest = canonicalSnapshotDigest(latestSnapshot);
+      if (digest === savedDigestRef.current) return;
+      if (saveAppData(latestSnapshot, latestUserIdRef.current)) {
+        savedDigestRef.current = digest;
+      }
+    };
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') flushLatestSnapshot();
+    };
+    window.addEventListener('pagehide', flushLatestSnapshot);
+    document.addEventListener('visibilitychange', flushWhenHidden);
+    return () => {
+      window.removeEventListener('pagehide', flushLatestSnapshot);
+      document.removeEventListener('visibilitychange', flushWhenHidden);
+    };
+  }, [persistenceEnabled]);
 
   useEffect(() => {
     if (!persistenceEnabled) return;
@@ -207,7 +235,12 @@ export function useLocalDataController({
   ]);
 
   const applySnapshot = useCallback(
-    (next: AppDataSnapshot) => {
+    (
+      next: AppDataSnapshot,
+      { preserveTransientState = false }: {
+        preserveTransientState?: boolean;
+      } = {},
+    ) => {
       setDataMode(next.dataMode);
       setMoments(next.moments);
       setNotes(next.notes);
@@ -224,13 +257,36 @@ export function useLocalDataController({
         [...next.conversations]
           .reverse()
           .find((conversation) => conversation.kind !== 'companion');
-      setActiveConversationId(
-        restoredConversation?.id ?? createRecordId('conversation'),
-      );
-      setViewingMomentId(null);
-      setEditingMomentId(null);
-      setRevisitNoteId(null);
-      setActiveView('map');
+      const fallbackConversationId =
+        restoredConversation?.id ?? createRecordId('conversation');
+      if (preserveTransientState) {
+        setActiveConversationId((current) =>
+          next.conversations.some((conversation) => conversation.id === current)
+            ? current
+            : fallbackConversationId,
+        );
+        setViewingMomentId((current) =>
+          current && next.moments.some((moment) => moment.id === current)
+            ? current
+            : null,
+        );
+        setEditingMomentId((current) =>
+          current && next.moments.some((moment) => moment.id === current)
+            ? current
+            : null,
+        );
+        setRevisitNoteId((current) =>
+          current && next.notes.some((note) => note.id === current)
+            ? current
+            : null,
+        );
+      } else {
+        setActiveConversationId(fallbackConversationId);
+        setViewingMomentId(null);
+        setEditingMomentId(null);
+        setRevisitNoteId(null);
+        setActiveView('map');
+      }
     },
     [
       setActiveView,
