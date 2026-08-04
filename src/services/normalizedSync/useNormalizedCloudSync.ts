@@ -24,8 +24,8 @@ import { createEmotionRecoveryBundle, downloadEmotionRecoveryBundle,
   normalizedEmotionDeviceSnapshot, persistNormalizedEmotionPreferences,
 } from './emotionSyncRuntime';
 import type { CloudSyncStatus, NormalizedEmotionSnapshot } from './emotionSyncTypes';
+import { nextEmotionMutationBatch } from './emotionMutationBatching';
 export type { CloudSyncStatus } from './emotionSyncTypes';
-const BATCH_SIZE = 500;
 const online = () => typeof navigator === 'undefined' || navigator.onLine;
 export function useNormalizedCloudSync({
   client,
@@ -206,8 +206,7 @@ export function useNormalizedCloudSync({
     try {
       while (outboxRef.current?.mutations.length) {
         let outbox = outboxRef.current;
-        const batch = outbox.inFlightBatch?.mutations ??
-          outbox.mutations.slice(0, BATCH_SIZE);
+        const batch = nextEmotionMutationBatch(outbox);
         if (!outbox.inFlightBatch) {
           outbox = await persistEmotionInFlightBatch(outbox, batch);
           outboxRef.current = outbox;
@@ -438,6 +437,7 @@ export function useNormalizedCloudSync({
   return {
     status,
     errorInfo,
+    datasetRevision: revision ?? 0,
     revision: status === 'synced' ? revision : null,
     safeMerge: () => { void resolveConflict('safe'); },
     useRemoteVersion: () => { void resolveConflict('remote'); },

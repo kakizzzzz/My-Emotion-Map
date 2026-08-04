@@ -248,6 +248,8 @@
 }
 
 .export-data-panel {
+  display: grid;
+  gap: 12px;
   margin-top: 16px;
 }
 
@@ -353,6 +355,93 @@
 
 .export-submit:disabled {
   opacity: 0.45;
+}
+
+.data-backup-card,
+.data-delete-card {
+  display: grid;
+  gap: 10px;
+}
+
+.data-management-copy {
+  margin: 0 2px 2px;
+  color: var(--em-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.import-preview {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--em-soft-surface);
+}
+
+.import-preview > strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.import-preview dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.import-preview dl > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  text-align: center;
+}
+
+.import-preview dt {
+  overflow: hidden;
+  color: var(--em-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-preview dd {
+  margin: 0;
+  color: var(--em-text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.import-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr 0.8fr;
+  gap: 6px;
+}
+
+.import-actions button {
+  min-height: 40px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--em-soft-card);
+  color: var(--em-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.data-delete-card > input {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  outline: 0;
+  background: var(--em-soft-surface);
+  color: var(--em-text-primary);
+  font: inherit;
+}
+
+.data-delete-action:not(:disabled) {
+  background: var(--em-dark);
+  color: var(--em-on-dark);
 }
 
 .ai-conversation-settings-card {

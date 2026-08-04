@@ -20,7 +20,6 @@ import { sanitizeExternalEvidence } from './sanitizeExternalEvidence';
 import { sanitizeMcpCalls } from '../domain/query/mcpCalls';
 import {
   LEGACY_APP_DATA_STORAGE_KEY,
-  isWorkspaceWithinBudget,
   stableSerialize,
   workspaceStorageKey,
   legacyUserWorkspaceStorageKey,
@@ -832,7 +831,7 @@ export const saveAppData = (
 ) => {
   try {
     const key = workspaceStorageKey(snapshot.dataMode, userId);
-    if (!key || !isWorkspaceWithinBudget(snapshot)) return false;
+    if (!key) return false;
     window.localStorage.setItem(
       key,
       JSON.stringify({ ...snapshot, schemaVersion: CURRENT_SCHEMA_VERSION }),

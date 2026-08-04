@@ -26,7 +26,6 @@ import {
   clearAllLocalData,
   canonicalSnapshotDigest,
   createEmptyAppData,
-  parseImportedAppData,
   removeMomentAssociations,
   saveAppData,
 } from './appDataRepository';
@@ -36,6 +35,29 @@ import {
   type DataExportRange,
 } from './exportReadableData';
 import { createRecordId } from './createRecordId';
+import {
+  createDefaultLocalSettings,
+  loadLocalSettings,
+  saveLocalSettings,
+} from './profilePreferences';
+import {
+  createCompleteEmotionBackup,
+  downloadCompleteEmotionBackup,
+  type ParsedEmotionBackup,
+} from '../domain/storage/emotionBackup';
+import {
+  prepareEmotionImport,
+  type EmotionImportMode,
+} from '../domain/storage/emotionImport';
+import { normalizeEmotionSnapshot } from '../domain/storage/normalizedEmotionSnapshot';
+import {
+  readEmotionMutationOutbox,
+  writeEmotionRecoveryBundle,
+} from '../services/normalizedSync/emotionOutbox';
+import {
+  createEmotionRecoveryBundle,
+  persistNormalizedEmotionPreferences,
+} from '../services/normalizedSync/emotionSyncRuntime';
 
 type LocalDataControllerOptions = {
   initialData: LoadedAppData;
@@ -52,6 +74,7 @@ type LocalDataControllerOptions = {
   lastViewport?: MapViewport;
   activeConversationId: string;
   language: AppLanguage;
+  getDatasetRevision: () => number;
   setMoments: Dispatch<SetStateAction<EmotionMoment[]>>;
   setNotes: Dispatch<SetStateAction<EmotionNote[]>>;
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
@@ -85,6 +108,7 @@ export function useLocalDataController({
   lastViewport,
   activeConversationId,
   language,
+  getDatasetRevision,
   setMoments,
   setNotes,
   setConversations,
@@ -264,46 +288,108 @@ export function useLocalDataController({
     return result;
   }, [copy.feedback.dataExported, copy.settings.exportEmpty, language, showToast, snapshot]);
 
-  const importData = useCallback(
-    async (file: File) => {
-      const parsed = parseImportedAppData(await file.text());
-      if (!parsed.ok) {
-        showToast(
-          parsed.issue === 'upgrade-required'
-            ? copy.feedback.dataUpgradeRequired
-            : copy.feedback.dataImportFailed,
-          {
-            placement: 'top',
-            durationMs: 4_000,
-          },
-        );
-        return;
-      }
-      const preview = String(parsed.snapshot.notes.length);
-      if (!window.confirm(preview)) return;
-      applySnapshot(parsed.snapshot);
-      showToast(copy.feedback.dataImported);
-    },
-    [applySnapshot, copy.feedback, showToast],
-  );
+  const exportCompleteBackup = useCallback(async () => {
+    if (!userId) return false;
+    try {
+      const normalized = normalizeEmotionSnapshot(
+        snapshot,
+        loadLocalSettings(userId),
+      ).snapshot;
+      const backup = await createCompleteEmotionBackup({
+        normalized,
+        datasetRevision: getDatasetRevision(),
+      });
+      downloadCompleteEmotionBackup(backup);
+      showToast(copy.feedback.dataExported);
+      return true;
+    } catch {
+      showToast(copy.feedback.storageWriteFailed, {
+        placement: 'top',
+        durationMs: 5_000,
+      });
+      return false;
+    }
+  }, [copy.feedback.dataExported, copy.feedback.storageWriteFailed,
+    getDatasetRevision, showToast, snapshot, userId]);
 
-  const deleteAllData = useCallback(() => {
-    if (!window.confirm(copy.feedback.deleteAllDataConfirm)) return;
+  const importCompleteBackup = useCallback(async (
+    parsed: ParsedEmotionBackup,
+    mode: EmotionImportMode,
+  ) => {
+    if (!userId) return { ok: false, conflicts: 0 };
+    const current = normalizeEmotionSnapshot(
+      snapshot,
+      loadLocalSettings(userId),
+    ).snapshot;
+    const revision = getDatasetRevision();
+    try {
+      const outbox = await readEmotionMutationOutbox(userId);
+      if (mode === 'replace') {
+        const safetyBackup = await createCompleteEmotionBackup({
+          normalized: current,
+          datasetRevision: revision,
+        });
+        downloadCompleteEmotionBackup(safetyBackup);
+      }
+      const prepared = prepareEmotionImport({
+        current,
+        incoming: parsed.normalized,
+        mode,
+        device: snapshot,
+      });
+      if (mode === 'replace' || prepared.conflicts.length) {
+        await writeEmotionRecoveryBundle(createEmotionRecoveryBundle({
+          userId,
+          kind: mode === 'replace' ? 'import-replace' : 'conflict',
+          localSnapshot: current,
+          remoteSnapshot: parsed.normalized,
+          outbox,
+          revision,
+          conflicts: prepared.conflicts,
+        }));
+      }
+      persistNormalizedEmotionPreferences(userId, prepared.snapshot);
+      applySnapshot(prepared.appSnapshot);
+      showToast(copy.feedback.dataImported);
+      return { ok: true, conflicts: prepared.conflicts.length };
+    } catch {
+      showToast(copy.feedback.dataImportFailed, {
+        placement: 'top',
+        durationMs: 5_000,
+      });
+      return { ok: false, conflicts: 0 };
+    }
+  }, [applySnapshot, copy.feedback.dataImportFailed,
+    copy.feedback.dataImported, getDatasetRevision, showToast, snapshot, userId]);
+
+  const deleteAllData = useCallback(async () => {
+    if (!userId) return false;
+    const localSettings = loadLocalSettings(userId);
     if (!clearAllLocalData(userId, dataMode)) {
       showToast(copy.feedback.storageWriteFailed, {
         placement: 'top',
         durationMs: 5_000,
       });
+      return false;
     }
+    saveLocalSettings({
+      ...createDefaultLocalSettings(),
+      avatarSrc: localSettings.avatarSrc,
+      profileId: localSettings.profileId,
+      language: localSettings.language,
+    }, userId);
     applySnapshot(createEmptyAppData());
     showToast(copy.feedback.allDataDeleted);
-  }, [applySnapshot, copy.feedback, dataMode, showToast, userId]);
+    return true;
+  }, [applySnapshot, copy.feedback.allDataDeleted,
+    copy.feedback.storageWriteFailed, dataMode, showToast, userId]);
 
   return {
     applySnapshot,
     deleteMoment,
     exportData,
-    importData,
+    exportCompleteBackup,
+    importCompleteBackup,
     deleteAllData,
   };
 }

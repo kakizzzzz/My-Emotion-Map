@@ -1,26 +1,46 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AppDataSnapshot } from '../types';
+import { loadLocalSettings } from '../app/profilePreferences';
+import { stableSerialize } from '../app/workspace/workspaceStorage';
 import {
-  canonicalSnapshotDigest,
-  migrateAppData,
-} from '../app/appDataRepository';
+  assembleNormalizedEmotionSnapshot,
+  normalizeEmotionSnapshot,
+} from '../domain/storage/normalizedEmotionSnapshot';
+import {
+  applyEmotionMutationsToSnapshot,
+  diffEmotionState,
+  emotionMutationKey,
+  getEmotionMutationEntityValue,
+} from './normalizedSync/emotionMutationModel';
+import { validateEmotionMutations } from './normalizedSync/emotionMutationValidation';
+import type {
+  EmotionMutation,
+  NormalizedEmotionSnapshot,
+} from './normalizedSync/emotionSyncTypes';
 
 export type ProposalApplicationJournal = {
   userId: string;
   proposalId: string;
   operationId: string;
-  beforeHash: string;
-  afterHash: string;
-  after: AppDataSnapshot;
+  targetFingerprints: Record<string, string>;
+  mutations: EmotionMutation[];
+  beforeEntityHashes: Record<string, string>;
+  expectedRevision: number;
   localApplied: boolean;
   createdAt: string;
 };
 
-const PREFIX = 'my-emotion-map.proposal-application.v1.';
+const PREFIX = 'my-emotion-map.proposal-application.v2.';
+const LEGACY_PREFIX = 'my-emotion-map.proposal-application.v1.';
 const inFlightCompletions = new Set<string>();
 
 const journalKey = (userId: string, proposalId: string) =>
   `${PREFIX}${encodeURIComponent(userId)}.${encodeURIComponent(proposalId)}`;
+
+const entityFingerprint = (
+  snapshot: NormalizedEmotionSnapshot,
+  mutation: EmotionMutation,
+) => stableSerialize(getEmotionMutationEntityValue(snapshot, mutation));
 
 const writeJournal = (journal: ProposalApplicationJournal) => {
   window.localStorage.setItem(
@@ -33,24 +53,32 @@ const writeJournal = (journal: ProposalApplicationJournal) => {
 const parseJournal = (raw: string): ProposalApplicationJournal | null => {
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
-    const migrated = migrateAppData(value.after);
     if (
       typeof value.userId !== 'string' ||
       typeof value.proposalId !== 'string' ||
       typeof value.operationId !== 'string' ||
-      typeof value.beforeHash !== 'string' ||
-      typeof value.afterHash !== 'string' ||
       typeof value.createdAt !== 'string' ||
-      migrated.status !== 'ok' ||
-      canonicalSnapshotDigest(migrated.snapshot) !== value.afterHash
+      !Number.isSafeInteger(value.expectedRevision) || Number(value.expectedRevision) < 0 ||
+      !value.targetFingerprints || typeof value.targetFingerprints !== 'object' ||
+      !value.beforeEntityHashes || typeof value.beforeEntityHashes !== 'object' ||
+      !Array.isArray(value.mutations) || !value.mutations.length
     ) return null;
+    const mutations = structuredClone(value.mutations) as EmotionMutation[];
+    if (mutations.some((mutation) => mutation.base !== undefined)) return null;
+    validateEmotionMutations(mutations);
+    const targetFingerprints = structuredClone(value.targetFingerprints) as Record<string, string>;
+    const beforeEntityHashes = structuredClone(value.beforeEntityHashes) as Record<string, string>;
+    const keys = mutations.map(emotionMutationKey);
+    if (keys.some((key) => typeof targetFingerprints[key] !== 'string' ||
+      typeof beforeEntityHashes[key] !== 'string')) return null;
     return {
       userId: value.userId,
       proposalId: value.proposalId,
       operationId: value.operationId,
-      beforeHash: value.beforeHash,
-      afterHash: value.afterHash,
-      after: migrated.snapshot,
+      targetFingerprints,
+      mutations,
+      beforeEntityHashes,
+      expectedRevision: Number(value.expectedRevision),
       localApplied: value.localApplied === true,
       createdAt: value.createdAt,
     };
@@ -59,30 +87,65 @@ const parseJournal = (raw: string): ProposalApplicationJournal | null => {
   }
 };
 
+const normalizeJournalSnapshot = (userId: string, snapshot: AppDataSnapshot) =>
+  normalizeEmotionSnapshot(snapshot, loadLocalSettings(userId)).snapshot;
+
 export const stageProposalApplication = ({
   userId,
   proposalId,
   operationId,
   before,
   after,
+  expectedRevision,
 }: {
   userId: string;
   proposalId: string;
   operationId: string;
   before: AppDataSnapshot;
   after: AppDataSnapshot;
-}) => writeJournal({
-  userId,
-  proposalId,
-  operationId,
-  beforeHash: canonicalSnapshotDigest(before),
-  afterHash: canonicalSnapshotDigest(after),
-  after,
-  localApplied: false,
-  createdAt: new Date().toISOString(),
-});
+  expectedRevision: number;
+}) => {
+  const beforeNormalized = normalizeJournalSnapshot(userId, before);
+  const afterNormalized = normalizeJournalSnapshot(userId, after);
+  const mutations = diffEmotionState(beforeNormalized, afterNormalized).map(
+    ({ base: _base, ...mutation }) => mutation,
+  );
+  if (!mutations.length) throw new Error('Proposal does not change a normalized entity.');
+  return writeJournal({
+    userId,
+    proposalId,
+    operationId,
+    targetFingerprints: Object.fromEntries(mutations.map((mutation) => [
+      emotionMutationKey(mutation),
+      entityFingerprint(afterNormalized, mutation),
+    ])),
+    mutations,
+    beforeEntityHashes: Object.fromEntries(mutations.map((mutation) => [
+      emotionMutationKey(mutation),
+      entityFingerprint(beforeNormalized, mutation),
+    ])),
+    expectedRevision,
+    localApplied: false,
+    createdAt: new Date().toISOString(),
+  });
+};
+
+const removeLegacyJournals = (userId: string) => {
+  try {
+    const suffix = `${encodeURIComponent(userId)}.`;
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith(`${LEGACY_PREFIX}${suffix}`)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // The server proposal remains recoverable when storage is unavailable.
+  }
+};
 
 export const listProposalJournals = (userId: string) => {
+  removeLegacyJournals(userId);
   const journals: ProposalApplicationJournal[] = [];
   try {
     for (let index = 0; index < window.localStorage.length; index += 1) {
@@ -99,6 +162,7 @@ export const listProposalJournals = (userId: string) => {
 };
 
 export const findProposalJournal = (userId: string, proposalId: string) => {
+  removeLegacyJournals(userId);
   try {
     const raw = window.localStorage.getItem(journalKey(userId, proposalId));
     return raw ? parseJournal(raw) : null;
@@ -115,11 +179,34 @@ export const classifyProposalJournal = (
   journal: ProposalApplicationJournal,
   current: AppDataSnapshot,
 ): 'apply' | 'already_applied' | 'stale' => {
-  const currentHash = canonicalSnapshotDigest(current);
-  if (currentHash === journal.afterHash) return 'already_applied';
-  if (currentHash === journal.beforeHash) return 'apply';
+  const normalized = normalizeJournalSnapshot(journal.userId, current);
+  const currentHashes = Object.fromEntries(journal.mutations.map((mutation) => [
+    emotionMutationKey(mutation),
+    entityFingerprint(normalized, mutation),
+  ]));
+  const keys = journal.mutations.map(emotionMutationKey);
+  if (keys.every((key) => currentHashes[key] === journal.targetFingerprints[key])) {
+    return 'already_applied';
+  }
+  if (keys.every((key) => currentHashes[key] === journal.beforeEntityHashes[key])) {
+    return 'apply';
+  }
   return 'stale';
 };
+
+export const applyProposalJournal = (
+  journal: ProposalApplicationJournal,
+  current: AppDataSnapshot,
+) => assembleNormalizedEmotionSnapshot(
+  applyEmotionMutationsToSnapshot(
+    normalizeJournalSnapshot(journal.userId, current),
+    journal.mutations,
+  ),
+  {
+    lastConversationId: current.lastConversationId,
+    lastViewport: current.lastViewport,
+  },
+);
 
 export const clearProposalJournal = (userId: string, proposalId: string) => {
   try {
@@ -146,7 +233,7 @@ export const completePendingProposalApplications = async ({
   syncedRevision: number;
 }) => {
   for (const journal of listProposalJournals(userId)) {
-    if (canonicalSnapshotDigest(snapshot) !== journal.afterHash) continue;
+    if (classifyProposalJournal(journal, snapshot) !== 'already_applied') continue;
     const flightKey = `${userId}:${journal.proposalId}`;
     if (inFlightCompletions.has(flightKey)) continue;
     inFlightCompletions.add(flightKey);

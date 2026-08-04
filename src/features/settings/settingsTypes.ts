@@ -4,6 +4,8 @@ import type { ToastHandler } from '../../app/appTypes';
 import type { DataExportRange, ReadableExportResult } from '../../app/exportReadableData';
 import type { MyLifeMemoryConnectionStatus } from '../../services/myLifeMemoryConnection';
 import type { McpOutputStatus } from '../../services/externalAccess';
+import type { ParsedEmotionBackup } from '../../domain/storage/emotionBackup';
+import type { EmotionImportMode } from '../../domain/storage/emotionImport';
 
 export type SettingsPanel =
   | 'profile'
@@ -35,6 +37,12 @@ export type SettingsScreenProps = {
   followUpIntervals: number[];
   onFollowUpIntervals: (intervals: number[]) => void;
   onExportData: (range: DataExportRange) => ReadableExportResult;
+  onExportCompleteBackup: () => Promise<boolean>;
+  onImportCompleteBackup: (
+    parsed: ParsedEmotionBackup,
+    mode: EmotionImportMode,
+  ) => Promise<{ ok: boolean; conflicts: number }>;
+  onDeleteAllData: () => Promise<boolean>;
   locationRequestState: LocationRequestState;
   onRequestLocation: () => void;
   onToast: ToastHandler;

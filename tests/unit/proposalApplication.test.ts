@@ -3,6 +3,7 @@ import { createEmptyAppData } from '../../src/app/appDataRepository';
 import {
   classifyProposalJournal,
   completePendingProposalApplications,
+  applyProposalJournal,
   listProposalJournals,
   markProposalLocallyApplied,
   stageProposalApplication,
@@ -11,24 +12,27 @@ import {
 describe('recoverable proposal application', () => {
   beforeEach(() => window.localStorage.clear());
 
-  it('stages the exact next snapshot before local application and recovers after reload', () => {
+  it('stores an exact compact mutation batch and recovers after reload', () => {
     const before = createEmptyAppData();
-    const after = {
-      ...before,
-      lastViewport: { latitude: 37.558, longitude: 127, zoom: 15 },
-    };
+    const after = { ...before, themeTone: 'blue' as const };
     const journal = stageProposalApplication({
       userId: 'user-a',
       proposalId: 'proposal-a',
       operationId: 'operation-a',
       before,
       after,
+      expectedRevision: 7,
     });
     expect(classifyProposalJournal(journal, before)).toBe('apply');
+    expect(applyProposalJournal(journal, before)).toEqual(after);
     markProposalLocallyApplied(journal);
 
     const recovered = listProposalJournals('user-a')[0];
     expect(recovered.localApplied).toBe(true);
+    expect(recovered.expectedRevision).toBe(7);
+    expect(recovered.mutations).toHaveLength(1);
+    expect(recovered.mutations[0]).not.toHaveProperty('base');
+    expect(recovered).not.toHaveProperty('after');
     expect(classifyProposalJournal(recovered, after)).toBe('already_applied');
     expect(listProposalJournals('user-b')).toEqual([]);
   });
@@ -43,6 +47,7 @@ describe('recoverable proposal application', () => {
       operationId: 'operation-a',
       before,
       after,
+      expectedRevision: 3,
     });
     expect(classifyProposalJournal(journal, unrelated)).toBe('stale');
   });
@@ -56,6 +61,7 @@ describe('recoverable proposal application', () => {
       operationId: 'operation-a',
       before,
       after,
+      expectedRevision: 8,
     });
     const rpc = vi.fn().mockResolvedValue({
       data: [{ status: 'applied' }],

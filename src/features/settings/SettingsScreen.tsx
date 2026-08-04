@@ -39,6 +39,9 @@ export function SettingsScreen({
   followUpIntervals,
   onFollowUpIntervals,
   onExportData,
+  onExportCompleteBackup,
+  onImportCompleteBackup,
+  onDeleteAllData,
   locationRequestState,
   onRequestLocation,
   onToast,
@@ -304,7 +307,13 @@ export function SettingsScreen({
                   onIntervals={onFollowUpIntervals}
                 />
               ) : panel === 'export' ? (
-                <ExportDataPanel onExportData={onExportData} />
+                <ExportDataPanel
+                  onExportData={onExportData}
+                  onExportCompleteBackup={onExportCompleteBackup}
+                  onImportCompleteBackup={onImportCompleteBackup}
+                  onDeleteAllData={onDeleteAllData}
+                  workspaceAvailable={Boolean(cloudUserId)}
+                />
               ) : (
                 <GeneralSettingsPanel
                   panel={panel}

@@ -278,6 +278,40 @@ test('authenticated identity opens an empty real workspace', async ({
   );
 });
 
+test('complete backup, import preview, cancel, and typed workspace deletion are wired', async ({
+  page,
+}) => {
+  await startBlank(page);
+  await page.getByRole('button', { name: '打开页面导航' }).click();
+  await page.getByRole('dialog', { name: '页面导航' })
+    .getByRole('button', { name: '设置' }).click();
+  await page.getByRole('button', { name: '数据与访问' }).click();
+  await page.getByRole('button', { name: '导出数据' }).click();
+
+  const download = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: '下载完整备份' }).click(),
+  ]).then(([value]) => value);
+  expect(download.suggestedFilename()).toMatch(/^my-emotion-map-backup-.*\.json$/);
+  const downloadPath = await download.path();
+  if (!downloadPath) throw new Error('Complete backup was not persisted by Playwright.');
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: '导入完整备份' }).click();
+  await (await chooser).setFiles(downloadPath);
+  await expect(page.getByRole('group', { name: '导入预览' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '合并', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '替换当前工作区' })).toBeVisible();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.getByRole('group', { name: '导入预览' })).toHaveCount(0);
+
+  const deleteButton = page.getByRole('button', { name: '永久删除工作区数据' });
+  await expect(deleteButton).toBeDisabled();
+  await page.getByRole('textbox', { name: '输入“永久删除”确认' }).fill('永久删除');
+  await expect(deleteButton).toBeEnabled();
+  await deleteButton.click();
+  await expect(page.getByRole('textbox', { name: '输入“永久删除”确认' })).toHaveValue('');
+});
+
 test('blank new user, keyboard sheets, and accessibility smoke', async ({
   page,
 }) => {

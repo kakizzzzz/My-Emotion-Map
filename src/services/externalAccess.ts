@@ -12,6 +12,7 @@ import type { UserLocation } from '../useLocationController';
 import type { McpProposal } from '../features/settings/settingsTypes';
 import { stableSerialize } from '../app/workspace/workspaceStorage';
 import {
+  applyProposalJournal,
   classifyProposalJournal,
   clearProposalJournal,
   findProposalJournal,
@@ -230,7 +231,7 @@ export const createExternalAccessHandlers = ({
       }
       if (recovery === 'apply') {
         try {
-          applySnapshot(recovered.after);
+          applySnapshot(applyProposalJournal(recovered, snapshot));
           markProposalLocallyApplied(recovered);
         } catch {
           await fail('local_apply_failed');
@@ -314,6 +315,7 @@ export const createExternalAccessHandlers = ({
       operationId,
       before: snapshot,
       after: nextSnapshot,
+      expectedRevision: proposal.createdAgainstRevision,
     });
     try {
       applySnapshot(nextSnapshot);

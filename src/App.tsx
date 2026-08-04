@@ -140,6 +140,7 @@ export function App() {
     Record<string, PhotoAssistDelivery>
   >({});
   const toastSequenceRef = useRef(0);
+  const cloudDatasetRevisionRef = useRef(0);
   const [themeTone, setThemeTone] = useState<ThemeTone>(initialData.themeTone);
   const [themePalette, setThemePalette] = useState<ThemePalette>(
     initialData.themePalette,
@@ -201,6 +202,9 @@ export function App() {
     applySnapshot,
     deleteMoment,
     exportData,
+    exportCompleteBackup,
+    importCompleteBackup,
+    deleteAllData,
   } = useLocalDataController({
     initialData,
     userId: cloudSession.session?.user.id ?? null,
@@ -219,6 +223,7 @@ export function App() {
     lastViewport,
     activeConversationId,
     language,
+    getDatasetRevision: () => cloudDatasetRevisionRef.current,
     setMoments,
     setNotes,
     setConversations,
@@ -309,6 +314,9 @@ export function App() {
     blockedByFutureSchema: workspaceUpgradeRequired,
     pauseRemoteRefresh: hasPendingChatRequest,
   });
+  useEffect(() => {
+    cloudDatasetRevisionRef.current = cloudSync.datasetRevision;
+  }, [cloudSync.datasetRevision]);
 
   const authenticateCloudAccount = async (
     mode: 'login' | 'register',
@@ -675,6 +683,9 @@ export function App() {
                 followUpIntervals={followUpIntervals}
                 onFollowUpIntervals={setFollowUpIntervals}
                 onExportData={exportData}
+                onExportCompleteBackup={exportCompleteBackup}
+                onImportCompleteBackup={importCompleteBackup}
+                onDeleteAllData={deleteAllData}
                 locationRequestState={locationController.requestState}
                 onRequestLocation={() =>
                   locationController.openLocationRequest('settings')
