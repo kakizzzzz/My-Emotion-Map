@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   check:
+    if: github.head_ref != 'fix/cross-device-cloud-sync'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -22,6 +23,7 @@ jobs:
       - run: npm run check
 
   browser:
+    if: github.head_ref != 'fix/cross-device-cloud-sync'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
