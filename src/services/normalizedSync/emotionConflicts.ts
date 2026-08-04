@@ -107,6 +107,19 @@ export const reconcileEmotionMutationsAfterRemoteAdvance = ({
   const appliedKeys = new Set(inFlightMutations
     .filter((mutation) => mutationMatchesRemote(mutation, remote))
     .map(emotionMutationKey));
+  const replayableInFlightKeys = new Set(inFlightMutations
+    .filter((mutation) => {
+      if (mutationMatchesRemote(mutation, remote)) return false;
+      const directRemoteValue = getEmotionMutationEntityValue(remote, mutation);
+      const uniqueConflictValue = directRemoteValue === null
+        ? uniqueRemoteValue(mutation, remote)
+        : null;
+      return uniqueConflictValue === null && emotionValuesEqual(
+        mutation.base ?? null,
+        directRemoteValue,
+      );
+    })
+    .map(emotionMutationKey));
   const safeMutations: EmotionMutation[] = [];
   const conflicts: EmotionMutationConflict[] = [];
   const appliedMutationIds: string[] = [];
@@ -120,12 +133,14 @@ export const reconcileEmotionMutationsAfterRemoteAdvance = ({
     const remoteValue = directRemoteValue ?? (
       uniqueConflictValue ? { ...uniqueConflictValue } : null
     );
-    if (mutationMatchesRemote(mutation, remote)) {
+    const belongsToReplayableInFlightChain = replayableInFlightKeys.has(key);
+    if (mutationMatchesRemote(mutation, remote) &&
+      !belongsToReplayableInFlightChain) {
       appliedMutationIds.push(mutation.mutationId);
       return;
     }
     if (emotionValuesEqual(mutation.base ?? null, remoteValue) ||
-      appliedKeys.has(key)) {
+      appliedKeys.has(key) || belongsToReplayableInFlightChain) {
       safeMutations.push({ ...mutation, base: remoteValue });
       return;
     }

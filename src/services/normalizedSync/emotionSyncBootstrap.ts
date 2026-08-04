@@ -6,16 +6,35 @@ import type { AppDataSnapshot } from '../../types';
 import { loadSyncMeta } from '../cloudSyncModel';
 import {
   convertLegacySyncToOutbox,
+  enqueueEmotionMutations,
   readEmotionMutationOutbox,
   writeEmotionRecoveryBundle,
   type LegacySyncConversionDecision,
 } from './emotionOutbox';
+import {
+  applyEmotionMutationsToSnapshot,
+  diffEmotionState,
+} from './emotionMutationModel';
+import type { NormalizedEmotionSnapshot } from './emotionSyncTypes';
 import { loadNormalizedEmotionAccountData } from './emotionRepository';
 import {
   hasNormalizedEmotionContent,
   createEmotionRecoveryBundle,
   normalizedEmotionDigest,
 } from './emotionSyncRuntime';
+
+export const localEmotionDriftBeyondOutbox = ({
+  remote,
+  local,
+  outbox,
+}: {
+  remote: NormalizedEmotionSnapshot;
+  local: NormalizedEmotionSnapshot;
+  outbox: import('./emotionOutbox').EmotionMutationOutbox;
+}) => diffEmotionState(
+  applyEmotionMutationsToSnapshot(remote, outbox.mutations),
+  local,
+);
 
 export const bootstrapNormalizedEmotionSync = async ({
   client,
@@ -42,6 +61,20 @@ export const bootstrapNormalizedEmotionSync = async ({
     }));
   }
   if (outbox?.mutations.length) {
+    const localDrift = localEmotionDriftBeyondOutbox({
+      remote: loaded.snapshot,
+      local: localResult.snapshot,
+      outbox,
+    });
+    if (localDrift.length) {
+      await enqueueEmotionMutations({
+        userId,
+        expectedRevision: outbox.expectedRevision,
+        mutations: localDrift,
+        language: settings.language,
+      });
+      outbox = await readEmotionMutationOutbox(userId);
+    }
     return {
       loaded,
       local: localResult.snapshot,

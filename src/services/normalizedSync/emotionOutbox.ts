@@ -130,16 +130,37 @@ export const newestEmotionOutboxForUser = (
   return left.savedAt >= right.savedAt ? left : right;
 };
 
+const compactEmotionOutboxMutations = (
+  mutations: EmotionMutation[],
+  inFlightBatch: EmotionMutationOutbox['inFlightBatch'],
+) => {
+  if (!inFlightBatch?.mutations.length) return compactEmotionMutations(mutations);
+  const protectedIds = new Set(
+    inFlightBatch.mutations.map((mutation) => mutation.mutationId),
+  );
+  const byId = new Map(mutations.map((mutation) => [mutation.mutationId, mutation]));
+  const exactInFlight = inFlightBatch.mutations.map((mutation) =>
+    byId.get(mutation.mutationId) ?? mutation,
+  );
+  const trailing = mutations.filter(
+    (mutation) => !protectedIds.has(mutation.mutationId),
+  );
+  return [...exactInFlight, ...compactEmotionMutations(trailing)];
+};
+
 export const prepareEmotionOutbox = (
   outbox: EmotionMutationOutbox,
 ): EmotionMutationOutbox => ({
   ...outbox,
   expectedRevision: Math.max(0, outbox.expectedRevision),
-  mutations: compactEmotionMutations(outbox.mutations),
+  mutations: compactEmotionOutboxMutations(
+    outbox.mutations,
+    outbox.inFlightBatch,
+  ),
   inFlightBatch: outbox.inFlightBatch ? {
     ...outbox.inFlightBatch,
     expectedRevision: Math.max(0, outbox.inFlightBatch.expectedRevision),
-    mutations: compactEmotionMutations(outbox.inFlightBatch.mutations),
+    mutations: structuredClone(outbox.inFlightBatch.mutations),
   } : undefined,
   savedAt: Date.now(),
 });
@@ -163,10 +184,10 @@ export const mergeEmotionOutbox = ({
   return {
     userId,
     expectedRevision: current?.expectedRevision ?? Math.max(0, expectedRevision),
-    mutations: compactEmotionMutations([
+    mutations: compactEmotionOutboxMutations([
       ...(current?.mutations ?? []),
       ...mutations,
-    ]),
+    ], current?.inFlightBatch),
     inFlightBatch: current?.inFlightBatch,
     sequence: (current?.sequence ?? 0) + 1,
     savedAt: now,

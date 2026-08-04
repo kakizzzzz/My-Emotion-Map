@@ -72,9 +72,30 @@ confidence are built from the authorized records by the server.
 
 ## Cloud data and rate limits
 
-`app_states` is owner-only under RLS. Writes use compare-and-swap with expected
-revision and an idempotent request UUID. Demo snapshots are rejected and
-conflicts pause upload after local and remote recovery copies are stored.
+Cloud business data is stored as owner-scoped normalized entities. Authenticated
+clients may select only their own rows under RLS and cannot directly insert,
+update or delete them. All writes go through `apply_emotion_mutations`, which
+locks one owner's revision row, validates sensitive keys, coordinates, dates,
+references and entity limits, applies the full batch atomically, and increments
+`dataset_revision` once. Mutation `base`, IndexedDB sequence numbers and full
+workspace JSON never cross the network.
+
+`app_states` remains byte-for-byte historical data as a service-role-only,
+read-only migration archive. Runtime frontend and Edge code cannot read it,
+authenticated access is revoked, and `save_app_state` rejects new writes. The
+archive is not deleted, rewritten, redacted or used as live storage.
+
+The account-isolated browser outbox and conflict/recovery bundles use IndexedDB.
+The exact in-flight batch is durable before transmission, so response loss can
+retry safely. Load-cloud, keep-local and safe-merge actions persist recovery
+before discarding or rebasing mutations. Tombstones are retained for seven
+complete days and history is bounded to 20 before-images per entity.
+
+Complete JSON backups use stable serialization plus SHA-256. The schema excludes
+language, viewport, last conversation, avatar data URLs, passwords, sessions,
+Supabase/MCP/Shortcut tokens, provider keys, mutation bases/sequences and
+recovery copies. Import hard-stops future versions and validates checksum,
+canonical fields, uniqueness and references before any local change.
 
 `claim_ai_quota` atomically enforces five photo requests and ten chat requests
 per authenticated user per hour. Direct table access is revoked.
@@ -86,7 +107,8 @@ Emotion Map MCP is read-only and has no proposal or deep-link tool. Proposal
 tools require a separate `action` token and endpoint plus in-app confirmation.
 The current read manifest exposes no coordinate, health or image tool.
 Proposal confirmation is recoverable and idempotent: the server claims an
-operation as `accepting`, the client journals the exact transition, and the
+operation as `accepting`, the client journals only target fingerprints, exact
+normalized mutations, before-entity hashes and expected revision, and the
 server moves it to `applied` only after the resulting workspace revision is
 synced. Revision or target-fingerprint drift stops the operation.
 
@@ -105,3 +127,7 @@ synced. Revision or target-fingerprint drift stops the operation.
   output-schema validation and `last_used_at` updates.
 - verify My Life Memory connect/test/disconnect, full manifest pinning, local-only
   routing and external-output injection rejection.
+- verify the immutable archive separately from normalized owner RLS, atomic
+  mutation revision, seven-day tombstones and bounded entity history.
+- verify complete-backup secret exclusion/checksum and cross-device permanent
+  workspace deletion without deleting the Auth user.

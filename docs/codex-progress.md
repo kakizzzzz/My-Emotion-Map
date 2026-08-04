@@ -300,3 +300,53 @@ the authenticated Supabase SQL Editor for project `uifgpmmlvmfrauzbbrem`; any
 statement failure would have rolled back the transaction. CLI/API operations
 were still used for project/secret/function verification. No other Supabase
 project and no My Life Memory code or cloud resource was changed.
+
+## Normalized sync v2 migration — branch-only release candidate
+
+Status: implementation and local validation are complete through Checkpoint 7.
+Production is not yet deployed by this branch.
+
+Baseline: `main@05d67e9c295157f52250d3d017bc1dd890981023`
+
+Working branch: `refactor/normalized-emotion-sync-v2`
+
+| Checkpoint | Commit | Result |
+| --- | --- | --- |
+| 0 — baseline and invariants | `7740ed5` | passed |
+| 1 — pure normalized model | `de7a21b` | passed |
+| 2 — durable outbox/conflicts | `59f21ee` | passed |
+| 3 — storage migrations/verifier | `dc16094` | passed; production not run |
+| 4 — browser sync switch | `2ea5884` | passed |
+| 5 — Edge/AI/MCP normalized reads | `a4dcb75` | passed |
+| 6 — backup/import/delete/preferences | `553272f` | passed |
+| 7 — runbooks, outbox race and final validation | `docs: complete normalized sync migration and fix outbox race` | passed |
+
+Checkpoint 6 evidence: `npm run check` passed 63 Vitest files / 321 tests,
+typecheck, ESLint, architecture boundaries and production build. The complete
+backup/import/typed-delete flow passed in Chromium Mobile and iPhone WebKit.
+This evidence is local/mock only; real two-owner Supabase, production Edge,
+Cron, MCP owner-token and cross-device deletion smoke remain blocked until the
+explicit deployment window.
+
+Checkpoint 7 code validation: `npm run check` passed 63 Vitest files / 324
+tests, typecheck, ESLint, architecture boundaries and production build. The
+pure normalized model measured 212.41 ms p95 for 5,000-record assemble/diff and
+71.58 ms p95 for 10,000-message assemble/diff in the local CI-style Node run;
+a one-entity edit produced only its necessary mutation. Chromium exposed a real
+refresh race where an uncertain in-flight create could resurrect a later local
+delete. The protocol now preserves the exact in-flight prefix, queues the later
+delete behind it, captures local drift at bootstrap, and safely resolves both
+possible remote outcomes: the create was applied, or the create was not
+applied. The focused Chromium delete/reload flow passed 3/3 repeated runs. The
+full Chromium Mobile suite passed 13 tests with the real-account test skipped;
+the full iPhone WebKit suite passed the same 13 tests with the same credential-
+gated test skipped. `npm audit --omit=dev` found zero production
+vulnerabilities. Full `npm audit` reported one high-severity `brace-expansion`
+advisory reachable only through ESLint/TypeScript development tooling; no
+automatic audit fix or dependency update was applied.
+
+The new migration files are `202608040001` through `202608040004`; the read-only
+verifier and explicit same-owner recovery SQL live under `supabase/`. Historical
+migrations and `app_states` remain intact. My Life Memory was read-only reference
+material and was not modified. No production SQL, RLS, Cron, Edge Function,
+frontend deployment or `main` merge was performed.

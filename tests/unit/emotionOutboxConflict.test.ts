@@ -21,6 +21,7 @@ import {
   type EmotionMutationOutbox,
 } from '../../src/services/normalizedSync/emotionOutbox';
 import {
+  applyEmotionMutationsToSnapshot,
   compactEmotionMutations,
   diffEmotionState,
 } from '../../src/services/normalizedSync/emotionMutationModel';
@@ -28,6 +29,7 @@ import type {
   EmotionMutation,
   NormalizedEmotionSnapshot,
 } from '../../src/services/normalizedSync/emotionSyncTypes';
+import { localEmotionDriftBeyondOutbox } from '../../src/services/normalizedSync/emotionSyncBootstrap';
 import type { AppDataSnapshot, FollowUpRecord } from '../../src/types';
 
 const normalized = (snapshot: AppDataSnapshot) =>
@@ -66,6 +68,79 @@ afterEach(() => {
 });
 
 describe('durable emotion mutation outbox', () => {
+  it('folds a local delete that happened after a pending create before reload', () => {
+    const remote = normalized(createEmptyAppData());
+    const created = normalized(recordSnapshot());
+    const pending = outbox('user-a', diffEmotionState(remote, created));
+
+    const localDrift = localEmotionDriftBeyondOutbox({
+      remote,
+      local: remote,
+      outbox: pending,
+    });
+    expect(localDrift.map((mutation) => mutation.type)).toContain('record_soft_delete');
+    expect(mergeEmotionOutbox({
+      existing: pending,
+      userId: 'user-a',
+      expectedRevision: 4,
+      mutations: localDrift,
+      language: 'zh',
+    }).mutations).toEqual([]);
+  });
+
+  it('keeps a delete behind an uncertain in-flight create until acknowledgement', () => {
+    const remote = normalized(createEmptyAppData());
+    const created = normalized(recordSnapshot());
+    const pendingCreate = diffEmotionState(remote, created);
+    const pending = withEmotionInFlightBatch(
+      outbox('user-a', pendingCreate),
+      pendingCreate,
+    );
+    const localDelete = localEmotionDriftBeyondOutbox({
+      remote,
+      local: remote,
+      outbox: pending,
+    });
+    const merged = mergeEmotionOutbox({
+      existing: pending,
+      userId: 'user-a',
+      expectedRevision: 4,
+      mutations: localDelete,
+      language: 'zh',
+    });
+
+    expect(merged.mutations.slice(0, pendingCreate.length)).toEqual(pendingCreate);
+    expect(merged.mutations.slice(pendingCreate.length).map((mutation) => mutation.type))
+      .toContain('record_soft_delete');
+    expect(merged.inFlightBatch?.mutations).toEqual(pendingCreate);
+
+    const createWasNotApplied = reconcileEmotionMutationsAfterRemoteAdvance({
+      pendingMutations: merged.mutations,
+      inFlightMutations: pendingCreate,
+      remote,
+    });
+    expect(createWasNotApplied).toMatchObject({
+      safeMutations: [], conflicts: [], appliedMutationIds: [],
+    });
+
+    const createWasApplied = reconcileEmotionMutationsAfterRemoteAdvance({
+      pendingMutations: merged.mutations,
+      inFlightMutations: pendingCreate,
+      remote: created,
+    });
+    expect(createWasApplied.conflicts).toEqual([]);
+    expect(createWasApplied.safeMutations).toHaveLength(1);
+    expect(createWasApplied.safeMutations[0]).toMatchObject({
+      type: 'record_soft_delete',
+      entityId: created.records[0].momentId,
+      base: created.records[0],
+    });
+    expect(applyEmotionMutationsToSnapshot(
+      created,
+      createWasApplied.safeMutations,
+    ).records).toEqual([]);
+  });
+
   it('uses the required isolated IndexedDB and per-account key path', () => {
     expect(EMOTION_SYNC_DB_NAME).toBe('my-emotion-map-sync-v2');
     expect(EMOTION_OUTBOX_STORE_NAME).toBe('emotion-mutation-outbox');

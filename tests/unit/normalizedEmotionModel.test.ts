@@ -222,8 +222,19 @@ describe('normalized emotion snapshot mapping', () => {
     const next = structuredClone(base);
     next.records[4_999].title = 'Only this record changed';
 
-    const mutations = diffEmotionState(base, next);
-    const assembled = assembleNormalizedEmotionSnapshot(next);
+    const samples = Array.from({ length: 5 }, () => {
+      const startedAt = performance.now();
+      const mutations = diffEmotionState(base, next);
+      const assembled = assembleNormalizedEmotionSnapshot(next);
+      return {
+        durationMs: performance.now() - startedAt,
+        mutations,
+        assembled,
+      };
+    }).sort((left, right) => left.durationMs - right.durationMs);
+    const measured = samples[Math.ceil(samples.length * 0.95) - 1];
+    const { mutations, assembled } = measured;
+    console.info(`[perf] normalized 5000 records assemble+diff p95=${measured.durationMs.toFixed(2)}ms`);
 
     expect(mutations).toHaveLength(1);
     expect(mutations[0]).toMatchObject({
@@ -231,6 +242,43 @@ describe('normalized emotion snapshot mapping', () => {
     });
     expect(assembled.moments).toHaveLength(5_000);
     expect(assembled.notes).toHaveLength(5_000);
+  }, 10_000);
+
+  it('assembles and diffs 10000 messages without resending the workspace', () => {
+    const base = normalize(createEmptyAppData()).snapshot;
+    base.conversations.push({
+      id: 'conversation-large', sortOrder: 0, title: 'Large',
+      unread: false, proactive: false, kind: 'regular',
+    });
+    base.messages = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `message-${index}`,
+      conversationId: 'conversation-large',
+      sortOrder: index,
+      role: index % 2 ? 'assistant' as const : 'user' as const,
+      body: `message ${index}`,
+      kind: 'message' as const,
+      deliveryState: 'delivered' as const,
+    }));
+    const next = structuredClone(base);
+    next.messages[9_999].body = 'one changed message';
+    const samples = Array.from({ length: 5 }, () => {
+      const startedAt = performance.now();
+      const mutations = diffEmotionState(base, next);
+      const assembled = assembleNormalizedEmotionSnapshot(next);
+      return {
+        durationMs: performance.now() - startedAt,
+        mutations,
+        assembled,
+      };
+    }).sort((left, right) => left.durationMs - right.durationMs);
+    const measured = samples[Math.ceil(samples.length * 0.95) - 1];
+    console.info(`[perf] normalized 10000 messages assemble+diff p95=${measured.durationMs.toFixed(2)}ms`);
+
+    expect(measured.mutations).toHaveLength(1);
+    expect(measured.mutations[0]).toMatchObject({
+      type: 'message_upsert', entityId: 'message-9999',
+    });
+    expect(measured.assembled.conversations[0].messages).toHaveLength(10_000);
   }, 10_000);
 });
 
