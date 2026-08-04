@@ -1,5 +1,4 @@
 import { env } from './runtime.ts';
-import { isMcpOwner } from './mcpValidation.ts';
 
 export type EmotionMapMcpToken = {
   id: string;
@@ -126,31 +125,6 @@ export const touchMcpToken = async (token: EmotionMapMcpToken) => {
     },
   ).catch(() => null);
   return Boolean(response?.ok);
-};
-
-export const loadOwnerAppState = async (
-  token: EmotionMapMcpToken,
-  config = serviceConfig(),
-) => {
-  const { supabaseUrl, serviceRoleKey } = config;
-  if (!supabaseUrl || !serviceRoleKey) return null;
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/app_states?user_id=eq.${encodeURIComponent(token.userId)}` +
-      '&select=user_id,revision,payload&limit=1',
-    {
-      headers: serviceHeaders(serviceRoleKey),
-      signal: AbortSignal.timeout(8_000),
-    },
-  ).catch(() => null);
-  if (!response?.ok) return null;
-  const rows = await response.json().catch(() => []) as Array<Record<string, unknown>>;
-  const row = rows[0];
-  if (!row) return { revision: 0, payload: null };
-  if (!isMcpOwner(token.userId, row.user_id)) return null;
-  const revision = Number(row.revision);
-  return Number.isSafeInteger(revision) && revision >= 0
-    ? { revision, payload: row.payload }
-    : null;
 };
 
 export const mcpServiceRequest = async (

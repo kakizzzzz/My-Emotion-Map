@@ -1,8 +1,7 @@
-import { jsonResponse, readJsonBody, runtime } from '../_shared/runtime.ts';
+import { env, jsonResponse, readJsonBody, runtime } from '../_shared/runtime.ts';
 import {
   authenticateMcpToken,
   claimMcpQuota,
-  loadOwnerAppState,
   mcpOriginHeaders,
   mcpPreflightResponse,
   mcpRequestAllowed,
@@ -20,6 +19,10 @@ import {
   negotiateMcpProtocol,
   type McpRpcMessage,
 } from '../_shared/mcpTransport.ts';
+import {
+  loadNormalizedEmotionActionContext,
+  type NormalizedEmotionAccess,
+} from '../_shared/normalizedEmotionRepository.ts';
 
 const asObject = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -42,6 +45,16 @@ const toolResult = (value: unknown, isError = false) => ({
   structuredContent: value,
   isError,
 });
+
+const normalizedAccess = (userId: string): NormalizedEmotionAccess => {
+  const apiKey = env('SUPABASE_SERVICE_ROLE_KEY');
+  return {
+    supabaseUrl: env('SUPABASE_URL'),
+    userId,
+    authorization: `Bearer ${apiKey}`,
+    apiKey,
+  };
+};
 
 runtime.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -84,7 +97,10 @@ runtime.serve(async (request) => {
     return rpcError(-32600, 'Unsupported MCP protocol version', 400, baseHeaders);
   }
   let usedTools = false;
-  let statePromise: ReturnType<typeof loadOwnerAppState> | null = null;
+  const statePromises = new Map<
+    string,
+    ReturnType<typeof loadNormalizedEmotionActionContext>
+  >();
   const handler = async (message: McpRpcMessage) => {
     if (message.method === 'initialize') {
       const version = negotiateMcpProtocol(asObject(message.params)?.protocolVersion);
@@ -111,12 +127,22 @@ runtime.serve(async (request) => {
     const validated = validateEmotionMapToolInput(name, params?.arguments ?? {});
     if (!validated.ok) throw new McpRpcFault(-32602, 'Invalid tool arguments');
     usedTools = true;
-    statePromise ??= loadOwnerAppState(token);
+    const targetNoteId = name === 'propose_create_draft'
+      ? ''
+      : typeof validated.value.noteId === 'string'
+        ? validated.value.noteId
+        : '';
+    const statePromise = statePromises.get(targetNoteId) ??
+      loadNormalizedEmotionActionContext(
+        normalizedAccess(token.userId),
+        targetNoteId,
+      );
+    statePromises.set(targetNoteId, statePromise);
     const state = await statePromise;
     if (!state) return toolResult({ status: 'unavailable' }, true);
     const value = await queueEmotionMapProposal({
       token, name, input: validated.value,
-      revision: state.revision, snapshot: state.payload,
+      revision: state.revision, snapshot: state.snapshot,
     });
     if (!value || !validateEmotionMapToolOutput(name, value)) {
       return toolResult({ status: 'unavailable' }, true);

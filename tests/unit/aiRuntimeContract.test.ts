@@ -24,6 +24,8 @@ describe('AI runtime contracts', () => {
     expect(chat).toContain('await planChatWithModel(planBody)');
     expect(chat).toContain('verifyChatPlanToken(');
     expect(chat).toContain('verifiedPlan?.plan ?? planChatSources');
+    expect(chat).toContain('loadNormalizedEmotionRevision(');
+    expect(chat).toContain('loadNormalizedEmotionReadContext(');
   });
 
   it('routes every casual message through the model with recent context', () => {

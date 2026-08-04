@@ -1,27 +1,37 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadOwnerAppState } from '../../supabase/functions/_shared/emotionMapMcpAuth';
+import {
+  loadNormalizedEmotionReadContext,
+  type NormalizedEmotionAccess,
+} from '../../supabase/functions/_shared/normalizedEmotionRepository';
 
-const token = {
-  id: 'token-a', userId: 'account-a', kind: 'output' as const,
-  scopes: ['records:read'],
-};
-const config = {
+const access: NormalizedEmotionAccess = {
   supabaseUrl: 'https://emotion-map.supabase.co',
-  serviceRoleKey: 'server-only',
+  userId: 'account-a',
+  authorization: 'Bearer server-only',
+  apiKey: 'server-only',
 };
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('Emotion Map MCP owner state boundary', () => {
-  it('queries only the token owner and rejects a mismatched row', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{
-      user_id: 'account-b', revision: 4, payload: { dataMode: 'real' },
-    }]), { status: 200 }));
+describe('Emotion Map normalized owner boundary', () => {
+  it('queries only the token owner and rejects a mismatched entity row', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        user_id: 'account-a',
+        dataset_revision: 4,
+        data_model_version: 2,
+        migration_verified_at: '2026-08-04T00:00:00.000Z',
+      }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        user_id: 'account-b',
+        moment_id: 'other-record',
+      }]), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(loadOwnerAppState(token, config)).resolves.toBeNull();
-    const url = String(fetchMock.mock.calls[0]?.[0]);
-    expect(url).toContain('user_id=eq.account-a');
-    expect(url).not.toContain('account-b');
+    await expect(loadNormalizedEmotionReadContext(access)).resolves.toBeNull();
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls).toHaveLength(2);
+    expect(urls.every((url) => url.includes('user_id=eq.account-a'))).toBe(true);
+    expect(urls.join('\n')).not.toContain('account-b');
   });
 });

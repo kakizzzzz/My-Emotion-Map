@@ -29,6 +29,9 @@ const sha256 = async (value: string) => {
     .map((byte) => byte.toString(16).padStart(2, '0')).join('');
 };
 
+export const normalizedProposalNoteFingerprint = (note: unknown) =>
+  sha256(stableSerialize(note));
+
 export const queueEmotionMapProposal = async ({
   token,
   name,
@@ -54,7 +57,7 @@ export const queueEmotionMapProposal = async ({
       note && note.isDraft !== true && text(note.id, 200) === targetNoteId
     );
     if (!target) return null;
-    targetNoteFingerprint = await sha256(stableSerialize(target));
+    targetNoteFingerprint = await normalizedProposalNoteFingerprint(target);
   }
   const clientRequestId = text(input.clientRequestId, 120);
   const toolName = `emotion_map.${name}`;

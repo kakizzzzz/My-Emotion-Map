@@ -41,11 +41,25 @@ import {
   type MlmModelImage,
 } from '../_shared/mlmExternalRetrieval.ts';
 import { contextualizeMcpRequest } from '../../../src/domain/query/mcpIntent.ts';
+import {
+  loadNormalizedEmotionReadContext,
+  loadNormalizedEmotionRevision,
+  type NormalizedEmotionAccess,
+} from '../_shared/normalizedEmotionRepository.ts';
 
 const asObject = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+
+const normalizedAccess = (
+  session: NonNullable<Awaited<ReturnType<typeof authenticate>>>,
+): NormalizedEmotionAccess => ({
+  supabaseUrl: session.supabaseUrl,
+  userId: session.userId,
+  authorization: session.authorization,
+  apiKey: session.anonKey,
+});
 
 type RequestClaim =
   | { status: 'claimed' }
@@ -120,22 +134,6 @@ const releaseChatRequest = async (
   } catch {
     // A short expiry lets the same request recover even if release is unavailable.
   }
-};
-
-const readAppState = async (
-  session: NonNullable<Awaited<ReturnType<typeof authenticate>>>,
-) => {
-  const response = await fetch(
-    `${session.supabaseUrl}/rest/v1/app_states?select=payload,revision&user_id=eq.${encodeURIComponent(session.userId)}&limit=1`,
-    {
-      headers: { authorization: session.authorization, apikey: session.anonKey },
-      signal: AbortSignal.timeout(8_000),
-    },
-  );
-  if (!response.ok) return null;
-  const rows = await response.json() as Array<{ payload?: unknown; revision?: unknown }>;
-  const row = rows[0];
-  return row && typeof row.revision === 'number' ? row : null;
 };
 
 const createClarificationOptions = async ({
@@ -355,12 +353,12 @@ runtime.serve(async (request) => {
         return jsonResponse({ status: 'unavailable', code: 'idempotency_unavailable' }, 503, headers);
       }
       claimedRequestId = planRequestId;
-      const row = await readAppState(session);
-      if (!row) {
+      const revision = await loadNormalizedEmotionRevision(normalizedAccess(session));
+      if (revision === null) {
         await releaseChatRequest(session, planRequestId);
         return jsonResponse({ status: 'unavailable', code: 'state_unavailable' }, 503, headers);
       }
-      if (row.revision !== planBody.clientRevision) {
+      if (revision !== planBody.clientRevision) {
         await releaseChatRequest(session, planRequestId);
         return jsonResponse({ status: 'sync_required', code: 'sync_required' }, 409, headers);
       }
@@ -400,7 +398,7 @@ runtime.serve(async (request) => {
       const responsePayload = {
         status: 'planned',
         requestId: planBody.requestId,
-        serverRevision: row.revision,
+        serverRevision: revision,
         ...sourcePlan,
         routingPlanToken,
       };
@@ -426,12 +424,15 @@ runtime.serve(async (request) => {
       return jsonResponse({ status: 'unavailable', code: 'idempotency_unavailable' }, 503, headers);
     }
     claimedRequestId = body.requestId;
-    const row = await readAppState(session);
-    if (!row) {
+    const state = await loadNormalizedEmotionReadContext(
+      normalizedAccess(session),
+      body.conversationId,
+    );
+    if (!state) {
       await releaseChatRequest(session, body.requestId);
       return jsonResponse({ status: 'unavailable', code: 'state_unavailable' }, 503, headers);
     }
-    if (row.revision !== body.clientRevision) {
+    if (state.revision !== body.clientRevision) {
       await releaseChatRequest(session, body.requestId);
       return jsonResponse({ status: 'sync_required', answer: '', evidence: [], confidence: 'low', limitations: ['sync_required'] }, 409, headers);
     }
@@ -447,7 +448,7 @@ runtime.serve(async (request) => {
         env('SUPABASE_SERVICE_ROLE_KEY'),
         {
           userId: session.userId,
-          revision: row.revision,
+          revision: state.revision,
           optionId: body.referenceConfirmation.optionId,
         },
       );
@@ -456,7 +457,7 @@ runtime.serve(async (request) => {
         return jsonResponse({ status: 'unavailable', code: 'invalid_reference_confirmation' }, 400, headers);
       }
       const candidates = retrieveAuthorizedEvidence(
-        row.payload,
+        state.snapshot,
         continuation.query,
         [],
       ).evidence.slice(0, 3);
@@ -474,7 +475,7 @@ runtime.serve(async (request) => {
       retrievalExplicitNoteIds = [candidates[selectedIndex].noteId];
     } else {
       const reference = resolveConversationReference(
-        row.payload,
+        state.snapshot,
         body.conversationId,
         body.message,
         body.conversationAnchorNoteIds,
@@ -484,7 +485,7 @@ runtime.serve(async (request) => {
       }
     }
     const retrieval = retrieveAuthorizedEvidence(
-      row.payload,
+      state.snapshot,
       retrievalMessage,
       {
         explicitNoteIds: retrievalExplicitNoteIds,
@@ -614,7 +615,7 @@ runtime.serve(async (request) => {
       }
       const responsePayload = {
         requestId: body.requestId,
-        serverRevision: row.revision,
+        serverRevision: state.revision,
         intent: 'casual',
         retrievalStatus: 'supported',
         status: 'supported',
@@ -669,7 +670,7 @@ runtime.serve(async (request) => {
       ].filter(Boolean).join('\n\n');
       const responsePayload = {
         requestId: body.requestId,
-        serverRevision: row.revision,
+        serverRevision: state.revision,
         intent: retrieval.intent,
         retrievalStatus: responseStatus,
         status: responseStatus,
@@ -683,7 +684,7 @@ runtime.serve(async (request) => {
           ? await createClarificationOptions({
               evidence: retrieval.evidence,
               userId: session.userId,
-              revision: row.revision,
+              revision: state.revision,
               query: retrievalMessage,
             })
           : [],
@@ -719,7 +720,7 @@ runtime.serve(async (request) => {
         : [];
       const responsePayload = {
         requestId: body.requestId,
-        serverRevision: row.revision,
+        serverRevision: state.revision,
         intent: retrieval.intent,
         retrievalStatus: retrieval.retrievalStatus,
         status: retrieval.retrievalStatus,
@@ -733,7 +734,7 @@ runtime.serve(async (request) => {
           ? await createClarificationOptions({
               evidence: retrieval.evidence,
               userId: session.userId,
-              revision: row.revision,
+              revision: state.revision,
               query: retrievalMessage,
             })
           : [],
@@ -768,7 +769,7 @@ runtime.serve(async (request) => {
         }));
       const responsePayload = {
         requestId: body.requestId,
-        serverRevision: row.revision,
+        serverRevision: state.revision,
         intent: 'recent_places',
         retrievalStatus: 'supported',
         status: 'supported',
@@ -828,7 +829,7 @@ runtime.serve(async (request) => {
     if (!validation || !validation.validClaims.length) {
       const responsePayload = {
         requestId: body.requestId,
-        serverRevision: row.revision,
+        serverRevision: state.revision,
         intent: retrieval.intent,
         retrievalStatus: 'supported',
         status: 'generation_rejected',
@@ -880,7 +881,7 @@ runtime.serve(async (request) => {
       : '';
     const responsePayload = {
       requestId: body.requestId,
-      serverRevision: row.revision,
+      serverRevision: state.revision,
       intent: retrieval.intent,
       retrievalStatus: 'supported',
       status: 'supported',

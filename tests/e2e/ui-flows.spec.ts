@@ -9,19 +9,56 @@ async function seedAuthenticatedSession(
   page: Page,
   includeBlankData: boolean,
   legacyProfileName: string | null = null,
+  initialConversations: Array<Record<string, unknown>> = [],
 ) {
   await page.route(
     'https://uifgpmmlvmfrauzbbrem.supabase.co/rest/v1/**',
     async (route) => {
-      const isSave = route.request().url().includes('/rpc/save_app_state');
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith('/rpc/apply_emotion_mutations')) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 'e2e_offline', message: 'E2E keeps the local outbox.' }),
+        });
+        return;
+      }
+      const body = url.pathname.endsWith('/emotion_settings')
+        ? [{
+            user_id: TEST_USER_ID,
+            dataset_revision: 0,
+            changed_revision: 0,
+            data_model_version: 2,
+            migration_verified_at: '2026-08-04T00:00:00.000Z',
+            migration_verification: { verified: true },
+            theme_tone: 'original',
+            theme_palette: {
+              page: '#F3F3F3', card: '#D9D9D9',
+              icon: '#C3C3C3', dark: '#5C5C5C',
+            },
+          }]
+        : url.pathname.endsWith('/emotion_preferences')
+          ? [{
+              user_id: TEST_USER_ID,
+              profile_name: legacyProfileName ?? '',
+              about_me: '',
+              ai_user_prompt: '',
+              ai_context_message_count: 8,
+              chat_preference_tags: [],
+              follow_up_intervals: [3, 7, 14],
+              changed_revision: 0,
+            }]
+          : [];
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(isSave ? [{ revision: 1 }] : []),
+        body: JSON.stringify(body),
       });
     },
   );
-  await page.addInitScript(({ storageKey, authStorageKey, blank, userId, profileName }) => {
+  await page.addInitScript(({
+    storageKey, authStorageKey, blank, userId, profileName, conversations,
+  }) => {
     if (window.sessionStorage.getItem('e2e-storage-initialized')) return;
     window.localStorage.clear();
     window.localStorage.setItem(authStorageKey, JSON.stringify({
@@ -46,7 +83,7 @@ async function seedAuthenticatedSession(
         dataMode: 'real',
         moments: [],
         notes: [],
-        conversations: [],
+        conversations,
         followUps: [],
         revisits: [],
       }));
@@ -64,6 +101,7 @@ async function seedAuthenticatedSession(
     blank: includeBlankData,
     userId: TEST_USER_ID,
     profileName: legacyProfileName,
+    conversations: initialConversations,
   });
 }
 
@@ -411,14 +449,7 @@ test('add, complete, reopen, revisit, persist, and permanently delete', async ({
     .getByRole('button', { name: '关闭' })
     .click();
 
-  await page.evaluate((storageKey) => {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) throw new Error('Saved app data was not found');
-    const snapshot = JSON.parse(raw);
-    snapshot.followUps[0].dueAt = '2026-07-27T00:00:00.000Z';
-    snapshot.followUps[0].status = 'queued';
-    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
-  }, STORAGE_KEY);
+  await page.clock.setFixedTime(new Date('2030-08-04T12:00:00.000Z'));
   await page.reload();
   await page.getByRole('dialog', { name: '使用定位？' })
     .getByRole('button', { name: '暂不' }).click();
@@ -538,19 +569,14 @@ test('320px core flow and reduced-motion map behavior', async ({ page }) => {
 });
 
 test('regular conversation rows reveal a real delete action on left swipe', async ({ page }) => {
-  await startBlank(page);
-  await page.evaluate((storageKey) => {
-    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
-    snapshot.conversations = [{
+  await seedAuthenticatedSession(page, true, null, [{
       id: 'conversation-delete',
       title: '可删除对话',
       preview: '左滑删除',
       kind: 'regular',
       messages: [],
-    }];
-    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
-  }, STORAGE_KEY);
-  await page.reload();
+  }]);
+  await page.goto('/');
   await page.getByRole('dialog', { name: '使用定位？' })
     .getByRole('button', { name: '暂不' }).click();
   await page.getByRole('button', { name: '打开页面导航' }).click();

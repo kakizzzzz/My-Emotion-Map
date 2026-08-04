@@ -14,6 +14,10 @@ const actionQueue = readFileSync(
   resolve(process.cwd(), 'supabase/functions/_shared/emotionMapMcpActions.ts'),
   'utf8',
 );
+const normalizedRepository = readFileSync(
+  resolve(process.cwd(), 'supabase/functions/_shared/normalizedEmotionRepository.ts'),
+  'utf8',
+);
 const migration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/202608020005_phase5_output_mcp.sql'),
   'utf8',
@@ -30,6 +34,13 @@ describe('Emotion Map MCP server separation contract', () => {
     expect(actionServer).toContain('EMOTION_MAP_ACTION_TOOLS');
     expect(actionServer).toContain("MCP_ACTION_SCOPE");
     expect(actionQueue).toContain('requiresUserConfirmation');
+    expect(actionServer).toContain('loadNormalizedEmotionActionContext');
+  });
+
+  it('queries normalized records without loading chat history in the read MCP', () => {
+    expect(readServer).toContain('loadNormalizedEmotionReadContext');
+    expect(normalizedRepository).toContain("restRows(access, 'emotion_records'");
+    expect(readServer).not.toContain('loadNormalizedEmotionActionContext');
   });
 
   it('issues default output tokens as read-only and action tokens explicitly', () => {

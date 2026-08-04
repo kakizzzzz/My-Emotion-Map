@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   createEmptyAppData,
@@ -29,6 +30,15 @@ const note: EmotionNote = {
   excerpt: '',
   isDraft: false,
 };
+
+const runtimeSources = (directory: string): string[] => readdirSync(
+  directory,
+  { withFileTypes: true },
+).flatMap((entry) => {
+  const path = join(directory, entry.name);
+  if (entry.isDirectory()) return runtimeSources(path);
+  return /\.(?:ts|tsx)$/.test(entry.name) ? [path] : [];
+});
 
 describe('normalized sync migration product invariants', () => {
   it('keeps unselected emotion null and unknown-zone time as local wall time', () => {
@@ -159,5 +169,15 @@ describe('normalized sync migration product invariants', () => {
     expect(syncSource).toContain("window.removeEventListener('pageshow', recheck)");
     expect(syncSource).toContain("window.removeEventListener('online', recheck)");
     expect(syncSource).toContain("document.removeEventListener('visibilitychange', recheck)");
+  });
+
+  it('keeps the legacy snapshot archive out of browser and Edge runtime code', () => {
+    const offenders = [
+      ...runtimeSources('src'),
+      ...runtimeSources('supabase/functions'),
+    ].filter((path) => /app_states|save_app_state|loadOwnerAppState|readAppState/
+      .test(readFileSync(path, 'utf8')));
+
+    expect(offenders).toEqual([]);
   });
 });
