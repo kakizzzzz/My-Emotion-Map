@@ -32,6 +32,9 @@ select
   not has_table_privilege('authenticated', 'public.app_states', 'INSERT,UPDATE,DELETE')
     as authenticated_archive_write_revoked,
   has_table_privilege('service_role', 'public.app_states', 'SELECT')
+    and not has_table_privilege(
+      'service_role', 'public.app_states', 'INSERT,UPDATE,DELETE'
+    )
     as service_role_archive_read_only;
 
 select
@@ -86,7 +89,7 @@ with archive_stats as (
     ) as archive_conversation_ids,
     (
       select md5(coalesce(string_agg(
-        conversation.value ->> 'id' || '/' || message.value ->> 'id', E'\n'
+        (conversation.value ->> 'id') || '/' || (message.value ->> 'id'), E'\n'
         order by conversation.ordinality, message.ordinality
       ), ''))
       from jsonb_array_elements(coalesce(archive.payload -> 'conversations', '[]'::jsonb))

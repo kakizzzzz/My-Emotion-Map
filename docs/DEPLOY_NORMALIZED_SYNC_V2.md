@@ -10,6 +10,7 @@ allowed Supabase project is `uifgpmmlvmfrauzbbrem`.
   - `202608040002_emotion_trash_retention.sql`
   - `202608040003_emotion_archive_lockdown.sql`
   - `202608040004_normalized_proposal_revisions.sql`
+  - `202608040005_archive_readonly_and_retention_schedule.sql`
 - read-only verifier: `supabase/verify-normalized-emotion.sql`
 - explicit same-user recovery: `supabase/recover-normalized-emotion-for-user.sql`
 - changed Edge Functions: `emotion-chat`, `emotion-map-mcp`,
@@ -45,9 +46,12 @@ Use transactions and retain the complete SQL output.
    clients can no longer select `app_states` and `save_app_state` rejects writes;
    confirm service role can still read the archive.
 6. Apply `202608040004_normalized_proposal_revisions.sql`.
-7. Read back migrations, RLS flags, policies, grants, constraints, partial
+7. Apply `202608040005_archive_readonly_and_retention_schedule.sql`. Confirm
+   `service_role` has archive `SELECT` but no write privilege and read back
+   exactly one enabled `emotion-trash-retention-daily` job.
+8. Read back migrations, RLS flags, policies, grants, constraints, partial
    unique indexes and function ownership/search paths.
-8. Confirm `pg_cron` contains exactly one enabled
+9. Confirm `pg_cron` contains exactly one enabled
    `emotion-trash-retention-daily` job. If `pg_cron` is unavailable, create and
    document one equivalent service-role schedule; do not claim Cron is active
    without readback.

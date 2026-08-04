@@ -5,7 +5,7 @@
 begin;
 
 lock table public.app_states in share row exclusive mode;
-lock table public.profiles in share row exclusive mode;
+lock table public.account_profiles in share row exclusive mode;
 
 create table if not exists public.emotion_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -1524,9 +1524,9 @@ begin
       else '{"page":"#F3F3F3","card":"#D9D9D9","icon":"#C3C3C3","dark":"#5C5C5C"}'::jsonb end
   ) on conflict (user_id) do nothing;
   insert into public.emotion_preferences (user_id, profile_name)
-  select p_user_id, coalesce(profile.display_name, '')
+  select p_user_id, coalesce(profile.account_id, '')
   from (select 1) seed
-  left join public.profiles profile on profile.id = p_user_id
+  left join public.account_profiles profile on profile.user_id = p_user_id
   on conflict (user_id) do nothing;
 
   insert into public.emotion_records (
@@ -1666,7 +1666,7 @@ begin
   from jsonb_array_elements(v_payload -> 'conversations')
     with ordinality conversation(value, ordinality);
   select md5(coalesce(string_agg(
-      conversation.value ->> 'id' || '/' || message.value ->> 'id', E'\n'
+      (conversation.value ->> 'id') || '/' || (message.value ->> 'id'), E'\n'
       order by conversation.ordinality, message.ordinality
     ), ''))
   into v_message_ids

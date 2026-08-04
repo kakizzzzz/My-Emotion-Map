@@ -6,6 +6,9 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 const storage = read('supabase/migrations/202608040001_normalized_emotion_storage_v2.sql');
 const retention = read('supabase/migrations/202608040002_emotion_trash_retention.sql');
 const lockdown = read('supabase/migrations/202608040003_emotion_archive_lockdown.sql');
+const archiveHardening = read(
+  'supabase/migrations/202608040005_archive_readonly_and_retention_schedule.sql',
+);
 const verifier = read('supabase/verify-normalized-emotion.sql');
 const recovery = read('supabase/recover-normalized-emotion-for-user.sql');
 const verifyScript = read('scripts/verify-normalized-emotion-migration.mjs');
@@ -70,12 +73,22 @@ describe('normalized emotion database migration safety', () => {
     ));
     expect(storage.trimStart()).toMatch(/^--[\s\S]*?begin;/i);
     expect(storage).toContain('lock table public.app_states in share row exclusive mode');
+    expect(storage).toContain('lock table public.account_profiles in share row exclusive mode');
+    expect(storage).not.toContain('public.profiles');
+    expect(migration).toContain('profile.account_id');
+    expect(migration).toContain('profile.user_id = p_user_id');
     expect(migration).toContain('Future emotion schema cannot be migrated');
     expect(migration).toContain('Demo emotion archive cannot be migrated');
     expect(migration).toContain('Duplicate moment or note ID');
     expect(migration).toContain('Missing moment-note pair');
     expect(migration).toContain('Shared moment-note fields diverge');
     expect(migration).toContain("coalesce(message.value ->> 'deliveryState', '') <> 'pending'");
+    expect(storage).toContain(
+      "(conversation.value ->> 'id') || '/' || (message.value ->> 'id')",
+    );
+    expect(verifier).toContain(
+      "(conversation.value ->> 'id') || '/' || (message.value ->> 'id')",
+    );
     expect(migration).toContain('v_source_checksum := md5(v_source_semantic::text)');
     expect(migration).toContain('v_new_checksum := md5(v_new_semantic::text)');
     expect(migration).toContain('Normalized emotion migration verification failed');
@@ -86,7 +99,9 @@ describe('normalized emotion database migration safety', () => {
   });
 
   it('never mutates or removes the immutable archive payload', () => {
-    const combined = withoutComments([storage, retention, lockdown, recovery].join('\n'));
+    const combined = withoutComments([
+      storage, retention, lockdown, archiveHardening, recovery,
+    ].join('\n'));
     expect(combined).not.toMatch(/update\s+public\.app_states/i);
     expect(combined).not.toMatch(/delete\s+from\s+public\.app_states/i);
     expect(combined).not.toMatch(/truncate\s+(table\s+)?public\.app_states/i);
@@ -95,6 +110,12 @@ describe('normalized emotion database migration safety', () => {
     expect(lockdown).toContain("raise exception 'legacy_snapshot_write_rejected'");
     expect(lockdown).toContain('grant select on table public.app_states to service_role');
     expect(lockdown).toContain('from public, anon, authenticated, service_role');
+    expect(archiveHardening).toContain(
+      'revoke all on table public.app_states from service_role',
+    );
+    expect(archiveHardening).toContain(
+      'grant select on table public.app_states to service_role',
+    );
   });
 
   it('purges only propagated seven-day tombstones under the revision-row lock', () => {
@@ -111,6 +132,10 @@ describe('normalized emotion database migration safety', () => {
     expect(retention).toContain('from public, anon, authenticated');
     expect(retention).toContain("where jobname = $1");
     expect(retention).toContain('pg_cron is unavailable');
+    expect(archiveHardening).toContain('create extension if not exists pg_cron');
+    expect(archiveHardening).toContain("where jobname = 'emotion-trash-retention-daily'");
+    expect(archiveHardening).toContain('and active');
+    expect(archiveHardening).toContain('if v_enabled_count <> 1 then');
     expect(retention).not.toMatch(/media|avatar/i);
   });
 
