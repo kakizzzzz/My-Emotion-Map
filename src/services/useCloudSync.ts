@@ -95,6 +95,7 @@ export function useCloudSync({
   applySnapshot,
   blockedByFutureSchema = false,
   pauseUploads = false,
+  pauseRemoteRefresh = false,
 }: {
   client: SupabaseClient | null;
   session: Session | null;
@@ -102,6 +103,7 @@ export function useCloudSync({
   applySnapshot: (snapshot: AppDataSnapshot) => void;
   blockedByFutureSchema?: boolean;
   pauseUploads?: boolean;
+  pauseRemoteRefresh?: boolean;
 }) {
   const [status, setStatus] = useState<CloudSyncStatus>(client ? 'signed_out' : 'unconfigured');
   const [revision, setRevision] = useState<number | null>(null);
@@ -114,11 +116,18 @@ export function useCloudSync({
   const syncMetaRef = useRef<LocalSyncMeta | null>(null);
   const generationRef = useRef(0);
   const pendingAppliedHashRef = useRef('');
+  const statusRef = useRef(status);
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(0);
   const [instanceId] = useState(requestId);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
   }, [snapshot]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     applySnapshotRef.current = applySnapshot;
@@ -143,6 +152,131 @@ export function useCloudSync({
     setRevision(remoteRevision);
     setStatus('synced');
   }, [persistMeta]);
+
+  const refreshRemote = useCallback(async () => {
+    const userId = session?.user.id;
+    if (
+      !client ||
+      !userId ||
+      blockedByFutureSchema ||
+      pauseRemoteRefresh ||
+      snapshotRef.current.dataMode !== 'real' ||
+      refreshInFlightRef.current ||
+      statusRef.current === 'checking' ||
+      statusRef.current === 'syncing' ||
+      statusRef.current === 'conflict' ||
+      statusRef.current === 'upgrade_required'
+    ) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastRefreshAtRef.current < 1_200) return;
+    lastRefreshAtRef.current = now;
+    refreshInFlightRef.current = true;
+    const requestGeneration = generationRef.current;
+    setStatus('checking');
+
+    try {
+      const { data, error } = await client
+        .from('app_states')
+        .select('revision,payload')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (
+        generationRef.current !== requestGeneration ||
+        activeUserRef.current !== userId
+      ) {
+        return;
+      }
+      if (error) {
+        setStatus(navigator.onLine ? 'error' : 'offline');
+        return;
+      }
+      if (!data) {
+        setStatus((syncMetaRef.current?.baseRevision ?? 0) === 0
+          ? 'synced'
+          : 'error');
+        return;
+      }
+
+      const remoteResult = safeSnapshot(data.payload);
+      const remoteRevision = Number(data.revision);
+      if (remoteResult.status === 'upgrade_required') {
+        setRevision(
+          Number.isSafeInteger(remoteRevision) && remoteRevision >= 1
+            ? remoteRevision
+            : null,
+        );
+        setStatus('upgrade_required');
+        return;
+      }
+      if (
+        remoteResult.status !== 'ok' ||
+        !Number.isSafeInteger(remoteRevision) ||
+        remoteRevision < 1
+      ) {
+        setStatus('error');
+        return;
+      }
+
+      const currentMeta = syncMetaRef.current ?? loadSyncMeta(userId);
+      if (currentMeta && remoteRevision < currentMeta.baseRevision) {
+        setStatus('synced');
+        return;
+      }
+      const local = snapshotRef.current;
+      const localHash = canonicalSnapshotDigest(local);
+      const remote = remoteResult.snapshot;
+      const remoteHash = canonicalSnapshotDigest(remote);
+      const classification = classifyBroadcast({
+        localHash,
+        incomingHash: remoteHash,
+        meta: currentMeta,
+      });
+
+      if (classification === 'ignore') {
+        persistMeta(
+          userId,
+          markSyncComplete({
+            revision: remoteRevision,
+            payloadHash: remoteHash,
+          }),
+        );
+        setUploadedSnapshot(remoteHash);
+        window.localStorage.setItem(
+          `my-emotion-map.cloud-revision.${userId}`,
+          String(remoteRevision),
+        );
+        setRevision(remoteRevision);
+        setStatus('synced');
+        return;
+      }
+      if (classification === 'fetch_remote') {
+        acceptRemote(userId, remote, remoteRevision);
+        return;
+      }
+
+      saveRecoveryCopies(userId, local, remote);
+      conflictRemoteRef.current = {
+        snapshot: remote,
+        revision: remoteRevision,
+      };
+      if (currentMeta) {
+        persistMeta(userId, { ...currentMeta, dirty: true });
+      }
+      setRevision(remoteRevision);
+      setStatus('conflict');
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [
+    acceptRemote,
+    blockedByFutureSchema,
+    client,
+    pauseRemoteRefresh,
+    persistMeta,
+    session?.user.id,
+  ]);
 
   useEffect(() => {
     channelRef.current?.close();
@@ -231,6 +365,37 @@ export function useCloudSync({
       if (channelRef.current === channel) channelRef.current = null;
     };
   }, [acceptRemote, blockedByFutureSchema, client, persistMeta, session?.user.id]);
+
+  useEffect(() => {
+    if (
+      !client ||
+      !session ||
+      blockedByFutureSchema ||
+      pauseRemoteRefresh
+    ) {
+      return;
+    }
+    const recheck = () => {
+      if (document.visibilityState === 'hidden') return;
+      void refreshRemote();
+    };
+    window.addEventListener('focus', recheck);
+    window.addEventListener('pageshow', recheck);
+    window.addEventListener('online', recheck);
+    document.addEventListener('visibilitychange', recheck);
+    return () => {
+      window.removeEventListener('focus', recheck);
+      window.removeEventListener('pageshow', recheck);
+      window.removeEventListener('online', recheck);
+      document.removeEventListener('visibilitychange', recheck);
+    };
+  }, [
+    blockedByFutureSchema,
+    client,
+    pauseRemoteRefresh,
+    refreshRemote,
+    session,
+  ]);
 
   useEffect(() => {
     if (!client) {
@@ -473,13 +638,6 @@ export function useCloudSync({
     }, 800);
     return () => window.clearTimeout(timer);
   }, [client, instanceId, pauseUploads, persistMeta, revision, session, snapshot, status, uploadedSnapshot]);
-
-  useEffect(() => {
-    if (!client || !session || status !== 'offline' || revision === null || snapshot.dataMode !== 'real') return;
-    const resume = () => setStatus('synced');
-    window.addEventListener('online', resume);
-    return () => window.removeEventListener('online', resume);
-  }, [client, revision, session, snapshot.dataMode, status]);
 
   const confirmInitialUpload = () => {
     if (status === 'upload_confirmation_required' && revision === 0) setStatus('synced');

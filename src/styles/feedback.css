@@ -53,6 +53,32 @@
   text-decoration: underline;
 }
 
+.cloud-sync-toast {
+  bottom: calc(env(safe-area-inset-bottom) + 10.5rem);
+  flex-wrap: wrap;
+}
+
+.cloud-sync-toast--conflict {
+  max-width: min(22rem, calc(100% - 32px));
+  padding: 10px 12px;
+  border-radius: 18px;
+  pointer-events: auto;
+}
+
+.cloud-sync-toast__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.cloud-sync-toast__actions button {
+  min-height: 32px;
+  padding: 0 10px;
+  text-decoration: none;
+}
+
 /* Location permission */
 
 .location-permission-overlay {

@@ -427,12 +427,13 @@ const sanitizeMessage = (
     requestId: asString(source.requestId, 200) || undefined,
     replyToRequestId: asString(source.replyToRequestId, 200) || undefined,
     deliveryState:
-      source.deliveryState === 'pending' ||
-      source.deliveryState === 'delivered' ||
-      source.deliveryState === 'failed' ||
-      source.deliveryState === 'stopped'
-        ? source.deliveryState
-        : undefined,
+      source.deliveryState === 'pending'
+        ? 'stopped'
+        : source.deliveryState === 'delivered' ||
+            source.deliveryState === 'failed' ||
+            source.deliveryState === 'stopped'
+          ? source.deliveryState
+          : undefined,
     retryable: source.retryable === true,
     referenceConfirmation: (() => {
       const reference = asObject(source.referenceConfirmation);
