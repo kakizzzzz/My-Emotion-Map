@@ -32,6 +32,7 @@ import {
 } from './app/themePreferences';
 import type { ToastNotice, ToastHandler } from './app/appTypes';
 import { AppToast } from './app/AppToast';
+import { CloudSyncNotice } from './app/CloudSyncNotice';
 import { useFollowUpCoordinator } from './app/useFollowUpCoordinator';
 import { useLocalDataController } from './app/useLocalDataController';
 import {
@@ -47,6 +48,7 @@ import { RevisitEmotionModal } from './features/notes/RevisitEmotionModal';
 import { useSupabaseSession } from './services/useSupabaseSession';
 import type { PhotoAssistDelivery } from './app/appTypes';
 import { useCloudSync } from './services/useCloudSync';
+import { prepareCloudSnapshot } from './services/cloudSnapshot';
 import { createRecordId } from './app/createRecordId';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { authenticateAccount } from './services/accountAuth';
@@ -271,7 +273,7 @@ export function App() {
       loadLocalSettings(cloudSession.session?.user.id ?? null).followUpIntervals,
     );
   }, [cloudSession.session?.user.id]);
-  const cloudSnapshot = useMemo(() => ({
+  const workspaceSnapshot = useMemo(() => ({
     schemaVersion: initialData.schemaVersion,
     dataMode,
     moments,
@@ -292,8 +294,12 @@ export function App() {
     initialData.schemaVersion, moments, notes, revisits,
     themePalette, themeTone, lastViewport,
   ]);
-  const chatUploadPaused = conversations.some((conversation) =>
+  const hasPendingChatRequest = conversations.some((conversation) =>
     conversation.messages.some((message) => message.deliveryState === 'pending'),
+  );
+  const cloudSnapshot = useMemo(
+    () => prepareCloudSnapshot(workspaceSnapshot),
+    [workspaceSnapshot],
   );
   const cloudSync = useCloudSync({
     client: cloudSession.client,
@@ -301,7 +307,7 @@ export function App() {
     snapshot: cloudSnapshot,
     applySnapshot,
     blockedByFutureSchema: workspaceUpgradeRequired,
-    pauseUploads: chatUploadPaused,
+    pauseRemoteRefresh: hasPendingChatRequest,
   });
 
   const authenticateCloudAccount = async (
@@ -831,6 +837,12 @@ export function App() {
           onRequest={locationController.confirmLocationRequest}
         />
 
+        <CloudSyncNotice
+          status={cloudSync.status}
+          language={language}
+          onUseRemote={cloudSync.useRemoteVersion}
+          onKeepLocal={cloudSync.overwriteRemoteWithLocal}
+        />
         <AppToast notice={toast} onDismiss={() => setToast(null)} />
         </main>
       </div>
