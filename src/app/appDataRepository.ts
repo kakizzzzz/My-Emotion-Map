@@ -31,6 +31,7 @@ import {
   clearLegacyChatDrafts,
 } from './workspace/chatDraftStorage';
 import { sanitizeRevisits } from './appDataRevisits';
+import { recordSharedFieldsDiverged } from '../domain/storage/normalizedEmotionSnapshot';
 
 export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
 export const CURRENT_SCHEMA_VERSION = 6;
@@ -916,14 +917,22 @@ export const canonicalSnapshotDigest = (snapshot: AppDataSnapshot) =>
 export const validateReferentialIntegrity = (snapshot: AppDataSnapshot) => {
   const issues: string[] = [];
   const noteIds = new Set(snapshot.notes.map((note) => note.id));
+  const noteById = new Map(snapshot.notes.map((note) => [note.id, note]));
   const followUpIds = new Set(snapshot.followUps.map((record) => record.id));
   const noteOwners = new Map<string, number>();
   snapshot.moments.forEach((moment) => {
     noteOwners.set(moment.noteId, (noteOwners.get(moment.noteId) ?? 0) + 1);
     if (!noteIds.has(moment.noteId)) issues.push('moment-note-missing');
+    const note = noteById.get(moment.noteId);
+    if (note && recordSharedFieldsDiverged(moment, note)) {
+      issues.push('record-shared-fields-diverged');
+    }
   });
   if ([...noteOwners.values()].some((count) => count !== 1)) {
     issues.push('moment-note-not-unique');
+  }
+  if (snapshot.notes.some((note) => !noteOwners.has(note.id))) {
+    issues.push('note-moment-missing');
   }
   if (snapshot.followUps.some((record) => !noteIds.has(record.noteId))) {
     issues.push('followup-note-missing');
