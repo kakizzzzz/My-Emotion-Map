@@ -143,6 +143,7 @@ export function MapMarkers({
           longitude={userLocation.lng}
           latitude={userLocation.lat}
           anchor="center"
+          style={{ pointerEvents: 'none' }}
         >
           <div
             className="current-location-marker"
