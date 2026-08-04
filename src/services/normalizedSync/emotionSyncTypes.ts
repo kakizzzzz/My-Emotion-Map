@@ -11,7 +11,13 @@ import type {
 } from '../../types';
 
 export const NORMALIZED_EMOTION_MODEL_VERSION = 2;
+export const NORMALIZED_EMOTION_APP_SCHEMA_VERSION = 6;
 export const MAX_EMOTION_MUTATIONS_PER_COMMIT = 500;
+
+export type CloudSyncStatus =
+  | 'unconfigured' | 'signed_out' | 'idle' | 'local' | 'checking'
+  | 'syncing' | 'synced' | 'offline' | 'error' | 'conflict'
+  | 'upgrade_required' | 'setup_required';
 
 export type EmotionMutationType =
   | 'settings_update'

@@ -12,6 +12,8 @@ import {
 
 export const LOCAL_SETTINGS_STORAGE_KEY =
   'my-emotion-map.local-settings.v1';
+export const ACCOUNT_PREFERENCES_CHANGED_EVENT =
+  'my-emotion-map:account-preferences-changed';
 
 export const DEFAULT_AI_CONTEXT_MESSAGE_COUNT = 8;
 export const MIN_AI_CONTEXT_MESSAGE_COUNT = 2;
@@ -132,6 +134,9 @@ export const saveLocalSettings = (
         userPreferencesStorageKey(userId),
         JSON.stringify(settings),
       );
+      window.dispatchEvent(new CustomEvent(ACCOUNT_PREFERENCES_CHANGED_EVENT, {
+        detail: { userId },
+      }));
     }
     return true;
   } catch {

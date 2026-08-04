@@ -1,110 +1,189 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
-import {
-  CURRENT_SCHEMA_VERSION,
-  canonicalSnapshotDigest,
-  createEmptyAppData,
-} from '../../src/app/appDataRepository';
-import { useCloudSync } from '../../src/services/useCloudSync';
-import { loadSyncMeta, saveSyncMeta } from '../../src/services/cloudSyncModel';
+import { createEmptyAppData } from '../../src/app/appDataRepository';
 import { createRecord } from '../../src/app/recordFactory';
+import { loadLocalSettings } from '../../src/app/profilePreferences';
+import { normalizeEmotionSnapshot } from '../../src/domain/storage/normalizedEmotionSnapshot';
+import { diffEmotionState } from '../../src/services/normalizedSync/emotionMutationModel';
+import { NormalizedEmotionSyncError } from '../../src/services/normalizedSync/emotionSyncErrors';
+import type {
+  EmotionMutation,
+  NormalizedEmotionSnapshot,
+} from '../../src/services/normalizedSync/emotionSyncTypes';
+import type { EmotionMutationOutbox } from '../../src/services/normalizedSync/emotionOutbox';
+import { useCloudSync } from '../../src/services/useCloudSync';
 
-const session = {
-  user: { id: 'user-a' },
-} as Session;
+const mocks = vi.hoisted(() => ({
+  bootstrap: vi.fn(),
+  loadChanges: vi.fn(),
+  loadFull: vi.fn(),
+  applyMutations: vi.fn(),
+  applyChanges: vi.fn(),
+  enqueue: vi.fn(),
+  clear: vi.fn(),
+  writeRecovery: vi.fn(),
+  discardAfterRecovery: vi.fn(),
+  persistBatch: vi.fn(),
+  acknowledgeBatch: vi.fn(),
+  replaceMutations: vi.fn(),
+}));
+
+vi.mock('../../src/services/normalizedSync/emotionSyncBootstrap', () => ({
+  bootstrapNormalizedEmotionSync: mocks.bootstrap,
+}));
+
+vi.mock('../../src/services/normalizedSync/emotionRepository', () => ({
+  loadEmotionChangesSince: mocks.loadChanges,
+  loadNormalizedEmotionAccountData: mocks.loadFull,
+  applyEmotionMutations: mocks.applyMutations,
+  applyEmotionChanges: mocks.applyChanges,
+}));
+
+vi.mock('../../src/services/normalizedSync/emotionOutbox', () => ({
+  clearEmotionMutationOutbox: mocks.clear,
+  enqueueEmotionMutations: mocks.enqueue,
+  writeEmotionRecoveryBundle: mocks.writeRecovery,
+  discardEmotionOutboxAfterRecovery: mocks.discardAfterRecovery,
+}));
+
+vi.mock('../../src/services/normalizedSync/emotionOutboxCommit', () => ({
+  persistEmotionInFlightBatch: mocks.persistBatch,
+  acknowledgeEmotionInFlightBatch: mocks.acknowledgeBatch,
+  replaceEmotionOutboxMutations: mocks.replaceMutations,
+}));
+
+const session = { user: { id: 'user-a' } } as Session;
+const client = { from: vi.fn(), rpc: vi.fn() } as unknown as SupabaseClient;
 
 class BroadcastChannelStub {
   static instances: BroadcastChannelStub[] = [];
   onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+  postMessage = vi.fn();
+  close = vi.fn();
 
   constructor(public readonly name: string) {
     BroadcastChannelStub.instances.push(this);
   }
-
-  postMessage = vi.fn();
-  close = vi.fn();
 }
 
-describe('cloud sync', () => {
+const normalized = (snapshot = createEmptyAppData()) =>
+  normalizeEmotionSnapshot(snapshot, loadLocalSettings(session.user.id)).snapshot;
+
+const outbox = (
+  mutations: EmotionMutation[],
+  expectedRevision = 0,
+): EmotionMutationOutbox => ({
+  userId: session.user.id,
+  expectedRevision,
+  mutations,
+  sequence: 1,
+  savedAt: 1,
+  language: 'zh',
+});
+
+const bootstrap = ({
+  remote,
+  local = remote,
+  revision = 0,
+  pending = null,
+}: {
+  remote: NormalizedEmotionSnapshot;
+  local?: NormalizedEmotionSnapshot;
+  revision?: number;
+  pending?: EmotionMutationOutbox | null;
+}) => mocks.bootstrap.mockResolvedValue({
+  loaded: {
+    snapshot: remote,
+    revision,
+    dataModelVersion: 2,
+    migrationVerification: { verified: true },
+  },
+  local,
+  localRecovery: [],
+  outbox: pending,
+  decision: pending ? 'enqueue_local' : 'already_equal',
+});
+
+const emptyChanges = (
+  revision: number,
+  snapshot: NormalizedEmotionSnapshot,
+) => ({
+  revision,
+  records: [],
+  conversations: [],
+  messages: [],
+  followUps: [],
+  revisits: [],
+  snapshot,
+});
+
+describe('normalized cloud sync', () => {
   beforeEach(() => {
     window.localStorage.clear();
     BroadcastChannelStub.instances = [];
+    vi.clearAllMocks();
+    mocks.clear.mockResolvedValue(undefined);
+    mocks.writeRecovery.mockResolvedValue(undefined);
+    mocks.discardAfterRecovery.mockResolvedValue(undefined);
+    mocks.applyChanges.mockImplementation((_: unknown, changes: { snapshot: unknown }) =>
+      changes.snapshot);
+    mocks.persistBatch.mockImplementation(async (
+      current: EmotionMutationOutbox,
+      mutations: EmotionMutation[],
+    ) => ({
+      ...current,
+      inFlightBatch: {
+        expectedRevision: current.expectedRevision,
+        mutations,
+        startedAt: 1,
+      },
+    }));
+    mocks.replaceMutations.mockImplementation(async ({
+      outbox: current,
+      expectedRevision,
+      mutations,
+    }: {
+      outbox: EmotionMutationOutbox;
+      expectedRevision: number;
+      mutations: EmotionMutation[];
+    }) => ({ ...current, expectedRevision, mutations, inFlightBatch: undefined }));
+    mocks.acknowledgeBatch.mockResolvedValue(null);
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
-  it('enters upgrade_required without applying or rewriting a future remote schema', async () => {
-    const remotePayload = {
-      ...createEmptyAppData(),
-      schemaVersion: CURRENT_SCHEMA_VERSION + 1,
-      futureOnlyField: { mustSurvive: true },
-    };
-    const maybeSingle = vi.fn().mockResolvedValue({
-      data: { revision: 7, payload: remotePayload },
-      error: null,
-    });
-    const eq = vi.fn(() => ({ maybeSingle }));
-    const select = vi.fn(() => ({ eq }));
-    const rpc = vi.fn();
-    const client = {
-      from: vi.fn(() => ({ select })),
-      rpc,
-    } as unknown as SupabaseClient;
+  it('enters upgrade_required without applying or writing future cloud data', async () => {
+    mocks.bootstrap.mockRejectedValue(new NormalizedEmotionSyncError({
+      kind: 'upgrade_required',
+      message: 'Future normalized model.',
+    }));
     const applySnapshot = vi.fn();
+    const { result } = renderHook(() => useCloudSync({
+      client, session, snapshot: createEmptyAppData(), applySnapshot,
+    }));
 
-    const { result } = renderHook(() =>
-      useCloudSync({
-        client,
-        session,
-        snapshot: createEmptyAppData(),
-        applySnapshot,
-      }),
-    );
-
-    await waitFor(() =>
-      expect(result.current.status as string).toBe('upgrade_required'),
-    );
+    await waitFor(() => expect(result.current.status).toBe('upgrade_required'));
     expect(applySnapshot).not.toHaveBeenCalled();
-    expect(rpc).not.toHaveBeenCalled();
+    expect(mocks.applyMutations).not.toHaveBeenCalled();
   });
 
-  it('creates revision 1 for a fresh authenticated empty workspace', async () => {
-    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    const eq = vi.fn(() => ({ maybeSingle }));
-    const select = vi.fn(() => ({ eq }));
-    const rpc = vi.fn().mockResolvedValue({
-      data: { revision: 1, updated_at: '2026-08-02T00:00:00.000Z' },
-      error: null,
-    });
-    const client = {
-      from: vi.fn(() => ({ select })),
-      rpc,
-    } as unknown as SupabaseClient;
-
-    const { result } = renderHook(() =>
-      useCloudSync({
-        client,
-        session,
-        snapshot: createEmptyAppData(),
-        applySnapshot: vi.fn(),
-      }),
-    );
+  it('loads a fresh empty normalized workspace without manufacturing a write', async () => {
+    bootstrap({ remote: normalized() });
+    const { result } = renderHook(() => useCloudSync({
+      client, session, snapshot: createEmptyAppData(), applySnapshot: vi.fn(),
+    }));
 
     await waitFor(() => expect(result.current.status).toBe('synced'));
-    await waitFor(() => expect(result.current.revision).toBe(1));
-    expect(rpc).toHaveBeenCalledTimes(1);
-    expect(rpc).toHaveBeenCalledWith(
-      'save_app_state',
-      expect.objectContaining({
-        p_expected_revision: 0,
-        p_schema_version: CURRENT_SCHEMA_VERSION,
-        p_payload: createEmptyAppData(),
-      }),
-    );
+    expect(result.current.revision).toBe(0);
+    expect(mocks.applyMutations).not.toHaveBeenCalled();
   });
 
-  it('uploads existing local records automatically when the account cloud is empty', async () => {
+  it('uploads existing local records to an empty normalized account', async () => {
+    const empty = normalized();
     const { moment, note } = createRecord({
       longitude: 127,
       latitude: 37.558,
@@ -112,223 +191,158 @@ describe('cloud sync', () => {
       language: 'zh',
       source: 'manual',
     });
-    const local = {
+    const localApp = {
       ...createEmptyAppData(),
       moments: [moment],
       notes: [{ ...note, isDraft: false }],
     };
-    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    const rpc = vi.fn().mockResolvedValue({
-      data: { revision: 1, updated_at: '2026-08-03T00:00:00.000Z' },
-      error: null,
-    });
-    const client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })),
-      })),
-      rpc,
-    } as unknown as SupabaseClient;
+    const local = normalized(localApp);
+    const mutations = diffEmotionState(empty, local);
+    bootstrap({ remote: empty, local, pending: outbox(mutations) });
+    mocks.applyMutations.mockResolvedValue({ saved: true, revision: 1, conflict: null });
+    mocks.loadChanges.mockResolvedValue(emptyChanges(1, local));
 
-    const { result } = renderHook(() =>
-      useCloudSync({ client, session, snapshot: local, applySnapshot: vi.fn() }),
-    );
+    const { result } = renderHook(() => useCloudSync({
+      client, session, snapshot: localApp, applySnapshot: vi.fn(),
+    }));
 
     await waitFor(() => expect(result.current.revision).toBe(1), { timeout: 2_000 });
     expect(result.current.status).toBe('synced');
-    expect(rpc).toHaveBeenCalledWith(
-      'save_app_state',
-      expect.objectContaining({
-        p_expected_revision: 0,
-        p_payload: local,
-      }),
-    );
+    expect(mocks.applyMutations).toHaveBeenCalledWith(client, 0, mutations);
   });
 
-  it('fast-forwards from remote when local still matches the stored base hash', async () => {
-    const base = createEmptyAppData();
-    const remote = {
-      ...base,
-      lastViewport: { latitude: 37.558, longitude: 127, zoom: 15 },
-    };
-    saveSyncMeta('user-a', {
-      baseRevision: 7,
-      baseHash: canonicalSnapshotDigest(base),
-      pendingRequestId: null,
-      pendingPayloadHash: null,
-      dirty: false,
-      lastSyncedAt: '2026-08-02T00:00:00.000Z',
+  it('fast-forwards to remote normalized entities when no local mutations exist', async () => {
+    const localApp = createEmptyAppData();
+    const { moment, note } = createRecord({
+      longitude: 127,
+      latitude: 37.558,
+      place: '云端星星',
+      language: 'zh',
+      source: 'manual',
     });
-    window.localStorage.setItem('my-emotion-map.cloud-revision.user-a', '7');
-    const maybeSingle = vi.fn().mockResolvedValue({
-      data: { revision: 7, payload: remote },
-      error: null,
+    const remote = normalized({
+      ...localApp,
+      moments: [moment],
+      notes: [{ ...note, isDraft: false }],
     });
-    const client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({ maybeSingle })),
-        })),
-      })),
-      rpc: vi.fn(),
-    } as unknown as SupabaseClient;
+    bootstrap({ remote, local: normalized(localApp), revision: 7 });
     const applySnapshot = vi.fn();
 
-    const { result } = renderHook(() =>
-      useCloudSync({
-        client,
-        session,
-        snapshot: base,
-        applySnapshot,
-      }),
-    );
+    const { result } = renderHook(() => useCloudSync({
+      client, session, snapshot: localApp, applySnapshot,
+    }));
 
     await waitFor(() => expect(result.current.status).toBe('synced'));
-    expect(applySnapshot).toHaveBeenCalledWith(remote);
+    expect(applySnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      moments: [expect.objectContaining({ place: '云端星星' })],
+    }));
   });
 
-  it('pauses when both local and remote changed from the stored base', async () => {
-    const base = createEmptyAppData();
-    const local = {
-      ...base,
-      lastViewport: { latitude: 37.557, longitude: 126.999, zoom: 14 },
-    };
-    const remote = {
-      ...base,
-      lastViewport: { latitude: 37.559, longitude: 127.001, zoom: 16 },
-    };
-    saveSyncMeta('user-a', {
-      baseRevision: 7,
-      baseHash: canonicalSnapshotDigest(base),
-      pendingRequestId: null,
-      pendingPayloadHash: null,
-      dirty: false,
-      lastSyncedAt: '2026-08-02T00:00:00.000Z',
+  it('pauses when local and remote changed the same record', async () => {
+    const { moment, note } = createRecord({
+      longitude: 127,
+      latitude: 37.558,
+      place: '原地点',
+      language: 'zh',
+      source: 'manual',
     });
-    const maybeSingle = vi.fn().mockResolvedValue({
-      data: { revision: 8, payload: remote },
-      error: null,
-    });
-    const client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({ maybeSingle })),
-        })),
-      })),
-      rpc: vi.fn(),
-    } as unknown as SupabaseClient;
+    const baseApp = {
+      ...createEmptyAppData(), moments: [moment], notes: [{ ...note, isDraft: false }],
+    };
+    const base = normalized(baseApp);
+    const local = structuredClone(base);
+    local.records[0].place = '本机地点';
+    const remote = structuredClone(base);
+    remote.records[0].place = '云端地点';
+    const pending = outbox(diffEmotionState(base, local), 7);
+    bootstrap({ remote, local, revision: 8, pending });
     const applySnapshot = vi.fn();
 
-    const { result } = renderHook(() =>
-      useCloudSync({ client, session, snapshot: local, applySnapshot }),
-    );
+    const { result } = renderHook(() => useCloudSync({
+      client, session, snapshot: baseApp, applySnapshot,
+    }));
 
     await waitFor(() => expect(result.current.status).toBe('conflict'));
     expect(applySnapshot).not.toHaveBeenCalled();
+    expect(mocks.writeRecovery).toHaveBeenCalledTimes(1);
   });
 
-  it('does not let a broadcast overwrite dirty local work', async () => {
+  it('does not let a revision broadcast overwrite dirty local work', async () => {
     vi.stubGlobal('BroadcastChannel', BroadcastChannelStub);
-    const base = createEmptyAppData();
-    const local = {
-      ...base,
-      lastViewport: { latitude: 37.557, longitude: 126.999, zoom: 14 },
-    };
-    const remote = {
-      ...base,
-      lastViewport: { latitude: 37.559, longitude: 127.001, zoom: 16 },
-    };
-    const baseHash = canonicalSnapshotDigest(base);
-    saveSyncMeta('user-a', {
-      baseRevision: 7,
-      baseHash,
-      pendingRequestId: null,
-      pendingPayloadHash: null,
-      dirty: false,
-      lastSyncedAt: '2026-08-02T00:00:00.000Z',
+    const { moment, note } = createRecord({
+      longitude: 127,
+      latitude: 37.558,
+      place: '原地点',
+      language: 'zh',
+      source: 'manual',
     });
-    const maybeSingle = vi
-      .fn()
-      .mockResolvedValueOnce({ data: { revision: 7, payload: base }, error: null })
-      .mockResolvedValueOnce({ data: { revision: 8, payload: remote }, error: null });
-    const client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({ maybeSingle })),
-        })),
-      })),
-      rpc: vi.fn(),
-    } as unknown as SupabaseClient;
+    const baseApp = {
+      ...createEmptyAppData(), moments: [moment], notes: [{ ...note, isDraft: false }],
+    };
+    const base = normalized(baseApp);
+    const localApp = structuredClone(baseApp);
+    localApp.moments[0].place = '本机地点';
+    localApp.notes[0].place = '本机地点';
+    const local = normalized(localApp);
+    const remote = structuredClone(base);
+    remote.records[0].place = '云端地点';
+    bootstrap({ remote: base, local: base, revision: 7 });
+    mocks.enqueue.mockResolvedValue(outbox(diffEmotionState(base, local), 7));
+    mocks.loadChanges.mockResolvedValue(emptyChanges(8, remote));
+    mocks.applyMutations.mockImplementation(() => new Promise(() => undefined));
     const applySnapshot = vi.fn();
 
     const { result, rerender } = renderHook(
-      ({ current }) => useCloudSync({ client, session, snapshot: current, applySnapshot }),
-      { initialProps: { current: base } },
+      ({ snapshot }) => useCloudSync({ client, session, snapshot, applySnapshot }),
+      { initialProps: { snapshot: baseApp } },
     );
     await waitFor(() => expect(result.current.status).toBe('synced'));
-
-    rerender({ current: local });
-    await waitFor(() => expect(loadSyncMeta('user-a')?.dirty).toBe(true));
+    rerender({ snapshot: localApp });
+    await waitFor(() => expect(result.current.status).toBe('local'));
     const channel = BroadcastChannelStub.instances.at(-1);
-    expect(channel).toBeDefined();
-    channel?.onmessage?.({
-      data: {
-        type: 'synced_snapshot',
-        userId: 'user-a',
-        revision: 8,
-        hash: canonicalSnapshotDigest(remote),
-        generation: 'another-tab',
-      },
-    } as MessageEvent<unknown>);
+    expect(channel?.name).toBe('my-emotion-map-sync:user-a');
+
+    act(() => channel?.onmessage?.({
+      data: { type: 'normalized_revision', userId: 'user-a', revision: 8 },
+    } as MessageEvent<unknown>));
 
     await waitFor(() => expect(result.current.status).toBe('conflict'));
-    expect(applySnapshot).not.toHaveBeenCalled();
-    expect(maybeSingle).toHaveBeenCalledTimes(2);
+    expect(applySnapshot).toHaveBeenCalledTimes(1);
   });
 
-  it('reuses the persisted request id after reload when retrying the same payload', async () => {
-    const base = createEmptyAppData();
-    const local = {
-      ...base,
-      lastViewport: { latitude: 37.557, longitude: 126.999, zoom: 14 },
+  it('retries the exact persisted mutation batch after reload', async () => {
+    const empty = normalized();
+    const { moment, note } = createRecord({
+      longitude: 127,
+      latitude: 37.558,
+      place: '待重试星星',
+      language: 'zh',
+      source: 'manual',
+    });
+    const localApp = {
+      ...createEmptyAppData(), moments: [moment], notes: [{ ...note, isDraft: false }],
     };
-    const localHash = canonicalSnapshotDigest(local);
-    saveSyncMeta('user-a', {
-      baseRevision: 7,
-      baseHash: canonicalSnapshotDigest(base),
-      pendingRequestId: '1f8e2d28-1a1a-4a06-90eb-8fbbd05ecf24',
-      pendingPayloadHash: localHash,
-      dirty: true,
-      lastSyncedAt: '2026-08-02T00:00:00.000Z',
-    });
-    const maybeSingle = vi.fn().mockResolvedValue({
-      data: { revision: 7, payload: base },
-      error: null,
-    });
-    const rpc = vi.fn().mockResolvedValue({
-      data: { revision: 8, updated_at: '2026-08-02T00:00:00.000Z' },
-      error: null,
-    });
-    const client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({ maybeSingle })),
-        })),
-      })),
-      rpc,
-    } as unknown as SupabaseClient;
+    const local = normalized(localApp);
+    const mutations = diffEmotionState(empty, local);
+    const pending = {
+      ...outbox(mutations, 7),
+      inFlightBatch: { expectedRevision: 7, mutations, startedAt: 10 },
+    };
+    bootstrap({ remote: empty, local, revision: 7, pending });
+    mocks.applyMutations.mockResolvedValue({ saved: true, revision: 8, conflict: null });
+    mocks.loadChanges.mockResolvedValue(emptyChanges(8, local));
 
-    renderHook(() =>
-      useCloudSync({ client, session, snapshot: local, applySnapshot: vi.fn() }),
-    );
+    renderHook(() => useCloudSync({
+      client, session, snapshot: localApp, applySnapshot: vi.fn(),
+    }));
 
-    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1), { timeout: 2_000 });
-    expect(rpc).toHaveBeenCalledWith(
-      'save_app_state',
-      expect.objectContaining({
-        p_expected_revision: 7,
-        p_request_id: '1f8e2d28-1a1a-4a06-90eb-8fbbd05ecf24',
-        p_payload: local,
-      }),
+    await waitFor(() => expect(mocks.applyMutations).toHaveBeenCalledTimes(1), {
+      timeout: 2_000,
+    });
+    expect(mocks.applyMutations).toHaveBeenCalledWith(client, 7, mutations);
+    expect(mocks.persistBatch).toHaveBeenCalledWith(
+      expect.any(Object),
+      mutations,
     );
   });
 });

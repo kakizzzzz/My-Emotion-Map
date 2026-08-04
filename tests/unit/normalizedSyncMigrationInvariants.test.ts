@@ -145,7 +145,10 @@ describe('normalized sync migration product invariants', () => {
   });
 
   it('preserves every foreground and same-browser refresh trigger', () => {
-    const syncSource = readFileSync('src/services/useCloudSync.ts', 'utf8');
+    const syncSource = readFileSync(
+      'src/services/normalizedSync/useNormalizedCloudSync.ts',
+      'utf8',
+    );
 
     expect(syncSource).toContain('new BroadcastChannel(`my-emotion-map-sync:${userId}`)');
     for (const event of ['focus', 'pageshow', 'online']) {

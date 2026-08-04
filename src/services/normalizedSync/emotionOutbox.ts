@@ -66,13 +66,13 @@ type LegacyConversionMarker = {
   oldBaseHash: string | null;
 };
 
-const requestResult = <T>(request: IDBRequest<T>) =>
+export const requestEmotionSyncResult = <T>(request: IDBRequest<T>) =>
   new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed.'));
   });
 
-const transactionDone = (transaction: IDBTransaction) =>
+export const emotionSyncTransactionDone = (transaction: IDBTransaction) =>
   new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(
@@ -83,7 +83,7 @@ const transactionDone = (transaction: IDBTransaction) =>
     );
   });
 
-const openEmotionSyncDatabase = async () => {
+export const openEmotionSyncDatabase = async () => {
   if (typeof indexedDB === 'undefined') {
     throw new Error('IndexedDB is unavailable.');
   }
@@ -107,7 +107,7 @@ const openEmotionSyncDatabase = async () => {
       );
     }
   };
-  return requestResult(request);
+  return requestEmotionSyncResult(request);
 };
 
 export const emotionOutboxForUser = (
@@ -130,7 +130,7 @@ export const newestEmotionOutboxForUser = (
   return left.savedAt >= right.savedAt ? left : right;
 };
 
-const prepareOutbox = (
+export const prepareEmotionOutbox = (
   outbox: EmotionMutationOutbox,
 ): EmotionMutationOutbox => ({
   ...outbox,
@@ -199,7 +199,7 @@ export const readEmotionMutationOutbox = async (
   const database = await openEmotionSyncDatabase();
   try {
     const transaction = database.transaction(EMOTION_OUTBOX_STORE_NAME, 'readonly');
-    const value = await requestResult(
+    const value = await requestEmotionSyncResult(
       transaction.objectStore(EMOTION_OUTBOX_STORE_NAME).get(userId),
     );
     return value && typeof value === 'object'
@@ -216,8 +216,8 @@ export const writeEmotionMutationOutbox = async (
   const database = await openEmotionSyncDatabase();
   try {
     const transaction = database.transaction(EMOTION_OUTBOX_STORE_NAME, 'readwrite');
-    const done = transactionDone(transaction);
-    transaction.objectStore(EMOTION_OUTBOX_STORE_NAME).put(prepareOutbox(outbox));
+    const done = emotionSyncTransactionDone(transaction);
+    transaction.objectStore(EMOTION_OUTBOX_STORE_NAME).put(prepareEmotionOutbox(outbox));
     await done;
   } finally {
     database.close();
@@ -240,13 +240,13 @@ export const enqueueEmotionMutations = async ({
   let next: EmotionMutationOutbox | null = null;
   try {
     const transaction = database.transaction(EMOTION_OUTBOX_STORE_NAME, 'readwrite');
-    const done = transactionDone(transaction);
+    const done = emotionSyncTransactionDone(transaction);
     const store = transaction.objectStore(EMOTION_OUTBOX_STORE_NAME);
     const request = store.get(userId);
     request.onsuccess = () => {
       try {
         const existing = request.result as EmotionMutationOutbox | undefined;
-        next = prepareOutbox(mergeEmotionOutbox({
+        next = prepareEmotionOutbox(mergeEmotionOutbox({
           existing: existing ?? null,
           userId,
           expectedRevision,
@@ -266,20 +266,11 @@ export const enqueueEmotionMutations = async ({
   }
 };
 
-export const persistEmotionInFlightBatch = async (
-  outbox: EmotionMutationOutbox,
-  mutations: EmotionMutation[],
-) => {
-  const next = prepareOutbox(withEmotionInFlightBatch(outbox, mutations));
-  await writeEmotionMutationOutbox(next);
-  return next;
-};
-
 export const clearEmotionMutationOutbox = async (userId: string) => {
   const database = await openEmotionSyncDatabase();
   try {
     const transaction = database.transaction(EMOTION_OUTBOX_STORE_NAME, 'readwrite');
-    const done = transactionDone(transaction);
+    const done = emotionSyncTransactionDone(transaction);
     transaction.objectStore(EMOTION_OUTBOX_STORE_NAME).delete(userId);
     await done;
   } finally {
@@ -296,7 +287,7 @@ export const writeEmotionRecoveryBundle = async (
   const database = await openEmotionSyncDatabase();
   try {
     const transaction = database.transaction(EMOTION_RECOVERY_STORE_NAME, 'readwrite');
-    const done = transactionDone(transaction);
+    const done = emotionSyncTransactionDone(transaction);
     transaction.objectStore(EMOTION_RECOVERY_STORE_NAME).put(structuredClone(recovery));
     await done;
   } finally {
@@ -313,7 +304,7 @@ export const discardEmotionOutboxAfterRecovery = async (
       [EMOTION_RECOVERY_STORE_NAME, EMOTION_OUTBOX_STORE_NAME],
       'readwrite',
     );
-    const done = transactionDone(transaction);
+    const done = emotionSyncTransactionDone(transaction);
     transaction.objectStore(EMOTION_RECOVERY_STORE_NAME).put(
       structuredClone(recovery),
     );
@@ -348,6 +339,7 @@ export const decideLegacySyncConversion = ({
   if (remoteIsEmpty && !legacyArchiveExists && localHasValidRecords) {
     return 'enqueue_local';
   }
+  if (!localHasValidRecords && !remoteIsEmpty) return 'load_remote';
   return 'conflict';
 };
 
@@ -358,7 +350,7 @@ export const readLegacyEmotionConversion = async (userId: string) => {
       EMOTION_CONVERSION_STORE_NAME,
       'readonly',
     );
-    const value = await requestResult(
+    const value = await requestEmotionSyncResult(
       transaction.objectStore(EMOTION_CONVERSION_STORE_NAME).get(userId),
     );
     return value && typeof value === 'object'
@@ -408,7 +400,7 @@ export const convertLegacySyncToOutbox = async ({
       [EMOTION_OUTBOX_STORE_NAME, EMOTION_CONVERSION_STORE_NAME],
       'readwrite',
     );
-    const done = transactionDone(transaction);
+    const done = emotionSyncTransactionDone(transaction);
     const now = Date.now();
     const marker: LegacyConversionMarker = {
       userId,
@@ -419,7 +411,7 @@ export const convertLegacySyncToOutbox = async ({
     };
     if (decision === 'enqueue_local') {
       const mutations = diffEmotionState(remote, local);
-      const outbox = prepareOutbox({
+      const outbox = prepareEmotionOutbox({
         userId,
         expectedRevision: remoteRevision,
         mutations,
@@ -430,10 +422,13 @@ export const convertLegacySyncToOutbox = async ({
       });
       transaction.objectStore(EMOTION_OUTBOX_STORE_NAME).put(outbox);
     } else if (decision === 'conflict') {
-      transaction.objectStore(EMOTION_OUTBOX_STORE_NAME).put(prepareOutbox({
+      transaction.objectStore(EMOTION_OUTBOX_STORE_NAME).put(prepareEmotionOutbox({
         userId,
         expectedRevision: remoteRevision,
-        mutations: [],
+        mutations: diffEmotionState(remote, local).map((mutation) => ({
+          ...mutation,
+          base: null,
+        })),
         sequence: 1,
         savedAt: now,
         language,

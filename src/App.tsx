@@ -839,9 +839,12 @@ export function App() {
 
         <CloudSyncNotice
           status={cloudSync.status}
+          errorInfo={cloudSync.errorInfo}
           language={language}
+          onSafeMerge={cloudSync.safeMerge}
           onUseRemote={cloudSync.useRemoteVersion}
           onKeepLocal={cloudSync.overwriteRemoteWithLocal}
+          onDownloadRecovery={cloudSync.downloadRecovery}
         />
         <AppToast notice={toast} onDismiss={() => setToast(null)} />
         </main>
