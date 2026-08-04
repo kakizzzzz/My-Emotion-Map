@@ -165,44 +165,76 @@ export function useFollowUpCoordinator({
         ));
       }
 
-      setConversations((current) =>
-        current.map((conversation) =>
-          conversation.id === FOLLOW_UP_CONVERSATION_ID
-            ? {
-                ...conversation,
-                unread: false,
-                preview: assistantReply,
-                messages: [
-                  ...conversation.messages.map((message) =>
-                    message.followUpId === followUpId
-                      ? { ...message, options: undefined }
-                      : message,
-                  ),
-                  {
-                    id: createRecordId('follow-up-response'),
-                    role: 'user',
-                    kind: 'followup_answer',
-                    body: label,
-                    followUpId,
-                    createdAt: answeredAt,
-                  },
-                  {
-                    id: createRecordId('follow-up-reply'),
-                    role: 'assistant',
-                    kind: 'followup_reply',
-                    body: assistantReply,
-                    followUpId,
-                    createdAt: answeredAt,
-                  },
-                ],
-              }
-            : conversation,
-        ),
-      );
+      setConversations((current) => {
+        const companion = current.find(
+          (conversation) => conversation.id === FOLLOW_UP_CONVERSATION_ID,
+        );
+        const hasPrompt = companion?.messages.some(
+          (message) => message.followUpId === followUpId,
+        ) ?? false;
+        const promptMessage = {
+          id: createRecordId('follow-up'),
+          role: 'assistant' as const,
+          kind: 'followup_prompt' as const,
+          body: '',
+          noteIds: [record.noteId],
+          followUpId,
+          createdAt: record.promptedAt ?? record.dueAt,
+        };
+        const answerMessage = {
+          id: createRecordId('follow-up-response'),
+          role: 'user' as const,
+          kind: 'followup_answer' as const,
+          body: label,
+          followUpId,
+          createdAt: answeredAt,
+        };
+        const replyMessage = {
+          id: createRecordId('follow-up-reply'),
+          role: 'assistant' as const,
+          kind: 'followup_reply' as const,
+          body: assistantReply,
+          followUpId,
+          createdAt: answeredAt,
+        };
+        if (!companion) {
+          return [
+            {
+              id: FOLLOW_UP_CONVERSATION_ID,
+              title: navigationCopy.chat,
+              preview: assistantReply,
+              kind: 'companion' as const,
+              unread: false,
+              messages: [promptMessage, answerMessage, replyMessage],
+            },
+            ...current,
+          ];
+        }
+        return current.map((conversation) => {
+          if (conversation.id !== FOLLOW_UP_CONVERSATION_ID) {
+            return conversation;
+          }
+          const messages = hasPrompt
+            ? conversation.messages.map((message) =>
+                message.followUpId === followUpId
+                  ? { ...message, options: undefined }
+                  : message,
+              )
+            : [...conversation.messages, promptMessage];
+          return {
+            ...conversation,
+            title: navigationCopy.chat,
+            unread: false,
+            preview: assistantReply,
+            messages: [...messages, answerMessage, replyMessage],
+          };
+        });
+      });
     },
     [
       followUps,
       language,
+      navigationCopy.chat,
       notes,
       setConversations,
       setFollowUps,
