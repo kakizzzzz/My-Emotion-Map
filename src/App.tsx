@@ -131,6 +131,7 @@ export function App() {
   const [viewingMomentId, setViewingMomentId] = useState<string | null>(null);
   const [editingMomentId, setEditingMomentId] = useState<string | null>(null);
   const [revisitNoteId, setRevisitNoteId] = useState<string | null>(null);
+  const [revisitFollowUpId, setRevisitFollowUpId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [photoAssistByMomentId, setPhotoAssistByMomentId] = useState<
     Record<string, PhotoAssistDelivery>
@@ -484,6 +485,7 @@ export function App() {
   } = useNoteEditorHandlers({
     language,
     starSavedMessage: copy.feedback.starSaved,
+    notes,
     followUps,
     followUpIntervals,
     setMoments,
@@ -498,13 +500,21 @@ export function App() {
   const updateRevisitedEmotion = (noteId: string, emotion: EmotionKey) => {
     const note = notes.find((item) => item.id === noteId);
     if (!note) return;
-    const relatedFollowUp = [...followUps]
+    const targetedFollowUp = revisitFollowUpId
+      ? followUps.find(
+          (record) =>
+            record.id === revisitFollowUpId &&
+            record.noteId === noteId &&
+            (record.status === 'answered' || record.status === 'skipped'),
+        )
+      : null;
+    const relatedFollowUp = targetedFollowUp ?? [...followUps]
       .reverse()
       .find(
         (record) =>
           record.noteId === noteId &&
           (record.status === 'answered' || record.status === 'skipped'),
-    );
+      );
     if (relatedFollowUp && relatedFollowUp.responseOptionId !== 'skip') {
       const changeDirection = relatedFollowUp.responseOptionId ?? 'different';
       setRevisits((current) => setRevisitCurrentEmotion(
@@ -515,6 +525,7 @@ export function App() {
         changeDirection,
       ));
     }
+    setRevisitFollowUpId(null);
     setRevisitNoteId(null);
     showToast(copy.feedback.feelingSaved);
   };
@@ -617,7 +628,10 @@ export function App() {
                 activeConversationId={activeConversationId}
                 workspaceKey={chatWorkspace}
                 onAnswerFollowUp={answerFollowUp}
-                onRevisitEmotion={setRevisitNoteId}
+                onRevisitEmotion={(noteId, followUpId) => {
+                  setRevisitFollowUpId(followUpId);
+                  setRevisitNoteId(noteId);
+                }}
                 cloudAuth={cloudSession.cloudAuth}
                 cloudRevision={cloudSync.revision}
                 cloudStatus={cloudSync.status}
@@ -709,7 +723,10 @@ export function App() {
                     answerFollowUp(followUpId, label, kind, 'inbox');
                     setStarInboxOpen(false);
                     if (kind !== 'skip' && followUp) {
-                      window.setTimeout(() => setRevisitNoteId(followUp.noteId), 220);
+                      window.setTimeout(() => {
+                        setRevisitFollowUpId(followUp.id);
+                        setRevisitNoteId(followUp.noteId);
+                      }, 220);
                     }
                   }}
                   onClose={() => setStarInboxOpen(false)}
@@ -796,7 +813,10 @@ export function App() {
           {revisitNote ? (
             <RevisitEmotionModal
               note={revisitNote}
-              onClose={() => setRevisitNoteId(null)}
+              onClose={() => {
+                setRevisitFollowUpId(null);
+                setRevisitNoteId(null);
+              }}
               onConfirm={updateRevisitedEmotion}
             />
           ) : null}

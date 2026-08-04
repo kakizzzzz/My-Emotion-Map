@@ -165,42 +165,40 @@ export function useFollowUpCoordinator({
         ));
       }
 
-      if (source === 'chat') {
-        setConversations((current) =>
-          current.map((conversation) =>
-            conversation.id === FOLLOW_UP_CONVERSATION_ID
-              ? {
-                  ...conversation,
-                  unread: false,
-                  preview: assistantReply,
-                  messages: [
-                    ...conversation.messages.map((message) =>
-                      message.followUpId === followUpId
-                        ? { ...message, options: undefined }
-                        : message,
-                    ),
-                    {
-                      id: createRecordId('follow-up-response'),
-                      role: 'user',
-                      kind: 'followup_answer',
-                      body: label,
-                      followUpId,
-                      createdAt: answeredAt,
-                    },
-                    {
-                      id: createRecordId('follow-up-reply'),
-                      role: 'assistant',
-                      kind: 'followup_reply',
-                      body: assistantReply,
-                      followUpId,
-                      createdAt: answeredAt,
-                    },
-                  ],
-                }
-              : conversation,
-          ),
-        );
-      }
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === FOLLOW_UP_CONVERSATION_ID
+            ? {
+                ...conversation,
+                unread: false,
+                preview: assistantReply,
+                messages: [
+                  ...conversation.messages.map((message) =>
+                    message.followUpId === followUpId
+                      ? { ...message, options: undefined }
+                      : message,
+                  ),
+                  {
+                    id: createRecordId('follow-up-response'),
+                    role: 'user',
+                    kind: 'followup_answer',
+                    body: label,
+                    followUpId,
+                    createdAt: answeredAt,
+                  },
+                  {
+                    id: createRecordId('follow-up-reply'),
+                    role: 'assistant',
+                    kind: 'followup_reply',
+                    body: assistantReply,
+                    followUpId,
+                    createdAt: answeredAt,
+                  },
+                ],
+              }
+            : conversation,
+        ),
+      );
     },
     [
       followUps,
