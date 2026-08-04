@@ -227,12 +227,6 @@
   stroke-width: 0.9px;
 }
 
-.emotion-star.is-selected {
-  filter:
-    drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18))
-    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
-}
-
 .emotion-star__order {
   position: absolute;
   right: 0;

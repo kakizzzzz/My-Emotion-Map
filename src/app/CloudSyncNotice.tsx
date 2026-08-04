@@ -80,6 +80,7 @@ const COPY: Record<AppLanguage, {
 
 export function CloudSyncNotice({
   status,
+  isUserOperationSync,
   errorInfo,
   language,
   onSafeMerge,
@@ -88,6 +89,7 @@ export function CloudSyncNotice({
   onDownloadRecovery,
 }: {
   status: CloudSyncStatus;
+  isUserOperationSync: boolean;
   errorInfo?: EmotionSyncErrorInfo | null;
   language: AppLanguage;
   onSafeMerge: () => void;
@@ -98,17 +100,29 @@ export function CloudSyncNotice({
   const [showSynced, setShowSynced] = useState(false);
 
   useEffect(() => {
-    if (status !== 'synced') {
+    if (status !== 'synced' || !isUserOperationSync) {
       setShowSynced(false);
       return;
     }
     setShowSynced(true);
     const timer = window.setTimeout(() => setShowSynced(false), 900);
     return () => window.clearTimeout(timer);
-  }, [status]);
+  }, [isUserOperationSync, status]);
 
+  const requiresAttention =
+    status === 'conflict' ||
+    status === 'upgrade_required' ||
+    status === 'setup_required' ||
+    (status === 'error' && (
+      errorInfo?.kind === 'authorization' ||
+      errorInfo?.kind === 'storage'
+    ));
   const visibleStatus =
-    status === 'synced' && !showSynced ? null : status;
+    !isUserOperationSync && !requiresAttention
+      ? null
+      : status === 'synced' && !showSynced
+        ? null
+        : status;
   const copy = COPY[language];
   const message =
     visibleStatus === 'checking'

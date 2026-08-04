@@ -20,6 +20,7 @@ import type { PhotoAssistDelivery } from '../../src/app/appTypes';
 import { SideDrawer } from '../../src/app/AppChrome';
 import { StarInboxScreen } from '../../src/features/inbox/StarInboxScreen';
 import { useChatDeliveryHandlers } from '../../src/app/useChatDeliveryHandlers';
+import { ACCOUNT_PREFERENCES_CHANGED_EVENT } from '../../src/app/profilePreferences';
 
 const draftNote: EmotionNote = {
   id: 'note-new',
@@ -421,6 +422,11 @@ describe('core component flows', () => {
   it('closes settings through a discoverable button', async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
+    const onPreferenceChange = vi.fn();
+    window.addEventListener(
+      ACCOUNT_PREFERENCES_CHANGED_EVENT,
+      onPreferenceChange,
+    );
     window.localStorage.setItem(
       'my-emotion-map.user-preferences.00000000-0000-4000-8000-000000000001.v2',
       JSON.stringify({ profileName: 'student_01' }),
@@ -469,17 +475,26 @@ describe('core component flows', () => {
 
     expect(screen.getByRole('heading', { name: '用户student_01' })).toBeInTheDocument();
     expect(screen.getByText('ID:student_01')).toBeInTheDocument();
+    expect(onPreferenceChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: '修改信息' }));
     expect(document.querySelector('.profile-account-id-row')).toBeNull();
-    expect(screen.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
-      '用户student_01',
-    );
+    const profileNameInput = screen.getByRole('textbox', { name: '用户姓名' });
+    expect(profileNameInput).toHaveValue('用户student_01');
+    await user.clear(profileNameInput);
+    await user.type(profileNameInput, 'Kaki');
+    await waitFor(() => {
+      expect(onPreferenceChange).toHaveBeenCalled();
+    });
     await user.click(screen.getByRole('button', { name: '返回' }));
     await waitFor(() => {
       expect(screen.queryByRole('textbox', { name: '用户姓名' })).toBeNull();
     });
     await user.click(screen.getByRole('button', { name: '关闭' }));
     expect(onBack).toHaveBeenCalledTimes(1);
+    window.removeEventListener(
+      ACCOUNT_PREFERENCES_CHANGED_EVENT,
+      onPreferenceChange,
+    );
   });
 
   it('keeps My Life Memory and Emotion Map MCP credentials separate', async () => {

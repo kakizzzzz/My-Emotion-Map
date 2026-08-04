@@ -208,6 +208,7 @@ describe('normalized cloud sync', () => {
 
     await waitFor(() => expect(result.current.revision).toBe(1), { timeout: 2_000 });
     expect(result.current.status).toBe('synced');
+    expect(result.current.isUserOperationSync).toBe(false);
     expect(mocks.applyMutations).toHaveBeenCalledWith(client, 0, mutations);
   });
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -82,6 +82,28 @@ export function SettingsScreen({
   const [aiContextMessageCount, setAiContextMessageCount] = useState(
     initialSettings.aiContextMessageCount,
   );
+  const preferencesToSave = useMemo(() => ({
+    ...loadLocalSettings(cloudUserId),
+    avatarSrc,
+    profileName,
+    language,
+    aiUserPrompt,
+    aiContextMessageCount,
+    followUpIntervals,
+  }), [
+    aiContextMessageCount,
+    aiUserPrompt,
+    avatarSrc,
+    cloudUserId,
+    followUpIntervals,
+    language,
+    profileName,
+  ]);
+  const preferencesFingerprint = JSON.stringify(preferencesToSave);
+  const persistedPreferencesRef = useRef({
+    userId: cloudUserId,
+    fingerprint: preferencesFingerprint,
+  });
   const rows: Array<{
     id: SettingsPanel;
     label: string;
@@ -116,16 +138,19 @@ export function SettingsScreen({
                         : copy.settings.general;
 
   useEffect(() => {
-    saveLocalSettings({
-      ...loadLocalSettings(cloudUserId),
-      avatarSrc,
-      profileName,
-      language,
-      aiUserPrompt,
-      aiContextMessageCount,
-      followUpIntervals,
-    }, cloudUserId);
-  }, [aiContextMessageCount, aiUserPrompt, avatarSrc, cloudUserId, followUpIntervals, language, profileName]);
+    const persisted = persistedPreferencesRef.current;
+    if (persisted.userId !== cloudUserId) {
+      persistedPreferencesRef.current = {
+        userId: cloudUserId,
+        fingerprint: preferencesFingerprint,
+      };
+      return;
+    }
+    if (persisted.fingerprint === preferencesFingerprint) return;
+    if (saveLocalSettings(preferencesToSave, cloudUserId)) {
+      persistedPreferencesRef.current.fingerprint = preferencesFingerprint;
+    }
+  }, [cloudUserId, preferencesFingerprint, preferencesToSave]);
 
   const closePanel = () => {
     if (

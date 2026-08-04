@@ -180,6 +180,7 @@ describe('cross-device foreground normalized refresh', () => {
       client, session, snapshot: baseApp, applySnapshot,
     }));
     await waitFor(() => expect(result.current.status).toBe('synced'));
+    expect(result.current.isUserOperationSync).toBe(false);
     applySnapshot.mockClear();
 
     act(() => window.dispatchEvent(new Event('focus')));
@@ -196,6 +197,7 @@ describe('cross-device foreground normalized refresh', () => {
       followUpId: 'remote-follow-up', kind: 'followup_prompt',
     });
     expect(result.current.revision).toBe(2);
+    expect(result.current.isUserOperationSync).toBe(false);
   });
 
   it('keeps the local copy and reports a same-record foreground conflict', async () => {
@@ -226,6 +228,7 @@ describe('cross-device foreground normalized refresh', () => {
     await waitFor(() => expect(result.current.status).toBe('synced'));
     rerender({ snapshot: localApp });
     await waitFor(() => expect(mocks.enqueue).toHaveBeenCalled());
+    expect(result.current.isUserOperationSync).toBe(true);
     expect(diffEmotionState(base, local)).toHaveLength(1);
 
     act(() => window.dispatchEvent(new Event('focus')));

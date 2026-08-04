@@ -49,6 +49,7 @@ export function useNormalizedCloudSync({
   const [revision, setRevision] = useState<number | null>(null);
   const [outboxVersion, setOutboxVersion] = useState(0);
   const [errorInfo, setErrorInfo] = useState<EmotionSyncErrorInfo | null>(null);
+  const [isUserOperationSync, setIsUserOperationSync] = useState(false);
   const generationRef = useRef(0);
   const activeUserRef = useRef('');
   const snapshotRef = useRef(snapshot);
@@ -174,7 +175,10 @@ export function useNormalizedCloudSync({
     }
     refreshingRef.current = true;
     const requestGeneration = generationRef.current;
-    if (!outboxRef.current?.mutations.length) setStatus('checking');
+    if (!outboxRef.current?.mutations.length) {
+      setIsUserOperationSync(false);
+      setStatus('checking');
+    }
     try {
       const currentRemote = remoteRef.current;
       const currentRevision = revisionRef.current;
@@ -262,6 +266,7 @@ export function useNormalizedCloudSync({
     const mutations = diffEmotionState(previous, local);
     observedLocalRef.current = local;
     if (!mutations.length) return;
+    setIsUserOperationSync(true);
     localQueueRef.current = localQueueRef.current.then(async () => {
       const next = await enqueueEmotionMutations({
         userId,
@@ -343,6 +348,7 @@ export function useNormalizedCloudSync({
     outboxRef.current = null;
     conflictRemoteRef.current = null;
     recoveryRef.current = null;
+    setIsUserOperationSync(false);
     setErrorInfo(null);
     if (!client) {
       activeUserRef.current = '';
@@ -408,6 +414,7 @@ export function useNormalizedCloudSync({
     const outbox = outboxRef.current;
     const nextRevision = revisionRef.current;
     if (!userId || !remote || !outbox || nextRevision === null) return;
+    setIsUserOperationSync(true);
     const local = observedLocalRef.current ?? applyEmotionMutationsToSnapshot(
       remote,
       outbox.mutations,
@@ -436,6 +443,7 @@ export function useNormalizedCloudSync({
   }, [applyNormalizedToDevice, session?.user.id]);
   return {
     status,
+    isUserOperationSync,
     errorInfo,
     datasetRevision: revision ?? 0,
     revision: status === 'synced' ? revision : null,

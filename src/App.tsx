@@ -850,6 +850,7 @@ export function App() {
 
         <CloudSyncNotice
           status={cloudSync.status}
+          isUserOperationSync={cloudSync.isUserOperationSync}
           errorInfo={cloudSync.errorInfo}
           language={language}
           onSafeMerge={cloudSync.safeMerge}

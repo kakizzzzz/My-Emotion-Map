@@ -717,7 +717,7 @@
 .map-load-error {
   position: absolute;
   z-index: 7;
-  top: calc(env(safe-area-inset-top) + 72px);
+  top: 50%;
   left: 50%;
   display: flex;
   width: min(24rem, calc(100% - 32px));
@@ -731,7 +731,7 @@
   box-shadow: var(--em-shadow-float);
   color: var(--em-text-secondary);
   font-size: 13px;
-  translate: -50% 0;
+  translate: -50% -50%;
 }
 
 .map-load-error button {

@@ -8,7 +8,7 @@
   box-sizing: border-box;
   width: max-content;
   min-height: 36px;
-  max-width: min(18rem, calc(100% - 32px));
+  max-width: min(18rem, calc(100% - 152px));
   align-items: center;
   justify-content: center;
   padding: 8px 16px;
@@ -27,12 +27,10 @@
   -webkit-backdrop-filter: blur(8px);
 }
 
-.toast--top {
-  top: calc(env(safe-area-inset-top) + 5rem);
-}
-
+.toast--top,
 .toast--bottom {
-  bottom: calc(env(safe-area-inset-bottom) + 7.5rem);
+  top: auto;
+  bottom: var(--em-chrome-bottom);
 }
 
 .toast {
@@ -54,12 +52,12 @@
 }
 
 .cloud-sync-toast {
-  bottom: calc(env(safe-area-inset-bottom) + 10.5rem);
+  bottom: var(--em-chrome-bottom);
   flex-wrap: wrap;
 }
 
 .cloud-sync-toast--conflict {
-  max-width: min(22rem, calc(100% - 32px));
+  max-width: min(18rem, calc(100% - 152px));
   padding: 10px 12px;
   border-radius: 18px;
   pointer-events: auto;

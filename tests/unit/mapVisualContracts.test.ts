@@ -61,6 +61,38 @@ describe('map visual geometry contracts', () => {
     expect(orderBadge).toContain('border-radius: 50%;');
   });
 
+  it('keeps selected map stars at the My Life Memory shadow depth', async () => {
+    const shellCss = await readSource('src/styles/shell.css');
+
+    expect(shellCss).toContain(
+      'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15))',
+    );
+    expect(shellCss).not.toContain('.emotion-star.is-selected');
+  });
+
+  it('centers the recoverable map loading error in the viewport', async () => {
+    const mapCss = await readSource('src/styles/map.css');
+    const loadError = extractRule(mapCss, '.map-load-error');
+
+    expect(loadError).toContain('top: 50%;');
+    expect(loadError).toContain('left: 50%;');
+    expect(loadError).toContain('translate: -50% -50%;');
+  });
+
+  it('places global notices between the bottom menu and inbox controls', async () => {
+    const feedbackCss = await readSource('src/styles/feedback.css');
+
+    expect(feedbackCss).toContain(
+      'max-width: min(18rem, calc(100% - 152px));',
+    );
+    expect(feedbackCss).toMatch(
+      /\.toast--top,\s*\.toast--bottom\s*\{[^}]*bottom: var\(--em-chrome-bottom\);/s,
+    );
+    expect(feedbackCss).toMatch(
+      /\.cloud-sync-toast\s*\{[^}]*bottom: var\(--em-chrome-bottom\);/s,
+    );
+  });
+
   it('copies the My Life Memory location descriptions in all languages', async () => {
     const [zh, en, ko] = await Promise.all([
       readSource('src/i18n/zh.ts'),
