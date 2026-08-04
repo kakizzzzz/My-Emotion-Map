@@ -1,21 +1,21 @@
 name: run cross-device cloud sync fix
 
 on:
-  push:
-    branches: [fix/cross-device-cloud-sync]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   apply-and-verify:
-    if: github.actor != 'github-actions[bot]'
+    if: github.head_ref == 'fix/cross-device-cloud-sync'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/cross-device-cloud-sync
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -32,11 +32,12 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: e2e-public-placeholder
       - name: Commit verified changes
         run: |
+          git checkout origin/main -- .github/workflows/quality.yml
           rm .github/workflows/run-cross-device-sync-fix.yml
           rm scripts/apply-cross-device-sync-fix.py
           git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src tests .github/workflows/run-cross-device-sync-fix.yml scripts/apply-cross-device-sync-fix.py
+          git add src tests .github/workflows/quality.yml .github/workflows/run-cross-device-sync-fix.yml scripts/apply-cross-device-sync-fix.py
           git commit -m "Fix cross-device cloud sync visibility"
-          git push origin HEAD:fix/cross-device-cloud-sync
+          git push origin HEAD:${{ github.head_ref }}
