@@ -148,7 +148,7 @@ const validateResult = (
           return [{
             optionId: item.optionId.slice(0, 200),
             label: item.label.slice(0, 100),
-            continuationToken: item.continuationToken.slice(0, 2_000),
+            continuationToken: item.continuationToken.slice(0, 4_000),
           }];
         }).slice(0, 3)
       : undefined,

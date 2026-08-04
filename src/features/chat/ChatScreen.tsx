@@ -77,7 +77,7 @@ export function ChatScreen({
     label: string,
     kind: ChatOption['responseKind'],
   ) => void;
-  onRevisitEmotion: (noteId: string) => void;
+  onRevisitEmotion: (noteId: string, followUpId: string) => void;
   cloudAuth: CloudAuth | null;
   cloudRevision: number | null;
   cloudStatus: CloudSyncStatus;
@@ -626,7 +626,7 @@ export function ChatScreen({
                       type="button"
                       className="message-revisit-action"
                       aria-label={copy.note.recordCurrentFeeling}
-                      onClick={() => onRevisitEmotion(followUp.noteId)}
+                      onClick={() => onRevisitEmotion(followUp.noteId, followUp.id)}
                     >
                       <Heart size={18} strokeWidth={2.2} />
                     </button>

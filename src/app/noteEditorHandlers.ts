@@ -13,9 +13,85 @@ import {
   normalizeFollowUpCurve,
 } from '../domain/followUps';
 
+const DAY_MS = 86_400_000;
+const isPendingFollowUp = (record: FollowUpRecord) =>
+  record.status === 'queued' || record.status === 'active';
+
+const consentCycleKey = (record: FollowUpRecord) => {
+  const explicit = record.followUpConsentedAt;
+  if (explicit && Number.isFinite(new Date(explicit).getTime())) {
+    return explicit;
+  }
+  const dueTime = new Date(record.dueAt).getTime();
+  return Number.isFinite(dueTime)
+    ? new Date(dueTime - record.intervalDays * DAY_MS).toISOString()
+    : '';
+};
+
+export const reconcileFollowUpsForNote = ({
+  records,
+  note,
+  language,
+  intervals,
+  enabled,
+  wasEnabled,
+  now = new Date(),
+}: {
+  records: FollowUpRecord[];
+  note: EmotionNote;
+  language: AppLanguage;
+  intervals: number[];
+  enabled: boolean;
+  wasEnabled: boolean;
+  now?: Date;
+}) => {
+  if (!enabled) {
+    return records.filter(
+      (record) => record.noteId !== note.id || !isPendingFollowUp(record),
+    );
+  }
+
+  const curve = normalizeFollowUpCurve(intervals);
+  const desiredIntervals = new Set(curve);
+  const noteRecords = records.filter((record) => record.noteId === note.id);
+  const latestExistingCycle = noteRecords
+    .map((record) => consentCycleKey(record))
+    .filter(Boolean)
+    .sort(
+      (left, right) =>
+        new Date(right).getTime() - new Date(left).getTime(),
+    )[0];
+  const cycleKey = wasEnabled && latestExistingCycle
+    ? latestExistingCycle
+    : now.toISOString();
+  const cycleDate = new Date(cycleKey);
+  const existingIntervals = new Set(
+    noteRecords
+      .filter((record) => consentCycleKey(record) === cycleKey)
+      .map((record) => record.intervalDays),
+  );
+  const keptPendingIntervals = new Set<number>();
+  const retained = records.filter((record) => {
+    if (record.noteId !== note.id) return true;
+    if (!isPendingFollowUp(record)) return true;
+    if (consentCycleKey(record) !== cycleKey) return false;
+    if (!desiredIntervals.has(record.intervalDays)) return false;
+    if (keptPendingIntervals.has(record.intervalDays)) return false;
+    keptPendingIntervals.add(record.intervalDays);
+    return true;
+  });
+  const additions = curve
+    .filter((days) => !existingIntervals.has(days))
+    .map((days) =>
+      createFollowUpForNote(note, language, days, cycleDate),
+    );
+  return [...retained, ...additions];
+};
+
 export const useNoteEditorHandlers = ({
   language,
   starSavedMessage,
+  notes,
   followUps,
   followUpIntervals,
   setMoments,
@@ -28,6 +104,7 @@ export const useNoteEditorHandlers = ({
 }: {
   language: AppLanguage;
   starSavedMessage: string;
+  notes: EmotionNote[];
   followUps: FollowUpRecord[];
   followUpIntervals: number[];
   setMoments: Dispatch<SetStateAction<EmotionMoment[]>>;
@@ -60,59 +137,66 @@ export const useNoteEditorHandlers = ({
     color?: string,
     place?: string,
   ) => {
-    const pendingFollowUpIds = new Set(followUps
-      .filter((record) => record.noteId === nextNote.id &&
-        (record.status === 'queued' || record.status === 'active'))
-      .map((record) => record.id));
-    setNotes((current) => current.some((note) => note.id === nextNote.id)
-      ? current.map((note) => note.id === nextNote.id ? nextNote : note)
-      : [...current, nextNote]);
-    setMoments((current) => current.map((moment) => moment.id === momentId
-      ? {
-          ...moment,
-          emotion,
-          placeRating,
-          place: place ?? moment.place,
-          color,
-          isNew: false,
-        }
-      : moment));
-    setFollowUps((current) => {
-      if (!nextNote.followUpEnabled) {
-        return current.filter((record) => record.noteId !== nextNote.id ||
-          (record.status !== 'queued' && record.status !== 'active'));
-      }
-      const curve = normalizeFollowUpCurve(followUpIntervals);
-      const desired = new Set(curve);
-      const pending = current.filter((record) => record.noteId === nextNote.id &&
-        (record.status === 'queued' || record.status === 'active'));
-      const existingIntervals = new Set(
-        pending.map((record) => record.intervalDays),
+    const previousNote = notes.find((note) => note.id === nextNote.id);
+    const wasFollowUpEnabled =
+      previousNote?.followUpEnabled === true ||
+      followUps.some(
+        (record) => record.noteId === nextNote.id && isPendingFollowUp(record),
       );
-      const consentedAt = pending[0]?.followUpConsentedAt
-        ? new Date(pending[0].followUpConsentedAt)
-        : new Date();
-      const retained = current.filter((record) =>
-        record.noteId !== nextNote.id ||
-        (record.status !== 'queued' && record.status !== 'active') ||
-        desired.has(record.intervalDays),
-      );
-      const additions = curve
-        .filter((interval) => !existingIntervals.has(interval))
-        .map((interval) => createFollowUpForNote(
-          nextNote,
-          language,
-          interval,
-          consentedAt,
-        ));
-      return [...retained, ...additions];
-    });
+    const pendingFollowUpIds = new Set(
+      followUps
+        .filter(
+          (record) =>
+            record.noteId === nextNote.id && isPendingFollowUp(record),
+        )
+        .map((record) => record.id),
+    );
+    setNotes((current) =>
+      current.some((note) => note.id === nextNote.id)
+        ? current.map((note) => (note.id === nextNote.id ? nextNote : note))
+        : [...current, nextNote],
+    );
+    setMoments((current) =>
+      current.map((moment) =>
+        moment.id === momentId
+          ? {
+              ...moment,
+              emotion,
+              placeRating,
+              place: place ?? moment.place,
+              color,
+              isNew: false,
+            }
+          : moment,
+      ),
+    );
+    setFollowUps((current) => reconcileFollowUpsForNote({
+      records: current,
+      note: nextNote,
+      language,
+      intervals: followUpIntervals,
+      enabled: nextNote.followUpEnabled === true,
+      wasEnabled: wasFollowUpEnabled,
+    }));
     if (!nextNote.followUpEnabled && pendingFollowUpIds.size) {
-      setConversations((current) => current.map((conversation) => ({
-        ...conversation,
-        messages: conversation.messages.filter((message) =>
-          !message.followUpId || !pendingFollowUpIds.has(message.followUpId)),
-      })));
+      setConversations((current) =>
+        current.map((conversation) => {
+          const messages = conversation.messages.filter(
+            (message) =>
+              !message.followUpId ||
+              !pendingFollowUpIds.has(message.followUpId),
+          );
+          if (messages.length === conversation.messages.length) {
+            return conversation;
+          }
+          return {
+            ...conversation,
+            messages,
+            preview: messages[messages.length - 1]?.body ?? '',
+            unread: messages.length ? conversation.unread : false,
+          };
+        }),
+      );
     }
     closeNoteEditor(momentId);
     showToast(starSavedMessage);

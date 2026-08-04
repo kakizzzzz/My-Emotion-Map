@@ -13,6 +13,7 @@ import type {
 import { getEmotionLabel, getPlaceRatings } from '../../domain/notePrompts';
 import {
   formatFollowUpTimestamp,
+  getFollowUpPrompt,
 } from '../../domain/followUps';
 import { useDialogFocus } from '../../app/useDialogFocus';
 
@@ -176,7 +177,7 @@ export function NoteViewSheet({
                       )}
                     </time>
                   </header>
-                  <p>{record.prompt}</p>
+                  <p>{record.prompt || getFollowUpPrompt(record, note, language)}</p>
                   <strong>
                     {record.status === 'skipped'
                       ? copy.note.skipped
