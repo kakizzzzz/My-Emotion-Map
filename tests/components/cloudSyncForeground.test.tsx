@@ -111,7 +111,27 @@ describe('cross-device foreground cloud refresh', () => {
     await waitFor(() => expect(result.current.status).toBe('synced'));
     act(() => window.dispatchEvent(new Event('focus')));
 
-    await waitFor(() => expect(applySnapshot).toHaveBeenCalledWith(remote));
+    await waitFor(() => expect(applySnapshot).toHaveBeenCalledTimes(1));
+    const applied = applySnapshot.mock.calls[0][0];
+    expect(applied.moments).toHaveLength(1);
+    expect(applied.moments[0]).toMatchObject({
+      place: '另一台设备的星星',
+      noteId: note.id,
+    });
+    expect(applied.followUps).toEqual([
+      expect.objectContaining({
+        id: 'remote-follow-up',
+        status: 'active',
+      }),
+    ]);
+    expect(applied.conversations[0]).toMatchObject({
+      id: 'thread-revisit',
+      kind: 'companion',
+    });
+    expect(applied.conversations[0].messages[0]).toMatchObject({
+      followUpId: 'remote-follow-up',
+      kind: 'followup_prompt',
+    });
     expect(maybeSingle).toHaveBeenCalledTimes(2);
     expect(result.current.status).toBe('synced');
   });
