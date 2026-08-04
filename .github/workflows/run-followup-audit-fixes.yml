@@ -29,6 +29,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run check:all
+        env:
+          VITE_SUPABASE_URL: https://uifgpmmlvmfrauzbbrem.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: e2e-public-placeholder
       - name: Commit verified source changes
         run: |
           rm .github/workflows/run-followup-audit-fixes.yml
