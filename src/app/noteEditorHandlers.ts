@@ -6,13 +6,12 @@ import type {
   EmotionMoment,
   EmotionNote,
   FollowUpRecord,
-  PlaceRating,
 } from '../types';
+import type { PhotoAssistDelivery, ToastHandler } from './appTypes';
 import {
   createFollowUpForNote,
   normalizeFollowUpCurve,
 } from '../domain/followUps';
-import type { PhotoAssistDelivery, ToastHandler } from './appTypes';
 
 const DAY_MS = 86_400_000;
 const isPendingFollowUp = (record: FollowUpRecord) =>
@@ -89,7 +88,7 @@ export const reconcileFollowUpsForNote = ({
   return [...retained, ...additions];
 };
 
-export function useNoteEditorHandlers({
+export const useNoteEditorHandlers = ({
   language,
   starSavedMessage,
   notes,
@@ -113,16 +112,12 @@ export function useNoteEditorHandlers({
   setFollowUps: Dispatch<SetStateAction<FollowUpRecord[]>>;
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
   setEditingMomentId: Dispatch<SetStateAction<string | null>>;
-  setPhotoAssistByMomentId: Dispatch<SetStateAction<Record<string, PhotoAssistDelivery>>>;
+  setPhotoAssistByMomentId: Dispatch<
+    SetStateAction<Record<string, PhotoAssistDelivery>>
+  >;
   showToast: ToastHandler;
-}) {
-  const closeNoteEditor = (momentId: string) => {
-    setEditingMomentId(null);
-    setMoments((current) =>
-      current.map((moment) =>
-        moment.id === momentId ? { ...moment, isNew: false } : moment,
-      ),
-    );
+}) => {
+  const clearPhotoAssist = (momentId: string) => {
     setPhotoAssistByMomentId((current) => {
       if (!(momentId in current)) return current;
       const next = { ...current };
@@ -130,12 +125,15 @@ export function useNoteEditorHandlers({
       return next;
     });
   };
-
+  const closeNoteEditor = (momentId: string) => {
+    setEditingMomentId(null);
+    clearPhotoAssist(momentId);
+  };
   const saveNote = (
     momentId: string,
     nextNote: EmotionNote,
     emotion: EmotionKey | null,
-    rating: PlaceRating | null,
+    placeRating: EmotionMoment['placeRating'],
     color?: string,
     place?: string,
   ) => {
@@ -145,26 +143,6 @@ export function useNoteEditorHandlers({
       followUps.some(
         (record) => record.noteId === nextNote.id && isPendingFollowUp(record),
       );
-    setMoments((current) =>
-      current.map((moment) =>
-        moment.id === momentId
-          ? {
-              ...moment,
-              emotion,
-              intensity: emotion ? Math.max(1, moment.intensity) : 0,
-              placeRating: rating,
-              color,
-              place: place ?? moment.place,
-              isNew: false,
-            }
-          : moment,
-      ),
-    );
-    setNotes((current) =>
-      current.some((note) => note.id === nextNote.id)
-        ? current.map((note) => (note.id === nextNote.id ? nextNote : note))
-        : [...current, nextNote],
-    );
     const pendingFollowUpIds = new Set(
       followUps
         .filter(
@@ -172,6 +150,25 @@ export function useNoteEditorHandlers({
             record.noteId === nextNote.id && isPendingFollowUp(record),
         )
         .map((record) => record.id),
+    );
+    setNotes((current) =>
+      current.some((note) => note.id === nextNote.id)
+        ? current.map((note) => (note.id === nextNote.id ? nextNote : note))
+        : [...current, nextNote],
+    );
+    setMoments((current) =>
+      current.map((moment) =>
+        moment.id === momentId
+          ? {
+              ...moment,
+              emotion,
+              placeRating,
+              place: place ?? moment.place,
+              color,
+              isNew: false,
+            }
+          : moment,
+      ),
     );
     setFollowUps((current) => reconcileFollowUpsForNote({
       records: current,
@@ -201,15 +198,8 @@ export function useNoteEditorHandlers({
         }),
       );
     }
-    setEditingMomentId(null);
-    setPhotoAssistByMomentId((current) => {
-      if (!(momentId in current)) return current;
-      const next = { ...current };
-      delete next[momentId];
-      return next;
-    });
+    closeNoteEditor(momentId);
     showToast(starSavedMessage);
   };
-
   return { closeNoteEditor, saveNote };
-}
+};
