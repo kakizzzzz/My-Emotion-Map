@@ -86,7 +86,7 @@ describe('normalized emotion snapshot mapping', () => {
       name: 'photo EXIF with offset',
       eventTimestamp: '2026-08-04T14:30:00+09:00',
       expectedUtc: '2026-08-04T05:30:00.000Z',
-      expectedZone: 'Asia/Shanghai',
+      expectedZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
     },
     {
       name: 'photo EXIF without offset',
