@@ -26,6 +26,17 @@ describe('map visual geometry contracts', () => {
     expect(dot).toContain('transform: translate(-50%, -50%);');
   });
 
+  it('lets nearby stars receive taps through the current-location marker', async () => {
+    const markerSource = await readSource('src/features/map/MapMarkers.tsx');
+    const currentLocationBlock = markerSource.match(
+      /\{userLocation \? \([\s\S]*?\) : null\}/,
+    )?.[0] ?? '';
+
+    expect(currentLocationBlock).toContain("style={{ pointerEvents: 'none' }}");
+    expect(currentLocationBlock).toContain('<MapLocationMarker');
+    expect(currentLocationBlock).toContain('size={80}');
+  });
+
   it('keeps visible map controls and badges square and non-shrinking', async () => {
     const [shellCss, mapCss] = await Promise.all([
       readSource('src/styles/shell.css'),
