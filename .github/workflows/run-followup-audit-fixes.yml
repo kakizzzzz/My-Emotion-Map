@@ -21,6 +21,7 @@ jobs:
         run: |
           python scripts/apply-followup-audit-fixes.py
           python scripts/apply-followup-audit-extra.py
+          python scripts/fix-followup-audit-test.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -33,9 +34,10 @@ jobs:
           rm .github/workflows/run-followup-audit-fixes.yml
           rm scripts/apply-followup-audit-fixes.py
           rm scripts/apply-followup-audit-extra.py
+          rm scripts/fix-followup-audit-test.py
           git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src tests .github/workflows/run-followup-audit-fixes.yml scripts/apply-followup-audit-fixes.py scripts/apply-followup-audit-extra.py
+          git add src tests .github/workflows/run-followup-audit-fixes.yml scripts/apply-followup-audit-fixes.py scripts/apply-followup-audit-extra.py scripts/fix-followup-audit-test.py
           git commit -m "Fix follow-up scheduling and revisit targeting"
           git push origin HEAD:${{ github.head_ref }}
