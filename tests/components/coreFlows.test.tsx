@@ -779,7 +779,8 @@ describe('core component flows', () => {
           noteId: 'inbox-note',
           intervalDays: 3,
           dueAt: '2026-08-01T00:00:00.000Z',
-          status: 'active',
+          status: 'queued',
+          promptedAt: '2026-08-01T00:00:01.000Z',
         }]}
         onAnswerFollowUp={onAnswerFollowUp}
         onClose={vi.fn()}

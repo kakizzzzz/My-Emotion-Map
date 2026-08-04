@@ -37,7 +37,7 @@ export function useFollowUpScheduler(
     if (normalized.some((record) => record.status === 'active')) return;
 
     const nextQueued = normalized
-      .filter((record) => record.status === 'queued')
+      .filter((record) => record.status === 'queued' && !record.promptedAt)
       .sort(
         (left, right) =>
           new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime(),

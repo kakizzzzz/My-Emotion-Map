@@ -12,7 +12,7 @@ import type {
 import { getAppCopy } from '../../src/i18n';
 
 const note: EmotionNote = {
-  id: 'note-inbox',
+  id: 'note-routing',
   title: '安静角落',
   titleSource: 'user',
   place: '图书馆',
@@ -24,46 +24,53 @@ const note: EmotionNote = {
   excerpt: '测试记录',
   followUpEnabled: true,
 };
-const active: FollowUpRecord = {
-  id: 'follow-up-inbox',
+const chatFollowUp: FollowUpRecord = {
+  id: 'follow-up-chat',
   noteId: note.id,
   intervalDays: 3,
   dueAt: '2026-08-04T00:00:00.000Z',
   status: 'active',
+  promptedAt: '2026-08-04T00:00:00.000Z',
   promptVersion: 2,
-  followUpConsentedAt: '2026-08-01T00:00:00.000Z',
+};
+const inboxFollowUp: FollowUpRecord = {
+  id: 'follow-up-inbox',
+  noteId: note.id,
+  intervalDays: 7,
+  dueAt: '2026-08-04T00:00:00.000Z',
+  status: 'queued',
+  promptedAt: '2026-08-04T00:00:01.000Z',
+  promptVersion: 2,
 };
 const companion: Conversation = {
   id: FOLLOW_UP_CONVERSATION_ID,
   title: '交流回访',
-  preview: '旧预览',
+  preview: '当前聊天回访',
   kind: 'companion',
   unread: true,
   messages: [{
-    id: 'prompt-inbox',
+    id: 'prompt-chat',
     role: 'assistant',
     kind: 'followup_prompt',
     body: '',
-    followUpId: active.id,
+    followUpId: chatFollowUp.id,
     noteIds: [note.id],
   }],
 };
 
-const useHarness = (
-  initialConversations: Conversation[] = [companion],
-  availableNotes: EmotionNote[] = [note],
-) => {
-  const [followUps, setFollowUps] = useState<FollowUpRecord[]>([active]);
-  const [conversations, setConversations] = useState<Conversation[]>(
-    initialConversations,
-  );
+const useHarness = () => {
+  const [followUps, setFollowUps] = useState<FollowUpRecord[]>([
+    chatFollowUp,
+    inboxFollowUp,
+  ]);
+  const [conversations, setConversations] = useState<Conversation[]>([companion]);
   const [revisits, setRevisits] = useState<RevisitRecord[]>([]);
   const coordinator = useFollowUpCoordinator({
     followUps,
     setFollowUps,
     setConversations,
     setRevisits,
-    notes: availableNotes,
+    notes: [note],
     activeView: 'map',
     activeConversationId: FOLLOW_UP_CONVERSATION_ID,
     language: 'zh',
@@ -72,48 +79,52 @@ const useHarness = (
   return { followUps, conversations, revisits, ...coordinator };
 };
 
-describe('follow-up inbox history', () => {
-  it('mirrors an inbox answer into companion chat and clears its unread state', () => {
-    const { result } = renderHook(() => useHarness());
+describe('follow-up chat and inbox history isolation', () => {
+  it('keeps an inbox answer out of companion chat', () => {
+    const { result } = renderHook(useHarness);
     act(() => {
-      result.current.answerFollowUp(active.id, '轻了', 'lighter', 'inbox');
+      result.current.answerFollowUp(
+        inboxFollowUp.id,
+        '轻了',
+        'lighter',
+        'inbox',
+      );
     });
 
-    const thread = result.current.conversations[0];
-    expect(thread.unread).toBe(false);
-    expect(thread.messages.map((message) => message.kind)).toEqual([
-      'followup_prompt',
-      'followup_answer',
-      'followup_reply',
-    ]);
-    expect(thread.messages[1]).toMatchObject({
-      role: 'user',
-      body: '轻了',
-      followUpId: active.id,
-    });
-    expect(result.current.followUps[0]).toMatchObject({
+    expect(result.current.conversations[0].messages).toEqual(
+      companion.messages,
+    );
+    expect(result.current.followUps.find(
+      (record) => record.id === inboxFollowUp.id,
+    )).toMatchObject({
       status: 'answered',
       answeredVia: 'inbox',
       responseOptionId: 'lighter',
     });
   });
 
-  it('creates complete chat history if the inbox is answered before the prompt effect', () => {
-    const { result } = renderHook(() => useHarness([], []));
+  it('writes only the chat-slot answer into companion history', () => {
+    const { result } = renderHook(useHarness);
     act(() => {
-      result.current.answerFollowUp(active.id, '一样', 'same', 'inbox');
+      result.current.answerFollowUp(
+        chatFollowUp.id,
+        '一样',
+        'same',
+        'chat',
+      );
     });
 
     const thread = result.current.conversations[0];
-    expect(thread).toMatchObject({
-      id: FOLLOW_UP_CONVERSATION_ID,
-      kind: 'companion',
-      unread: false,
-    });
     expect(thread.messages.map((message) => message.kind)).toEqual([
       'followup_prompt',
       'followup_answer',
       'followup_reply',
     ]);
+    expect(thread.messages.some(
+      (message) => message.followUpId === inboxFollowUp.id,
+    )).toBe(false);
+    expect(result.current.followUps.find(
+      (record) => record.id === inboxFollowUp.id,
+    )).toMatchObject({ status: 'queued' });
   });
 });

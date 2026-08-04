@@ -36,6 +36,7 @@ import { useFollowUpCoordinator } from './app/useFollowUpCoordinator';
 import { useLocalDataController } from './app/useLocalDataController';
 import {
   FOLLOW_UP_CONVERSATION_ID,
+  isInboxFollowUp,
 } from './domain/followUps';
 import { GlobalInboxButton, GlobalMenuButton, SideDrawer } from './app/AppChrome';
 import { LocationPermissionPrompt } from './features/location/LocationPermissionPrompt';
@@ -167,7 +168,7 @@ export function App() {
     navigationCopy: copy.navigation,
   });
   const unreadStarInboxCount = followUps.filter(
-    (record) => record.status === 'active' && !record.seenAt,
+    (record) => isInboxFollowUp(record) && !record.seenAt,
   ).length;
   const themeStyle = getThemeStyle(themePalette);
   const chatWorkspace = chatWorkspaceKey(
@@ -462,10 +463,11 @@ export function App() {
   };
 
   const openStarInbox = () => {
-    const seenAt = new Date().toISOString();
+    const openedAt = Date.now();
+    const seenAt = new Date(openedAt).toISOString();
     setFollowUps((current) =>
       current.map((record) =>
-        record.status === 'active' && !record.seenAt
+        isInboxFollowUp(record, openedAt) && !record.seenAt
           ? { ...record, seenAt }
           : record,
       ),

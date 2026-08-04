@@ -162,51 +162,93 @@ export const formatFollowUpTimestamp = (
     .replace(/\//g, '-');
 };
 
+/**
+ * A queued record with promptedAt has already been routed to Star Inbox.
+ * A queued record without promptedAt is still future or not yet routed.
+ */
+export const isInboxFollowUp = (
+  record: Pick<FollowUpRecord, 'status' | 'dueAt' | 'promptedAt'>,
+  now: Date | number = Date.now(),
+) => {
+  const nowTime = typeof now === 'number' ? now : now.getTime();
+  return record.status === 'queued' &&
+    Boolean(record.promptedAt) &&
+    new Date(record.dueAt).getTime() <= nowTime;
+};
+
 export const promoteNextDueFollowUp = (
   records: FollowUpRecord[],
   now = new Date(),
 ): FollowUpRecord[] => {
   const nowTime = now.getTime();
+  const routedAt = now.toISOString();
   const normalized = records.map((record) => {
-    if (
-      record.status === 'active' &&
-      new Date(record.dueAt).getTime() > nowTime
-    ) {
-      return { ...record, status: 'queued' as const, promptedAt: undefined };
+    const dueTime = new Date(record.dueAt).getTime();
+    const routedPending =
+      record.status === 'active' ||
+      (record.status === 'queued' && Boolean(record.promptedAt));
+    if (routedPending && dueTime > nowTime) {
+      return {
+        ...record,
+        status: 'queued' as const,
+        promptedAt: undefined,
+        seenAt: undefined,
+      };
     }
     return record;
   });
+
   const active = normalized
     .filter((record) => record.status === 'active')
     .sort(
       (left, right) =>
         new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime(),
     );
-  if (active.length) {
-    const keepId = active[0].id;
-    return normalized.map((record) =>
-      record.status === 'active' && record.id !== keepId
-        ? { ...record, status: 'queued' as const, promptedAt: undefined }
-        : record,
-    );
-  }
-  const next = normalized
+  const keepActiveId = active[0]?.id;
+  const withSingleChatSlot = normalized.map((record) => {
+    if (record.status !== 'active') return record;
+    if (record.id === keepActiveId) {
+      return record.promptedAt ? record : { ...record, promptedAt: routedAt };
+    }
+    return {
+      ...record,
+      status: 'queued' as const,
+      promptedAt: record.promptedAt ?? routedAt,
+      seenAt: undefined,
+    };
+  });
+
+  const newlyDue = withSingleChatSlot
     .filter(
       (record) =>
         record.status === 'queued' &&
+        !record.promptedAt &&
         new Date(record.dueAt).getTime() <= nowTime,
     )
     .sort(
       (left, right) =>
         new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime(),
-    )[0];
-  if (!next) return normalized;
-  const promptedAt = now.toISOString();
-  return normalized.map((record) =>
-    record.id === next.id
-      ? { ...record, status: 'active' as const, promptedAt }
-      : record,
-  );
+    );
+  if (!newlyDue.length) return withSingleChatSlot;
+
+  const chatCandidateId = keepActiveId ? undefined : newlyDue[0].id;
+  const newlyDueIds = new Set(newlyDue.map((record) => record.id));
+  return withSingleChatSlot.map((record) => {
+    if (!newlyDueIds.has(record.id)) return record;
+    return record.id === chatCandidateId
+      ? {
+          ...record,
+          status: 'active' as const,
+          promptedAt: routedAt,
+          seenAt: undefined,
+        }
+      : {
+          ...record,
+          status: 'queued' as const,
+          promptedAt: routedAt,
+          seenAt: undefined,
+        };
+  });
 };
 
 export const createFollowUpForNote = (
