@@ -6,6 +6,10 @@ const source = readFileSync(
   resolve(process.cwd(), 'supabase/functions/login-account/index.ts'),
   'utf8',
 );
+const registrationSource = readFileSync(
+  resolve(process.cwd(), 'supabase/functions/register-account/index.ts'),
+  'utf8',
+);
 const migration = readFileSync(
   resolve(
     process.cwd(),
@@ -41,5 +45,20 @@ describe('account login Edge Function contract', () => {
     expect(migration).toContain("users.raw_user_meta_data ->> 'account_id'");
     expect(migration).toContain('having count(*) = 1');
     expect(migration).toContain('on conflict do nothing');
+  });
+
+  it('initializes normalized storage before registration becomes ready', () => {
+    expect(registrationSource).toContain(
+      '/rest/v1/rpc/initialize_normalized_emotion_account',
+    );
+    expect(registrationSource).toContain('p_user_id: createdUserId');
+    expect(registrationSource).toContain('p_profile_name: body.account');
+    expect(registrationSource.indexOf('initialize_normalized_emotion_account'))
+      .toBeLessThan(
+        registrationSource.indexOf("return jsonResponse({ status: 'ready' }, 201"),
+      );
+    expect(registrationSource).toContain(
+      'await deleteCreatedUser(supabaseUrl, serviceRoleKey, createdUserId)',
+    );
   });
 });

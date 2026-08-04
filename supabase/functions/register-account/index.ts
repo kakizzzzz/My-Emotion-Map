@@ -252,6 +252,31 @@ runtime.serve(async (request) => {
       );
     }
 
+    const normalizedAccountResponse = await fetch(
+      `${supabaseUrl}/rest/v1/rpc/initialize_normalized_emotion_account`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${serviceRoleKey}`,
+          apikey: serviceRoleKey,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_user_id: createdUserId,
+          p_profile_name: body.account,
+        }),
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!normalizedAccountResponse.ok) {
+      await deleteCreatedUser(supabaseUrl, serviceRoleKey, createdUserId);
+      return jsonResponse(
+        { status: 'unavailable', code: 'registration_unavailable' },
+        503,
+        headers,
+      );
+    }
+
     return jsonResponse({ status: 'ready' }, 201, headers);
   } catch {
     return jsonResponse(
