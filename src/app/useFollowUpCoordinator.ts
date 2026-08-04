@@ -20,6 +20,7 @@ import {
   FOLLOW_UP_CONVERSATION_ID,
   getFollowUpAssistantReply,
   getFollowUpPrompt,
+  isInboxFollowUp,
 } from '../domain/followUps';
 import { upsertFollowUpRevisit } from './recordAssociations';
 
@@ -126,11 +127,11 @@ export function useFollowUpCoordinator({
     ) => {
       if (answeringRef.current.has(followUpId)) return;
       const record = followUps.find((item) => item.id === followUpId);
-      if (
-        !record ||
-        (record.status !== 'active' &&
-          !(record.status === 'queued' && new Date(record.dueAt).getTime() <= Date.now()))
-      ) return;
+      if (!record) return;
+      const answerable = source === 'chat'
+        ? record.status === 'active'
+        : isInboxFollowUp(record);
+      if (!answerable) return;
       answeringRef.current.add(followUpId);
       const answeredAt = new Date().toISOString();
       const assistantReply = getFollowUpAssistantReply(kind, language);
@@ -164,6 +165,8 @@ export function useFollowUpCoordinator({
           answeredAt,
         ));
       }
+
+      if (source === 'inbox') return;
 
       setConversations((current) => {
         const companion = current.find(

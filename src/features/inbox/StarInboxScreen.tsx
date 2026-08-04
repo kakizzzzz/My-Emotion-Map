@@ -9,6 +9,7 @@ import {
   formatFollowUpTimestamp,
   getFollowUpOptions,
   getFollowUpPrompt,
+  isInboxFollowUp,
 } from '../../domain/followUps';
 import { useDialogFocus } from '../../app/useDialogFocus';
 
@@ -32,11 +33,7 @@ export function StarInboxScreen({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const followUpOptions = getFollowUpOptions(language);
   const queuedFollowUps = followUps
-    .filter(
-      (record) =>
-        record.status === 'active' ||
-        (record.status === 'queued' && new Date(record.dueAt).getTime() <= openedAt),
-    )
+    .filter((record) => isInboxFollowUp(record, openedAt))
     .sort(
       (left, right) =>
         new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime(),
