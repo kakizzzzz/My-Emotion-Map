@@ -49,16 +49,21 @@ const companion: Conversation = {
   }],
 };
 
-const useHarness = () => {
+const useHarness = (
+  initialConversations: Conversation[] = [companion],
+  availableNotes: EmotionNote[] = [note],
+) => {
   const [followUps, setFollowUps] = useState<FollowUpRecord[]>([active]);
-  const [conversations, setConversations] = useState<Conversation[]>([companion]);
+  const [conversations, setConversations] = useState<Conversation[]>(
+    initialConversations,
+  );
   const [revisits, setRevisits] = useState<RevisitRecord[]>([]);
   const coordinator = useFollowUpCoordinator({
     followUps,
     setFollowUps,
     setConversations,
     setRevisits,
-    notes: [note],
+    notes: availableNotes,
     activeView: 'map',
     activeConversationId: FOLLOW_UP_CONVERSATION_ID,
     language: 'zh',
@@ -69,7 +74,7 @@ const useHarness = () => {
 
 describe('follow-up inbox history', () => {
   it('mirrors an inbox answer into companion chat and clears its unread state', () => {
-    const { result } = renderHook(useHarness);
+    const { result } = renderHook(() => useHarness());
     act(() => {
       result.current.answerFollowUp(active.id, '轻了', 'lighter', 'inbox');
     });
@@ -91,5 +96,24 @@ describe('follow-up inbox history', () => {
       answeredVia: 'inbox',
       responseOptionId: 'lighter',
     });
+  });
+
+  it('creates complete chat history if the inbox is answered before the prompt effect', () => {
+    const { result } = renderHook(() => useHarness([], []));
+    act(() => {
+      result.current.answerFollowUp(active.id, '一样', 'same', 'inbox');
+    });
+
+    const thread = result.current.conversations[0];
+    expect(thread).toMatchObject({
+      id: FOLLOW_UP_CONVERSATION_ID,
+      kind: 'companion',
+      unread: false,
+    });
+    expect(thread.messages.map((message) => message.kind)).toEqual([
+      'followup_prompt',
+      'followup_answer',
+      'followup_reply',
+    ]);
   });
 });
