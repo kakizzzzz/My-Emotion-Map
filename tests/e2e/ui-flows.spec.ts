@@ -132,10 +132,10 @@ async function dragNewStarToMap(
   const star = page.getByRole('button', {
     name: '点击在当前位置添加星星，或拖到地图上放置',
   });
-  const box = await star.boundingBox();
-  if (!box) throw new Error('Star tool is not visible');
-  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  await page.mouse.move(start.x, start.y);
+  // Playwright waits for the animated toolbar button to become stable before
+  // positioning the real pointer. Reading a bounding box directly can capture
+  // an intermediate spring-animation position on slower CI machines.
+  await star.hover();
   await page.mouse.down();
   await page.mouse.move(target.x, target.y, { steps: 8 });
   await page.mouse.up();
