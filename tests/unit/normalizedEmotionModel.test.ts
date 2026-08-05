@@ -81,6 +81,31 @@ describe('normalized emotion snapshot mapping', () => {
     )).toBe(false);
   });
 
+  it('round-trips one private note image as metadata instead of inline bytes', () => {
+    const source = withOneRecord();
+    const image = {
+      provider: 'supabase' as const,
+      bucket: 'emotion-note-images' as const,
+      path: '00000000-0000-4000-8000-000000000001/notes/note-1/image-1.jpg',
+      mimeType: 'image/jpeg' as const,
+      size: 345_678,
+      width: 1200,
+      height: 900,
+      createdAt: 1_786_000_000_000,
+    };
+    source.notes[0] = { ...source.notes[0], image };
+
+    const result = normalize(source);
+    const assembled = assembleNormalizedEmotionSnapshot(result.snapshot);
+
+    expect(result.snapshot.records[0].image).toEqual(image);
+    expect(assembled.notes[0].image).toEqual(image);
+    expect(JSON.stringify(result.snapshot.records[0])).not.toContain('base64');
+    expect(() => validateEmotionMutation(
+      diffEmotionState(normalize(withOneRecord()).snapshot, result.snapshot)[0],
+    )).not.toThrow();
+  });
+
   it.each([
     {
       name: 'photo EXIF with offset',
@@ -299,6 +324,21 @@ describe('normalized emotion mutation model', () => {
     const changes = diffEmotionState(base, next);
     expect(changes.map((item) => item.type)).toEqual(['record_upsert']);
     expect(applyEmotionMutationsToSnapshot(base, changes)).toEqual(next);
+  });
+
+  it('rejects inline or cross-format image data in a record mutation', () => {
+    const base = normalize(withOneRecord()).snapshot;
+    const record = structuredClone(base.records[0]);
+    const change = mutation({
+      type: 'record_upsert',
+      entityId: record.momentId,
+      payload: {
+        ...record,
+        image: { src: 'data:image/jpeg;base64,unsafe-inline-content' },
+      },
+      base: record,
+    });
+    expect(() => validateEmotionMutation(change)).toThrow(/image metadata/i);
   });
 
   it('keeps the latest upsert payload and the earliest base', () => {

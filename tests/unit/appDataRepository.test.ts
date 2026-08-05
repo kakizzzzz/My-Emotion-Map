@@ -147,6 +147,30 @@ describe('app data repository', () => {
     expect(loaded.moments[0].occurredAtUtc).toBeNull();
   });
 
+  it('preserves only validated private note-image metadata', () => {
+    const image = {
+      provider: 'supabase' as const,
+      bucket: 'emotion-note-images' as const,
+      path: '00000000-0000-4000-8000-000000000001/notes/note-1/image-1.jpg',
+      mimeType: 'image/jpeg' as const,
+      size: 42_000,
+      width: 800,
+      height: 600,
+      createdAt: 1_786_000_000_000,
+    };
+    const valid = migrateOk({
+      ...populatedSnapshot(),
+      notes: [{ ...note, image }],
+    });
+    const invalid = migrateOk({
+      ...populatedSnapshot(),
+      notes: [{ ...note, image: { src: 'data:image/jpeg;base64,inline' } }],
+    });
+
+    expect(valid.snapshot.notes[0].image).toEqual(image);
+    expect(invalid.snapshot.notes[0].image).toBeUndefined();
+  });
+
   it('loads the legacy v4 user key without deleting the recovery source', () => {
     const legacyKey = legacyUserWorkspaceStorageKey('user-a');
     const raw = JSON.stringify({ ...populatedSnapshot(), schemaVersion: 4 });

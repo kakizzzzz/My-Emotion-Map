@@ -1,6 +1,7 @@
 import { DEFAULT_THEME, isThemePalette } from '../../app/themePreferences';
 import { normalizeAvatarSrc } from '../../app/profilePreferences';
 import { normalizeFollowUpCurve } from '../../domain/followUps';
+import { isStoredNoteImage } from '../noteImageStorage';
 import type {
   EmotionConversationEntity,
   EmotionFollowUpEntity,
@@ -134,6 +135,9 @@ export const mapEmotionRecordRow = (row: Row): EmotionRowChange<EmotionRecordEnt
     isDraft: bool(row.is_draft),
     isNew: bool(row.is_new),
     followUpEnabled: bool(row.follow_up_enabled),
+    image: isStoredNoteImage(row.note_image)
+      ? structuredClone(row.note_image)
+      : null,
   });
 
 export const mapEmotionConversationRow = (

@@ -43,6 +43,10 @@ import {
   createLocalSearchIndex,
   rankLocalSearch,
 } from '../../domain/query/rankRecords';
+import {
+  deleteUploadedNoteImage,
+  uploadNoteImage,
+} from '../../services/noteImageStorage';
 
 export type MapScreenProps = {
   workspaceKey: string;
@@ -97,6 +101,7 @@ export function MapScreen({
   const starNavigationOverlayRef = useRef<HTMLDivElement | null>(null);
   const handledLocationRequestRef = useRef(0);
   const cloudUserIdRef = useRef(cloudAuth?.userId ?? '');
+  const notesRef = useRef(notes);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [mapStyle, setMapStyle] = useState<keyof typeof MAP_STYLES>(loadMapStyle);
@@ -104,6 +109,9 @@ export function MapScreen({
   useEffect(() => {
     cloudUserIdRef.current = cloudAuth?.userId ?? '';
   }, [cloudAuth?.userId]);
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
   const [stylePickerOpen, setStylePickerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [coordinateSearch, setCoordinateSearch] = useState('');
@@ -549,7 +557,7 @@ export function MapScreen({
     });
     setMoments((current) => [...current, moment]);
     setNotes((current) => [...current, note]);
-    return moment.id;
+    return { momentId: moment.id, noteId: note.id };
   }, [copy.map.selectedLocation, language, setMoments, setNotes]);
 
   useEffect(() => {
@@ -597,7 +605,7 @@ export function MapScreen({
         });
         return;
       }
-      const momentId = addMomentAt(
+      const { momentId, noteId } = addMomentAt(
         metadata.longitude,
         metadata.latitude,
         copy.map.photoRecordLocation,
@@ -621,23 +629,48 @@ export function MapScreen({
       });
       if (cloudAuth) {
         const requestUserId = cloudAuth.userId;
-        try {
-          const prepared = await preparePhotoForAssist(file);
-          const delivery = await invokePhotoAssist({
-            auth: cloudAuth,
-            imageDataUrl: prepared.imageDataUrl,
-            language,
-            localDate: metadata.date,
+        const imageUpload = uploadNoteImage({ file, noteId, auth: cloudAuth })
+          .then(async (uploaded) => {
+            if (
+              cloudUserIdRef.current !== requestUserId ||
+              !notesRef.current.some((note) => note.id === noteId)
+            ) {
+              if (uploaded.src.startsWith('blob:')) URL.revokeObjectURL(uploaded.src);
+              await deleteUploadedNoteImage(uploaded.metadata, cloudAuth);
+              return;
+            }
+            setNotes((current) => current.map((note) =>
+              note.id === noteId ? { ...note, image: uploaded.metadata } : note));
+            if (uploaded.src.startsWith('blob:')) URL.revokeObjectURL(uploaded.src);
+          })
+          .catch(() => {
+            if (cloudUserIdRef.current === requestUserId) {
+              onToast(copy.feedback.noteImageUploadFailed, {
+                placement: 'top',
+                durationMs: 1800,
+              });
+            }
           });
-          if (delivery.status === 'ready' && cloudUserIdRef.current === requestUserId) {
-            onPhotoAssistResult(momentId, {
-              requestId: createRecordId('photo-assist'),
-              result: delivery.result,
+        const photoAssist = (async () => {
+          try {
+            const prepared = await preparePhotoForAssist(file);
+            const delivery = await invokePhotoAssist({
+              auth: cloudAuth,
+              imageDataUrl: prepared.imageDataUrl,
+              language,
+              localDate: metadata.date,
             });
+            if (delivery.status === 'ready' && cloudUserIdRef.current === requestUserId) {
+              onPhotoAssistResult(momentId, {
+                requestId: createRecordId('photo-assist'),
+                result: delivery.result,
+              });
+            }
+          } catch {
+            // Photo suggestions are optional; keep the created star without a notice.
           }
-        } catch {
-          // Photo suggestions are optional; keep the created star without a notice.
-        }
+        })();
+        await Promise.allSettled([imageUpload, photoAssist]);
       }
     } catch {
       onToast(copy.feedback.photoLocationFailed, {

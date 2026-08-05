@@ -16,6 +16,8 @@ import {
   getFollowUpPrompt,
 } from '../../domain/followUps';
 import { useDialogFocus } from '../../app/useDialogFocus';
+import type { CloudAuth } from '../../services/supabaseClient';
+import { StoredNoteImageView } from './StoredNoteImageView';
 
 export function NoteViewSheet({
   moment,
@@ -24,6 +26,7 @@ export function NoteViewSheet({
   revisits,
   onClose,
   onEdit,
+  cloudAuth = null,
 }: {
   moment: EmotionMoment;
   note: EmotionNote;
@@ -31,6 +34,7 @@ export function NoteViewSheet({
   revisits: RevisitRecord[];
   onClose: () => void;
   onEdit: () => void;
+  cloudAuth?: CloudAuth | null;
 }) {
   const { copy, language, locale } = useAppLanguage();
   const [activePane, setActivePane] = useState<'note' | 'follow-ups'>('note');
@@ -137,6 +141,15 @@ export function NoteViewSheet({
               ) : (
                 <p className="note-view-excerpt">{note.excerpt}</p>
               )}
+              {note.image ? (
+                <section className="note-view-image">
+                  <StoredNoteImageView
+                    image={note.image}
+                    auth={cloudAuth}
+                    alt={copy.note.photoPreview}
+                  />
+                </section>
+              ) : null}
             </>
           ) : followUpHistory.length || revisitHistory.length ? (
             <section

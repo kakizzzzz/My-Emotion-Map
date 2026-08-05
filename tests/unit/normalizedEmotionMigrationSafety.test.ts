@@ -15,6 +15,9 @@ const preferenceSync = read(
 const preferenceSyncCompatibility = read(
   'supabase/migrations/202608050002_allow_synced_language_preference.sql',
 );
+const noteImageStorage = read(
+  'supabase/migrations/202608050003_note_image_storage.sql',
+);
 const verifier = read('supabase/verify-normalized-emotion.sql');
 const recovery = read('supabase/recover-normalized-emotion-for-user.sql');
 const verifyScript = read('scripts/verify-normalized-emotion-migration.mjs');
@@ -104,6 +107,22 @@ describe('normalized emotion database migration safety', () => {
     );
     expect(withoutComments(preferenceSyncCompatibility)).not.toMatch(
       /\b(insert|update|delete|truncate|drop)\b\s+(table|from|into|public\.)/i,
+    );
+  });
+
+  it('stores note images privately and preserves old-client record metadata', () => {
+    expect(noteImageStorage).toContain("'emotion-note-images'");
+    expect(noteImageStorage).toContain('public = false');
+    expect(noteImageStorage).toContain(
+      "(storage.foldername(name))[1] = auth.uid()::text",
+    );
+    expect(noteImageStorage).toContain('add column if not exists note_image jsonb');
+    expect(noteImageStorage).toContain('emotion_note_image_is_valid');
+    expect(noteImageStorage).toContain('apply_emotion_mutations_v2_media_core');
+    expect(noteImageStorage).toContain("and coalesce(item.value -> 'payload', '{}'::jsonb) ? 'image'");
+    expect(noteImageStorage).toContain('changed_revision = v_revision');
+    expect(noteImageStorage).not.toMatch(
+      /create policy[\s\S]*?bucket_id = 'emotion-note-images'[\s\S]*?to anon/i,
     );
   });
 

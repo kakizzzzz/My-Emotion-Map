@@ -31,6 +31,7 @@ import {
 } from './workspace/chatDraftStorage';
 import { sanitizeRevisits } from './appDataRevisits';
 import { recordSharedFieldsDiverged } from '../domain/storage/normalizedEmotionSnapshot';
+import { isStoredNoteImage } from '../services/noteImageStorage';
 
 export const APP_DATA_STORAGE_KEY = LEGACY_APP_DATA_STORAGE_KEY;
 export const CURRENT_SCHEMA_VERSION = 6;
@@ -317,6 +318,9 @@ const sanitizeNote = (
       typeof source.followUpEnabled === 'boolean'
         ? source.followUpEnabled
         : undefined,
+    image: isStoredNoteImage(source.image)
+      ? structuredClone(source.image)
+      : undefined,
     ...migrateLegacyTemporalFields({
       date: source.date,
       time: source.time,
