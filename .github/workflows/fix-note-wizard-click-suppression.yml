@@ -1,0 +1,50 @@
+name: Fix note wizard click suppression
+
+on:
+  push:
+    branches:
+      - agent/note-wizard-swipe-wheel
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Clear ghost-click suppression on a new pointer sequence
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/features/notes/useNoteWizardGestures.ts')
+          source = path.read_text(encoding='utf-8')
+          old = (
+              "  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {\n"
+              "    if ("
+          )
+          new = (
+              "  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {\n"
+              "    // A genuine new press must always remain clickable. Browser-generated\n"
+              "    // click events after a swipe arrive without a new pointerdown.\n"
+              "    suppressClickUntilRef.current = 0;\n"
+              "    if ("
+          )
+          count = source.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected one pointerdown handler, found {count}')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+          rm .github/workflows/fix-note-wizard-click-suppression.yml
+      - name: Commit immediate tap preservation
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/features/notes/useNoteWizardGestures.ts .github/workflows/fix-note-wizard-click-suppression.yml
+          git commit -m 'preserve immediate taps after note wizard swipes'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
