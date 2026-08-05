@@ -70,7 +70,10 @@ export function useNoteWizardGestures(onNavigate: NavigateWizard) {
   const wheelSignRef = useRef(0);
   const wheelLockedUntilRef = useRef(0);
   const wheelResetTimerRef = useRef<number | null>(null);
-  navigateRef.current = onNavigate;
+
+  useEffect(() => {
+    navigateRef.current = onNavigate;
+  }, [onNavigate]);
 
   useEffect(() => () => {
     if (wheelResetTimerRef.current !== null) {
