@@ -29,7 +29,7 @@ const DATA_COPY: Record<AppLanguage, {
 }> = {
   zh: {
     backupTitle: '完整数据备份',
-    backupBody: '无损 JSON 备份包含记录、对话、回访、主题和账号偏好，不包含密码、令牌、头像或设备位置。',
+    backupBody: '无损 JSON 备份包含记录、对话、回访、主题、头像和账号偏好，不包含密码、令牌或设备位置。',
     backupAction: '下载完整备份',
     importAction: '导入完整备份',
     importInvalid: '备份格式、引用或校验值无效，未导入任何数据。',
@@ -48,7 +48,7 @@ const DATA_COPY: Record<AppLanguage, {
   },
   en: {
     backupTitle: 'Complete data backup',
-    backupBody: 'The lossless JSON backup includes records, conversations, follow-ups, revisits, theme, and account preferences. It excludes passwords, tokens, avatar, and device location.',
+    backupBody: 'The lossless JSON backup includes records, conversations, follow-ups, revisits, theme, avatar, and account preferences. It excludes passwords, tokens, and device location.',
     backupAction: 'Download complete backup',
     importAction: 'Import complete backup',
     importInvalid: 'The backup format, references, or checksum is invalid. Nothing was imported.',
@@ -67,7 +67,7 @@ const DATA_COPY: Record<AppLanguage, {
   },
   ko: {
     backupTitle: '전체 데이터 백업',
-    backupBody: '무손실 JSON 백업에는 기록, 대화, 후속 방문, 테마와 계정 설정이 포함되며 비밀번호, 토큰, 아바타와 기기 위치는 제외됩니다.',
+    backupBody: '무손실 JSON 백업에는 기록, 대화, 후속 방문, 테마, 아바타와 계정 설정이 포함되며 비밀번호, 토큰과 기기 위치는 제외됩니다.',
     backupAction: '전체 백업 다운로드',
     importAction: '전체 백업 가져오기',
     importInvalid: '백업 형식, 참조 또는 체크섬이 올바르지 않아 아무 데이터도 가져오지 않았습니다.',
