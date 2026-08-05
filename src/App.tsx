@@ -45,6 +45,10 @@ import { LocationPermissionPrompt } from './features/location/LocationPermission
 import { MapScreen } from './features/map/MapScreen';
 import { NoteEditorSheet } from './features/notes/NoteEditorSheet';
 import { NoteViewSheet } from './features/notes/NoteViewSheet';
+import {
+  retryPendingNoteImageDeletions,
+  scheduleReplacedNoteImageDeletion,
+} from './services/noteImageStorage';
 import { RevisitEmotionModal } from './features/notes/RevisitEmotionModal';
 import { useSupabaseSession } from './services/useSupabaseSession';
 import type { PhotoAssistDelivery } from './app/appTypes';
@@ -288,6 +292,51 @@ export function App() {
     copy,
     showToast,
   });
+  const deleteMomentWithMedia = useCallback((momentId: string) => {
+    const moment = moments.find((item) => item.id === momentId);
+    const image = moment
+      ? notes.find((item) => item.id === moment.noteId)?.image
+      : undefined;
+    if (image && cloudSession.cloudAuth) {
+      scheduleReplacedNoteImageDeletion(image, cloudSession.cloudAuth);
+    }
+    deleteMoment(momentId);
+  }, [cloudSession.cloudAuth, deleteMoment, moments, notes]);
+  const deleteAllDataWithMedia = useCallback(async () => {
+    const deleted = await deleteAllData();
+    if (deleted && cloudSession.cloudAuth) {
+      notes.forEach((note) => {
+        if (note.image) {
+          scheduleReplacedNoteImageDeletion(note.image, cloudSession.cloudAuth!);
+        }
+      });
+    }
+    return deleted;
+  }, [cloudSession.cloudAuth, deleteAllData, notes]);
+  const importCompleteBackupWithMedia = useCallback(async (
+    parsed: Parameters<typeof importCompleteBackup>[0],
+    mode: Parameters<typeof importCompleteBackup>[1],
+  ) => {
+    const imported = await importCompleteBackup(parsed, mode);
+    if (imported.ok && mode === 'replace' && cloudSession.cloudAuth) {
+      const retained = new Set(parsed.normalized.records.flatMap((record) =>
+        record.image ? [`${record.image.bucket}/${record.image.path}`] : []));
+      notes.forEach((note) => {
+        if (note.image && !retained.has(`${note.image.bucket}/${note.image.path}`)) {
+          scheduleReplacedNoteImageDeletion(note.image, cloudSession.cloudAuth!);
+        }
+      });
+    }
+    return imported;
+  }, [cloudSession.cloudAuth, importCompleteBackup, notes]);
+
+  useEffect(() => {
+    if (!cloudSession.cloudAuth) return;
+    void retryPendingNoteImageDeletions(
+      cloudSession.cloudAuth,
+      notes.flatMap((note) => note.image ? [note.image] : []),
+    );
+  }, [cloudSession.cloudAuth, notes]);
   useEffect(() => {
     if (!cloudSession.ready) return;
     const userId = cloudSession.session?.user.id ?? null;
@@ -643,7 +692,7 @@ export function App() {
             setFocusMomentId={setMapFocusMomentId}
             onEditMoment={setEditingMomentId}
             onViewMoment={setViewingMomentId}
-            onDeleteMoment={deleteMoment}
+            onDeleteMoment={deleteMomentWithMedia}
             userLocation={locationController.userLocation}
             locationRequestState={locationController.requestState}
             resolvedLocationRequest={locationController.resolvedRequest}
@@ -734,8 +783,8 @@ export function App() {
                 onFollowUpIntervals={setFollowUpIntervals}
                 onExportData={exportData}
                 onExportCompleteBackup={exportCompleteBackup}
-                onImportCompleteBackup={importCompleteBackup}
-                onDeleteAllData={deleteAllData}
+                onImportCompleteBackup={importCompleteBackupWithMedia}
+                onDeleteAllData={deleteAllDataWithMedia}
                 locationRequestState={locationController.requestState}
                 onRequestLocation={() =>
                   locationController.openLocationRequest('settings')
@@ -858,6 +907,7 @@ export function App() {
                 setViewingMomentId(null);
                 setEditingMomentId(viewingMoment.id);
               }}
+              cloudAuth={cloudSession.cloudAuth}
             />
           ) : null}
         </AnimatePresence>

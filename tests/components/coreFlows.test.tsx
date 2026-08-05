@@ -10,6 +10,7 @@ import {
 import { ChatScreen } from '../../src/features/chat/ChatScreen';
 import { LoginScreen } from '../../src/features/auth/LoginScreen';
 import { NoteEditorSheet } from '../../src/features/notes/NoteEditorSheet';
+import { NoteViewSheet } from '../../src/features/notes/NoteViewSheet';
 import { SettingsScreen } from '../../src/features/settings/SettingsScreen';
 import { AiSettingsPanel } from '../../src/features/settings/AiSettingsPanel';
 import { EmotionMapMcpPanel } from '../../src/features/settings/EmotionMapMcpPanel';
@@ -188,6 +189,65 @@ describe('core component flows', () => {
     expect(onSave.mock.calls[0][2]).toBe('calm');
     expect(onSave.mock.calls[0][3]).toBe('safe');
   }, 10_000);
+
+  it('removes an attached image in edit mode and hides image removal in preview mode', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const image = {
+      provider: 'supabase' as const,
+      bucket: 'emotion-note-images' as const,
+      path: '00000000-0000-4000-8000-000000000001/notes/note-new/image-1.jpg',
+      mimeType: 'image/jpeg' as const,
+      size: 120_000,
+      width: 900,
+      height: 1200,
+      createdAt: 1_786_000_000_000,
+    };
+    const existingMoment = {
+      ...draftMoment,
+      isNew: false,
+      emotion: 'calm' as const,
+      placeRating: 'safe' as const,
+    };
+    const existingNote = {
+      ...draftNote,
+      isDraft: false,
+      emotion: 'calm' as const,
+      placeRating: 'safe' as const,
+      image,
+    };
+    const rendered = renderWithLanguage(
+      <NoteEditorSheet
+        moment={existingMoment}
+        note={existingNote}
+        onSave={onSave}
+        onClose={() => undefined}
+        onToast={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '平静' }));
+    await screen.findByRole('heading', { name: '这个地方给你的感觉' });
+    expect(screen.getByRole('button', { name: '移除图片' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '移除图片' }));
+    await user.click(screen.getByRole('button', { name: '关闭' }));
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    expect(onSave.mock.calls[0][1].image).toBeUndefined();
+
+    rendered.unmount();
+    renderWithLanguage(
+      <NoteViewSheet
+        moment={existingMoment}
+        note={existingNote}
+        followUps={[]}
+        revisits={[]}
+        onClose={() => undefined}
+        onEdit={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('img', { name: '这条星星记录的图片' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '移除图片' })).toBeNull();
+  });
 
   it('swipes from a star without converting the gesture into a click', () => {
     renderWithLanguage(

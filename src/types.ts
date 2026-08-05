@@ -82,6 +82,17 @@ export type GuidedAnswer = {
   role?: PromptRole;
 };
 
+export type StoredNoteImage = {
+  provider: 'supabase';
+  bucket: 'emotion-note-images';
+  path: string;
+  mimeType: 'image/jpeg';
+  size: number;
+  width: number;
+  height: number;
+  createdAt: number;
+};
+
 export type EmotionNote = Partial<TemporalFields> & {
   id: string;
   title: string;
@@ -96,6 +107,7 @@ export type EmotionNote = Partial<TemporalFields> & {
   excerpt: string;
   isDraft?: boolean;
   followUpEnabled?: boolean;
+  image?: StoredNoteImage;
 };
 
 export type ChatRole = 'user' | 'assistant';

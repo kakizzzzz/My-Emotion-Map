@@ -5,6 +5,7 @@ import type {
   EmotionMutationType,
   EmotionPreferencesEntity,
 } from './emotionSyncTypes';
+import { isStoredNoteImage } from '../noteImageStorage';
 
 const MUTATION_TYPES = new Set<EmotionMutationType>([
   'settings_update',
@@ -123,6 +124,9 @@ const validateRecord = (mutation: EmotionMutation, payload: Record<string, unkno
     String(payload.title ?? '').length > 500 ||
     String(payload.excerpt ?? '').length > 5_000) {
     reject(mutation, 'A record text field exceeds the current product limits.');
+  }
+  if (!(payload.image === null || isStoredNoteImage(payload.image))) {
+    reject(mutation, 'A record has invalid image metadata.');
   }
 };
 

@@ -39,6 +39,7 @@ import {
   requestVoiceSummary,
   type VoiceSummaryTarget,
 } from '../../services/voiceSummary';
+import { NoteImageField, useNoteImageEditor } from './NoteImageField';
 
 type SaveNoteHandler = (
   momentId: string,
@@ -82,6 +83,14 @@ export function NoteEditorSheet({
       : normalizeGuidedAnswers(note.answers),
   );
   const [followUp, setFollowUp] = useState(note.followUpEnabled ?? false);
+  const {
+    image,
+    previewSrc: imagePreviewSrc,
+    uploading: imageUploading,
+    selectImage,
+    removeImage,
+    commitImage,
+  } = useNoteImageEditor({ note, cloudAuth, copy, onToast });
   const [currentStep, setCurrentStep] = useState(0);
   const [highestStep, setHighestStep] = useState(0);
   const [promptIndex, setPromptIndex] = useState(0);
@@ -114,6 +123,7 @@ export function NoteEditorSheet({
       ? normalizeNewRecordPrompts(note.answers, language)
       : normalizeGuidedAnswers(note.answers),
     followUp: note.followUpEnabled ?? false,
+    image: note.image ?? null,
   }));
   const editorDigest = JSON.stringify({
     title,
@@ -123,6 +133,7 @@ export function NoteEditorSheet({
     placeRating,
     answers,
     followUp,
+    image,
   });
   const isDirty = editorDigest !== initialEditorDigest;
 
@@ -454,12 +465,15 @@ export function NoteEditorSheet({
         excerpt,
         isDraft,
         followUpEnabled: followUp,
+        image: image ?? undefined,
       },
     };
   }
 
   function save() {
+    if (imageUploading) return;
     const { savedPlace, savedNote } = buildNote(false);
+    commitImage(savedNote.image);
     onSave(
       moment.id,
       savedNote,
@@ -597,6 +611,15 @@ export function NoteEditorSheet({
                     </i>
                   </button>
                 </div>
+                <NoteImageField
+                  image={image}
+                  previewSrc={imagePreviewSrc}
+                  uploading={imageUploading}
+                  cloudAuth={cloudAuth}
+                  copy={copy}
+                  onSelect={selectImage}
+                  onRemove={removeImage}
+                />
               </section>
             </section>
 

@@ -100,6 +100,7 @@ export type EmotionRecordEntity = {
   isDraft: boolean;
   isNew: boolean;
   followUpEnabled: boolean;
+  image: EmotionNote['image'] | null;
 };
 
 export type EmotionConversationEntity = Omit<

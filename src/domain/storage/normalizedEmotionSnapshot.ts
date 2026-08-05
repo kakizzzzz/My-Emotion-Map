@@ -122,6 +122,7 @@ const canonicalRecord = (
     isDraft: note.isDraft === true,
     isNew: moment.isNew === true,
     followUpEnabled: note.followUpEnabled === true,
+    image: note.image ? structuredClone(note.image) : null,
   };
 };
 
@@ -332,6 +333,7 @@ export const assembleNormalizedEmotionSnapshot = (
           excerpt: record.excerpt,
           isDraft: record.isDraft || undefined,
           followUpEnabled: record.followUpEnabled,
+          image: record.image ? structuredClone(record.image) : undefined,
           ...temporal,
         } satisfies EmotionNote,
       };
