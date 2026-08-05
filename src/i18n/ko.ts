@@ -400,6 +400,8 @@ export const koCopy: AppCopy = {
     notNowHint: '“나중에”를 선택하면 브라우저에 위치를 요청하지 않습니다. 권한이 차단된 경우 사이트 설정에서 다시 허용해야 합니다.',
     accuracy: (meters) => `정확도 약 ${meters}m`,
     accuracyUnknown: '위치 정확도를 알 수 없음',
+    nearbyPastStars: (count) => count === 1 ? '근처에 지난 별이 하나 있어요' : `근처에 지난 별이 ${count}개 있어요`,
+    viewNearbyStar: '보기',
   },
   feedback: {
     starSaved: '이 별을 저장했습니다',

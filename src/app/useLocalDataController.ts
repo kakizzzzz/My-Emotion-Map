@@ -59,6 +59,7 @@ import {
   createEmotionRecoveryBundle,
   persistNormalizedEmotionPreferences,
 } from '../services/normalizedSync/emotionSyncRuntime';
+import { clearAmbientLocationState } from './useAmbientLocationAwareness';
 
 type LocalDataControllerOptions = {
   initialData: LoadedAppData;
@@ -428,6 +429,7 @@ export function useLocalDataController({
       });
       return false;
     }
+    clearAmbientLocationState(userId);
     saveLocalSettings({
       ...createDefaultLocalSettings(),
       avatarSrc: localSettings.avatarSrc,

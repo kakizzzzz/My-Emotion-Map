@@ -400,6 +400,8 @@ export const enCopy: AppCopy = {
     notNowHint: 'Choosing “Not now” does not request browser location. If permission is blocked, allow it again in site settings.',
     accuracy: (meters) => `Accuracy about ${meters} m`,
     accuracyUnknown: 'Location accuracy unknown',
+    nearbyPastStars: (count) => count === 1 ? 'There is a past star nearby' : `There are ${count} past stars nearby`,
+    viewNearbyStar: 'View',
   },
   feedback: {
     starSaved: 'This star has been saved',

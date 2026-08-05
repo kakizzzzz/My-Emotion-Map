@@ -61,6 +61,7 @@ import {
 } from './app/workspace/chatDraftStorage';
 import { useNoteEditorHandlers } from './app/noteEditorHandlers';
 import { useChatDeliveryHandlers } from './app/useChatDeliveryHandlers';
+import { useAmbientLocationAwareness, type AmbientLocationPrompt } from './app/useAmbientLocationAwareness';
 
 const CalendarScreen = lazy(() =>
   import('./features/calendar/CalendarScreen').then((module) => ({
@@ -218,6 +219,32 @@ export function App() {
       onAction: options.onAction,
     });
   }, []);
+  const handleAmbientLocationPrompt = useCallback((prompt: AmbientLocationPrompt) => {
+    showToast(copy.location.nearbyPastStars(prompt.count), {
+      placement: 'top',
+      durationMs: 6_500,
+      actionLabel: copy.location.viewNearbyStar,
+      onAction: () => {
+        setActiveView('map');
+        setMapFocusMomentId(prompt.primaryMomentId);
+        setViewingMomentId(prompt.primaryMomentId);
+      },
+    });
+  }, [copy.location, showToast]);
+  useAmbientLocationAwareness({
+    userId: cloudSession.session?.user.id ?? null,
+    enabled: Boolean(
+      cloudSession.session?.user.id && workspaceReady && dataMode === 'real' &&
+      activeView === 'map' && !sideOpen && !starInboxOpen &&
+      !editingMomentId && !viewingMomentId && !revisitNoteId &&
+      !locationController.isPermissionPromptOpen &&
+      locationController.requestState === 'ready'
+    ),
+    userLocation,
+    moments,
+    notes,
+    onPrompt: handleAmbientLocationPrompt,
+  });
   const {
     applySnapshot,
     deleteMoment,

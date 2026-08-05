@@ -398,6 +398,8 @@ export const zhCopy = {
     notNowHint: '点击“暂不”不会向浏览器请求定位。浏览器权限被阻止后，需要在网站设置中重新允许。',
     accuracy: (meters: number) => `精度约 ${meters} 米`,
     accuracyUnknown: '定位精度未知',
+    nearbyPastStars: (count: number) => count === 1 ? '附近有一颗过去的星星' : `附近有 ${count} 颗过去的星星`,
+    viewNearbyStar: '看看',
   },
   feedback: {
     starSaved: '这颗星星已经记下来了',
