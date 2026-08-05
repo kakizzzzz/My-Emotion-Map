@@ -12,6 +12,9 @@ const archiveHardening = read(
 const preferenceSync = read(
   'supabase/migrations/202608050001_sync_all_account_preferences.sql',
 );
+const preferenceSyncCompatibility = read(
+  'supabase/migrations/202608050002_allow_synced_language_preference.sql',
+);
 const verifier = read('supabase/verify-normalized-emotion.sql');
 const recovery = read('supabase/recover-normalized-emotion-for-user.sql');
 const verifyScript = read('scripts/verify-normalized-emotion-migration.mjs');
@@ -81,6 +84,29 @@ describe('normalized emotion database migration safety', () => {
     expect(preferenceSync).not.toMatch(/grant\s+(insert|update|delete|all).*emotion_preferences/i);
   });
 
+  it('allows synced language through history validation while retaining credential guards', () => {
+    const sensitiveKeys = preferenceSyncCompatibility.match(
+      /v_key\s*=\s*any\(array\[([\s\S]*?)\]\)/,
+    )?.[1] ?? '';
+    expect(sensitiveKeys).not.toContain("'language'");
+    expect(sensitiveKeys).toContain("'password'");
+    expect(sensitiveKeys).toContain("'accesstoken'");
+    expect(sensitiveKeys).toContain("'avatarsrc'");
+    expect(sensitiveKeys).toContain("'profileid'");
+    expect(preferenceSyncCompatibility).toContain(
+      'Synced language is still classified as sensitive',
+    );
+    expect(preferenceSyncCompatibility).toContain(
+      'Authentication token guard is missing',
+    );
+    expect(preferenceSyncCompatibility).toContain(
+      'revoke all on function public.emotion_json_has_sensitive_keys(jsonb)',
+    );
+    expect(withoutComments(preferenceSyncCompatibility)).not.toMatch(
+      /\b(insert|update|delete|truncate|drop)\b\s+(table|from|into|public\.)/i,
+    );
+  });
+
   it('locks and verifies every archive before marking it migrated', () => {
     const migration = storage.slice(storage.indexOf(
       'create or replace function public.migrate_emotion_archive_user',
@@ -114,7 +140,8 @@ describe('normalized emotion database migration safety', () => {
 
   it('never mutates or removes the immutable archive payload', () => {
     const combined = withoutComments([
-      storage, retention, lockdown, archiveHardening, preferenceSync, recovery,
+      storage, retention, lockdown, archiveHardening, preferenceSync,
+      preferenceSyncCompatibility, recovery,
     ].join('\n'));
     expect(combined).not.toMatch(/update\s+public\.app_states/i);
     expect(combined).not.toMatch(/delete\s+from\s+public\.app_states/i);
