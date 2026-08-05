@@ -1,9 +1,10 @@
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FOLLOW_UP_FEEDBACK_DURATION_MS,
   FOLLOW_UP_FEEDBACK_PARTS,
   FollowUpFeelingFeedback,
+  useFollowUpFeelingFeedback,
 } from '../../src/features/chat/FollowUpFeelingFeedback';
 import type { ChatOption } from '../../src/types';
 
@@ -45,4 +46,28 @@ describe('follow-up feeling feedback', () => {
       expect(onFinish).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('anchors feedback to the center of the chat content area', () => {
+    const contentArea = document.createElement('div');
+    vi.spyOn(contentArea, 'getBoundingClientRect').mockReturnValue({
+      x: 20,
+      y: 80,
+      left: 20,
+      top: 80,
+      right: 380,
+      bottom: 680,
+      width: 360,
+      height: 600,
+      toJSON: () => ({}),
+    });
+    const { result } = renderHook(() => useFollowUpFeelingFeedback());
+
+    act(() => result.current.showFeedback('lighter', contentArea));
+
+    expect(result.current.feedback).toMatchObject({
+      kind: 'lighter',
+      x: 200,
+      y: 380,
+    });
+  });
 });

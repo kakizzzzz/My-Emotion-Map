@@ -614,6 +614,22 @@ test('add, complete, reopen, revisit, persist, and permanently delete', async ({
     '.follow-up-feeling-feedback[data-kind="lighter"]',
   );
   await expect(feelingFeedback).toBeVisible();
+  const feedbackBox = await feelingFeedback.boundingBox();
+  const messageAreaBox = await page.locator('.message-scroll').boundingBox();
+  expect(feedbackBox).not.toBeNull();
+  expect(messageAreaBox).not.toBeNull();
+  expect(
+    Math.abs(
+      (feedbackBox?.x ?? 0) + (feedbackBox?.width ?? 0) / 2 -
+        ((messageAreaBox?.x ?? 0) + (messageAreaBox?.width ?? 0) / 2),
+    ),
+  ).toBeLessThan(2);
+  expect(
+    Math.abs(
+      (feedbackBox?.y ?? 0) + (feedbackBox?.height ?? 0) / 2 -
+        ((messageAreaBox?.y ?? 0) + (messageAreaBox?.height ?? 0) / 2),
+    ),
+  ).toBeLessThan(2);
   await expect(page.locator('.positive-confetti')).toHaveCount(0);
   await expect(page.getByText('已保存这次回访')).toBeVisible();
   await expect(page.locator('.message-options')).toHaveCount(0);

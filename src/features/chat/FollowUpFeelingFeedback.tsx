@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import type { ChatOption } from '../../types';
 
@@ -33,16 +32,16 @@ export function useFollowUpFeelingFeedback() {
     useState<FollowUpFeelingFeedbackState | null>(null);
   const feedbackIdRef = useRef(0);
   const showFeedback = useCallback((
-    event: ReactMouseEvent<HTMLButtonElement>,
     kind: ChatOption['responseKind'],
+    contentArea: HTMLElement | null,
   ) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
+    const bounds = contentArea?.getBoundingClientRect();
     feedbackIdRef.current += 1;
     setFeedback({
       id: feedbackIdRef.current,
       kind,
-      x: bounds.left + bounds.width / 2,
-      y: bounds.top + bounds.height / 2,
+      x: bounds ? bounds.left + bounds.width / 2 : window.innerWidth / 2,
+      y: bounds ? bounds.top + bounds.height / 2 : window.innerHeight / 2,
     });
   }, []);
   const clearFeedback = useCallback(() => setFeedback(null), []);

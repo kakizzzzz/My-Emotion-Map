@@ -561,8 +561,11 @@ export function ChatScreen({
                           key={option.id}
                           type="button"
                           data-option={option.id}
-                          onClick={(event) => {
-                            showFollowUpFeedback(event, option.responseKind);
+                          onClick={() => {
+                            showFollowUpFeedback(
+                              option.responseKind,
+                              scrollRef.current,
+                            );
                             onAnswerFollowUp(
                               followUp.id,
                               option.label,
