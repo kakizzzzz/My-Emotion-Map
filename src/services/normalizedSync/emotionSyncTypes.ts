@@ -56,7 +56,9 @@ export type EmotionSettingsEntity = {
 
 export type EmotionPreferencesEntity = Pick<
   LocalSettings,
+  | 'avatarSrc'
   | 'profileName'
+  | 'language'
   | 'aboutMe'
   | 'aiUserPrompt'
   | 'aiContextMessageCount'

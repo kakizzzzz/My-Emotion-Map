@@ -37,9 +37,7 @@ export const persistNormalizedEmotionPreferences = (
   return saveLocalSettings({
     ...local,
     ...snapshot.preferences,
-    avatarSrc: local.avatarSrc,
     profileId: local.profileId,
-    language: local.language,
   }, userId);
 };
 

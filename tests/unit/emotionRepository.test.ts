@@ -29,7 +29,9 @@ const preferencesRow = (revision = 1): Row => ({
   user_id: 'user-a',
   changed_revision: revision,
   deleted_at: null,
+  avatar_data_url: 'data:image/webp;base64,YXZhdGFy',
   profile_name: 'Kaki',
+  language: 'ko',
   about_me: '',
   ai_user_prompt: '',
   ai_context_message_count: 8,
@@ -144,7 +146,8 @@ const emptySnapshot = (): NormalizedEmotionSnapshot => ({
     accent: '#666666', text: '#1d1d1f', muted: '#858585',
   } },
   preferences: {
-    profileName: '', aboutMe: '', aiUserPrompt: '', aiContextMessageCount: 8,
+    avatarSrc: '', profileName: '', language: 'zh', aboutMe: '',
+    aiUserPrompt: '', aiContextMessageCount: 8,
     chatPreferenceTags: [], followUpIntervals: [3, 7, 14],
   },
   records: [], conversations: [], messages: [], followUps: [], revisits: [],
@@ -161,6 +164,11 @@ describe('normalized emotion repository', () => {
     const loaded = await loadNormalizedEmotionAccountData(client, 'user-a');
 
     expect(loaded.revision).toBe(4);
+    expect(loaded.snapshot.preferences).toMatchObject({
+      avatarSrc: 'data:image/webp;base64,YXZhdGFy',
+      profileName: 'Kaki',
+      language: 'ko',
+    });
     expect(loaded.snapshot.records).toHaveLength(1_001);
     expect(loaded.snapshot.records.at(-1)?.momentId).toBe('moment-1000');
     expect(rangeCalls.filter((call) => call.table === 'emotion_records')).toEqual([

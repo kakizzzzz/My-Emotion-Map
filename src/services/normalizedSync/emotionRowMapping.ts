@@ -1,4 +1,5 @@
 import { DEFAULT_THEME, isThemePalette } from '../../app/themePreferences';
+import { normalizeAvatarSrc } from '../../app/profilePreferences';
 import { normalizeFollowUpCurve } from '../../domain/followUps';
 import type {
   EmotionConversationEntity,
@@ -79,7 +80,9 @@ export const mapEmotionPreferencesRow = (
   const row = object(value);
   if (!row) throw new Error('Emotion preferences row is missing.');
   return {
+    avatarSrc: normalizeAvatarSrc(row.avatar_data_url),
     profileName: text(row.profile_name).slice(0, 80),
+    language: row.language === 'en' || row.language === 'ko' ? row.language : 'zh',
     aboutMe: text(row.about_me).slice(0, 2_000),
     aiUserPrompt: text(row.ai_user_prompt).slice(0, 500),
     aiContextMessageCount: integer(row.ai_context_message_count, 8),

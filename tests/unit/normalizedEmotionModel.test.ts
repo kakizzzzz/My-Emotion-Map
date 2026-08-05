@@ -372,11 +372,12 @@ describe('normalized emotion mutation model', () => {
     expect(emotionMutationKey(other)).toBe('followup:other');
   });
 
-  it('never sends local mutation metadata or sensitive preference fields', () => {
+  it('sends synchronized preferences but never local mutation metadata or credentials', () => {
     const change = mutation({
       type: 'preferences_update', entityId: 'preferences',
       payload: {
-        profileName: 'Kaki', aboutMe: '', aiUserPrompt: '',
+        avatarSrc: 'data:image/png;base64,cHJvZmlsZQ==',
+        profileName: 'Kaki', language: 'ko', aboutMe: '', aiUserPrompt: '',
         aiContextMessageCount: 8, chatPreferenceTags: [],
         followUpIntervals: [3, 7, 14],
       },
@@ -387,10 +388,11 @@ describe('normalized emotion mutation model', () => {
     });
     expect(toEmotionWireMutation(change)).not.toHaveProperty('mutationId');
     expect(toEmotionWireMutation(change)).not.toHaveProperty('base');
+    expect(() => validateEmotionMutation(change)).not.toThrow();
 
     expect(() => validateEmotionMutation({
       ...change,
-      payload: { ...change.payload, avatarSrc: 'data:image/png;base64,secret' },
+      payload: { ...change.payload, profileId: 'private-profile-id' },
     })).toThrow(/Sensitive fields/);
   });
 

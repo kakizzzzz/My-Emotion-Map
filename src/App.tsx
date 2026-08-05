@@ -23,6 +23,7 @@ import {
   setRevisitCurrentEmotion,
 } from './app/appDataRepository';
 import {
+  ACCOUNT_PREFERENCES_CHANGED_EVENT,
   loadLocalSettings,
   saveLocalSettings,
 } from './app/profilePreferences';
@@ -103,6 +104,25 @@ export function App() {
     [copy, language, languageLocale],
   );
   const cloudSession = useSupabaseSession();
+  useEffect(() => {
+    const userId = cloudSession.session?.user.id;
+    if (!userId) return;
+    const applyAccountPreferences = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string }>).detail;
+      if (detail?.userId !== userId) return;
+      const next = loadLocalSettings(userId);
+      setLanguage(next.language);
+      setFollowUpIntervals(next.followUpIntervals);
+    };
+    window.addEventListener(
+      ACCOUNT_PREFERENCES_CHANGED_EVENT,
+      applyAccountPreferences,
+    );
+    return () => window.removeEventListener(
+      ACCOUNT_PREFERENCES_CHANGED_EVENT,
+      applyAccountPreferences,
+    );
+  }, [cloudSession.session?.user.id]);
   const locationController = useLocationController({
     isMapActive: activeView === 'map',
     isEnabled: Boolean(cloudSession.session),

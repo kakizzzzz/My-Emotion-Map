@@ -1,5 +1,6 @@
 import {
   MAX_AI_CONTEXT_MESSAGE_COUNT,
+  normalizeAvatarSrc,
   MIN_AI_CONTEXT_MESSAGE_COUNT,
   normalizeAiContextMessageCount,
 } from '../../app/profilePreferences';
@@ -127,7 +128,9 @@ const canonicalRecord = (
 export const normalizeEmotionPreferences = (
   settings: LocalSettings,
 ): EmotionPreferencesEntity => ({
+  avatarSrc: normalizeAvatarSrc(settings.avatarSrc),
   profileName: settings.profileName.trim().slice(0, 80),
+  language: settings.language,
   aboutMe: settings.aboutMe.slice(0, 2_000),
   aiUserPrompt: settings.aiUserPrompt.trim().slice(0, 500),
   aiContextMessageCount: normalizeAiContextMessageCount(
@@ -353,7 +356,9 @@ export const assembleNormalizedEmotionSnapshot = (
 
 export const isEmotionPreferencesEntityValid = (
   value: EmotionPreferencesEntity,
-) => value.profileName.length <= 80 && value.aboutMe.length <= 2_000 &&
+) => normalizeAvatarSrc(value.avatarSrc) === value.avatarSrc &&
+  ['zh', 'en', 'ko'].includes(value.language) &&
+  value.profileName.length <= 80 && value.aboutMe.length <= 2_000 &&
   value.aiUserPrompt.length <= 500 &&
   value.aiContextMessageCount >= MIN_AI_CONTEXT_MESSAGE_COUNT &&
   value.aiContextMessageCount <= MAX_AI_CONTEXT_MESSAGE_COUNT &&

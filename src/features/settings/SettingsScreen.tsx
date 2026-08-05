@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { MOTION } from '../../motion';
 import { useAppLanguage } from '../../i18n';
 import {
+  ACCOUNT_PREFERENCES_CHANGED_EVENT,
   buildDefaultProfileName,
   loadLocalSettings,
   saveLocalSettings,
@@ -104,6 +105,22 @@ export function SettingsScreen({
     userId: cloudUserId,
     fingerprint: preferencesFingerprint,
   });
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string }>).detail;
+      if (!cloudUserId || detail?.userId !== cloudUserId) return;
+      const next = loadLocalSettings(cloudUserId);
+      setAvatarSrc(next.avatarSrc);
+      setProfileName(next.profileName);
+      setAiUserPrompt(next.aiUserPrompt);
+      setAiContextMessageCount(next.aiContextMessageCount);
+    };
+    window.addEventListener(ACCOUNT_PREFERENCES_CHANGED_EVENT, listener);
+    return () => window.removeEventListener(
+      ACCOUNT_PREFERENCES_CHANGED_EVENT,
+      listener,
+    );
+  }, [cloudUserId]);
   const rows: Array<{
     id: SettingsPanel;
     label: string;

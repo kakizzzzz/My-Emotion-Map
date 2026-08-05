@@ -9,6 +9,9 @@ const lockdown = read('supabase/migrations/202608040003_emotion_archive_lockdown
 const archiveHardening = read(
   'supabase/migrations/202608040005_archive_readonly_and_retention_schedule.sql',
 );
+const preferenceSync = read(
+  'supabase/migrations/202608050001_sync_all_account_preferences.sql',
+);
 const verifier = read('supabase/verify-normalized-emotion.sql');
 const recovery = read('supabase/recover-normalized-emotion-for-user.sql');
 const verifyScript = read('scripts/verify-normalized-emotion-migration.mjs');
@@ -67,6 +70,17 @@ describe('normalized emotion database migration safety', () => {
     expect(apply).toContain("when 'record_soft_delete' then 120");
   });
 
+  it('syncs avatar and language at the same preference revision without exposing media history', () => {
+    expect(preferenceSync).toContain('add column if not exists avatar_data_url');
+    expect(preferenceSync).toContain("add column if not exists language");
+    expect(preferenceSync).toContain('apply_emotion_mutations_v2_core');
+    expect(preferenceSync).toContain("- 'avatarSrc' - 'language'");
+    expect(preferenceSync).toContain('changed_revision = v_revision');
+    expect(preferenceSync).toContain("new.before_data - 'avatar_data_url'");
+    expect(preferenceSync).toContain("to authenticated");
+    expect(preferenceSync).not.toMatch(/grant\s+(insert|update|delete|all).*emotion_preferences/i);
+  });
+
   it('locks and verifies every archive before marking it migrated', () => {
     const migration = storage.slice(storage.indexOf(
       'create or replace function public.migrate_emotion_archive_user',
@@ -100,7 +114,7 @@ describe('normalized emotion database migration safety', () => {
 
   it('never mutates or removes the immutable archive payload', () => {
     const combined = withoutComments([
-      storage, retention, lockdown, archiveHardening, recovery,
+      storage, retention, lockdown, archiveHardening, preferenceSync, recovery,
     ].join('\n'));
     expect(combined).not.toMatch(/update\s+public\.app_states/i);
     expect(combined).not.toMatch(/delete\s+from\s+public\.app_states/i);

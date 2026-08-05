@@ -33,7 +33,7 @@ const SENSITIVE_KEYS = new Set([
   'newpassword', 'confirmpassword', 'invitecode', 'accesstoken',
   'refreshtoken', 'servicerolekey', 'databaseurl', 'supabasekey',
   'mcptoken', 'mylifememorytoken', 'shortcutpairingsecret',
-  'siliconflowkey', 'session', 'avatarsrc', 'profileid', 'language',
+  'siliconflowkey', 'session', 'profileid',
 ]);
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;

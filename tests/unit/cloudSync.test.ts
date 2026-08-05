@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { createEmptyAppData } from '../../src/app/appDataRepository';
 import { createRecord } from '../../src/app/recordFactory';
-import { loadLocalSettings } from '../../src/app/profilePreferences';
+import {
+  loadLocalSettings,
+  saveLocalSettings,
+} from '../../src/app/profilePreferences';
 import { normalizeEmotionSnapshot } from '../../src/domain/storage/normalizedEmotionSnapshot';
 import { diffEmotionState } from '../../src/services/normalizedSync/emotionMutationModel';
 import { NormalizedEmotionSyncError } from '../../src/services/normalizedSync/emotionSyncErrors';
@@ -128,7 +131,7 @@ describe('normalized cloud sync', () => {
   beforeEach(() => {
     window.localStorage.clear();
     BroadcastChannelStub.instances = [];
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.clear.mockResolvedValue(undefined);
     mocks.readOutbox.mockResolvedValue(null);
     mocks.writeRecovery.mockResolvedValue(undefined);
@@ -176,6 +179,75 @@ describe('normalized cloud sync', () => {
     await waitFor(() => expect(result.current.status).toBe('upgrade_required'));
     expect(applySnapshot).not.toHaveBeenCalled();
     expect(mocks.applyMutations).not.toHaveBeenCalled();
+  });
+
+  it('queues every account-owned setting, including avatar, name and language', async () => {
+    const remote = normalized();
+    bootstrap({ remote, revision: 5 });
+    mocks.enqueue.mockImplementation(async ({ mutations }: {
+      mutations: EmotionMutation[];
+    }) => outbox(mutations, 5));
+    const applySnapshot = vi.fn();
+    const { result, unmount } = renderHook(() => useCloudSync({
+      client, session, snapshot: createEmptyAppData(), applySnapshot,
+    }));
+    await waitFor(() => expect(result.current.status).not.toBe('checking'));
+    expect(result.current.errorInfo).toBeNull();
+    expect(result.current.status).toBe('synced');
+
+    act(() => {
+      saveLocalSettings({
+        ...loadLocalSettings(session.user.id),
+        avatarSrc: 'data:image/webp;base64,YXZhdGFy',
+        profileName: 'Kaki Cloud',
+        language: 'ko',
+        aboutMe: '同步简介',
+        aiUserPrompt: '温和一些',
+        aiContextMessageCount: 12,
+        chatPreferenceTags: ['listenFirst'],
+        followUpIntervals: [2, 9, 30],
+      }, session.user.id);
+    });
+
+    await waitFor(() => expect(mocks.enqueue).toHaveBeenCalled());
+    const mutations = mocks.enqueue.mock.calls.at(-1)?.[0]?.mutations as
+      EmotionMutation[];
+    expect(mutations).toHaveLength(1);
+    expect(mutations[0]).toMatchObject({
+      type: 'preferences_update',
+      payload: {
+        avatarSrc: 'data:image/webp;base64,YXZhdGFy',
+        profileName: 'Kaki Cloud',
+        language: 'ko',
+        aboutMe: '同步简介',
+        aiUserPrompt: '温和一些',
+        aiContextMessageCount: 12,
+        chatPreferenceTags: ['listenFirst'],
+        followUpIntervals: [2, 9, 30],
+      },
+    });
+    unmount();
+  });
+
+  it('restores every cloud preference into the signed-in account workspace', async () => {
+    const remote = normalized();
+    remote.preferences = {
+      avatarSrc: 'data:image/png;base64,Y2xvdWQ=',
+      profileName: 'Cloud Profile',
+      language: 'en',
+      aboutMe: 'cloud about',
+      aiUserPrompt: 'cloud prompt',
+      aiContextMessageCount: 14,
+      chatPreferenceTags: ['fewerQuestions'],
+      followUpIntervals: [1, 5, 21, 60],
+    };
+    bootstrap({ remote, revision: 9 });
+    const { result } = renderHook(() => useCloudSync({
+      client, session, snapshot: createEmptyAppData(), applySnapshot: vi.fn(),
+    }));
+
+    await waitFor(() => expect(result.current.status).toBe('synced'));
+    expect(loadLocalSettings(session.user.id)).toMatchObject(remote.preferences);
   });
 
   it('loads a fresh empty normalized workspace without manufacturing a write', async () => {

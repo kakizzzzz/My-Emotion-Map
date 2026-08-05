@@ -48,7 +48,7 @@ const normalized = () => {
 describe('complete normalized backup and import', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('round-trips stable JSON with SHA-256 and excludes device and secret fields', async () => {
+  it('round-trips synchronized settings while excluding runtime and credential fields', async () => {
     const backup = await createCompleteEmotionBackup({
       normalized: normalized(),
       datasetRevision: 12,
@@ -64,8 +64,8 @@ describe('complete normalized backup and import', () => {
       },
     });
     expect(backup.checksum).toMatch(/^[0-9a-f]{64}$/);
-    expect(text).not.toContain('secret-avatar');
-    expect(text).not.toContain('"language"');
+    expect(text).toContain('secret-avatar');
+    expect(text).toContain('"language": "ko"');
     expect(text).not.toContain('lastViewport');
     expect(text).not.toContain('lastConversationId');
     expect(text).not.toContain('mutation');

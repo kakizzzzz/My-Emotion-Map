@@ -18,6 +18,15 @@ export const ACCOUNT_PREFERENCES_CHANGED_EVENT =
 export const DEFAULT_AI_CONTEXT_MESSAGE_COUNT = 8;
 export const MIN_AI_CONTEXT_MESSAGE_COUNT = 2;
 export const MAX_AI_CONTEXT_MESSAGE_COUNT = 20;
+export const MAX_AVATAR_DATA_URL_LENGTH = 165_000;
+
+export const normalizeAvatarSrc = (value: unknown) => {
+  if (typeof value !== 'string' || value.length > MAX_AVATAR_DATA_URL_LENGTH) {
+    return '';
+  }
+  if (!value) return '';
+  return /^data:image\/(?:webp|png|jpeg);base64,/i.test(value) ? value : '';
+};
 
 export const normalizeAiContextMessageCount = (value: unknown) => {
   const count = Number(value);
@@ -92,7 +101,7 @@ export const loadLocalSettings = (userId: string | null = null): LocalSettings =
         : '';
     return {
       avatarSrc:
-        typeof parsed.avatarSrc === 'string' ? parsed.avatarSrc.slice(0, 2_000_000) : '',
+        normalizeAvatarSrc(parsed.avatarSrc),
       profileId: isSupabaseProfileId(parsed.profileId)
         ? parsed.profileId
         : defaults.profileId,
