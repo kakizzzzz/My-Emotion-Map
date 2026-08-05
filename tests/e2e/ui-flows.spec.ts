@@ -710,10 +710,11 @@ test('five-star neurodiversity journey covers choices, skips, revisits, inbox, c
   );
   const expectedClock = await page.evaluate(() => {
     const now = new Date();
+    const offset = -now.getTimezoneOffset();
     return {
       localDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
       localTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
-      utcOffsetMinutes: -now.getTimezoneOffset(),
+      utcOffsetMinutes: Object.is(offset, -0) ? 0 : offset,
     };
   });
   expect(chatPayload?.clientContext).toMatchObject(expectedClock);

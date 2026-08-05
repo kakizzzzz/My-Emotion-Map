@@ -19,8 +19,10 @@ const safeTimeZone = () => {
   }
 };
 
-export const currentUtcOffsetMinutes = (date = new Date()) =>
-  -date.getTimezoneOffset();
+export const currentUtcOffsetMinutes = (date = new Date()) => {
+  const offset = -date.getTimezoneOffset();
+  return Object.is(offset, -0) ? 0 : offset;
+};
 
 export type DeviceTemporalContext = {
   localDate: string;

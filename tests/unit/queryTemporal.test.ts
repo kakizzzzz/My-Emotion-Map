@@ -10,6 +10,7 @@ import { resolveRetrievalStatus } from '../../src/domain/query/retrievalStatus';
 import {
   createDeviceTemporalContext,
   createTemporalFields,
+  currentUtcOffsetMinutes,
   migrateLegacyTemporalFields,
 } from '../../src/domain/time/temporal';
 import type { EmotionMoment, EmotionNote } from '../../src/types';
@@ -114,7 +115,7 @@ describe('v4 query and temporal contracts', () => {
       localDate: '2026-08-04',
       localTime: '21:37',
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
-      utcOffsetMinutes: -date.getTimezoneOffset(),
+      utcOffsetMinutes: currentUtcOffsetMinutes(date),
     });
   });
 
