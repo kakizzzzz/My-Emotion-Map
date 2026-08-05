@@ -59,7 +59,7 @@ export function NoteViewSheet({
       className="overlay-layer note-editor-overlay"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      exit={{ opacity: 0, pointerEvents: 'none' }}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -73,7 +73,7 @@ export function NoteViewSheet({
         tabIndex={-1}
         initial={{ y: 32, opacity: 0.94 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 26, opacity: 0 }}
+        exit={{ y: 26, opacity: 0, pointerEvents: 'none' }}
         transition={MOTION.sheet}
       >
         <header className="sheet-header">
