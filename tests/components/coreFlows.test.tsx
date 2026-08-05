@@ -473,13 +473,13 @@ describe('core component flows', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: '用户student_01' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'student_01' })).toBeInTheDocument();
     expect(screen.getByText('ID:student_01')).toBeInTheDocument();
     expect(onPreferenceChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: '修改信息' }));
     expect(document.querySelector('.profile-account-id-row')).toBeNull();
     const profileNameInput = screen.getByRole('textbox', { name: '用户姓名' });
-    expect(profileNameInput).toHaveValue('用户student_01');
+    expect(profileNameInput).toHaveValue('student_01');
     await user.clear(profileNameInput);
     await user.type(profileNameInput, 'Kaki');
     await waitFor(() => {

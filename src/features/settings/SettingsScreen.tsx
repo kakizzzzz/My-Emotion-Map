@@ -69,11 +69,7 @@ export function SettingsScreen({
   const [panel, setPanel] = useState<SettingsPanel | null>(null);
   const [avatarSrc, setAvatarSrc] = useState(initialSettings.avatarSrc);
   const [profileName, setProfileName] = useState(
-    cloudAccount && (
-      !initialSettings.profileName ||
-      initialSettings.profileName.toLocaleLowerCase() ===
-        cloudAccount.trim().toLocaleLowerCase()
-    )
+    cloudAccount && !initialSettings.profileName
       ? buildDefaultProfileName(cloudAccount, language)
       : initialSettings.profileName,
   );

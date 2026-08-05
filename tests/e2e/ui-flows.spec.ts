@@ -351,7 +351,7 @@ test('authenticated identity opens an empty real workspace', async ({
   ).toHaveCount(0);
   await drawer.getByRole('button', { name: '设置' }).click();
 
-  await expect(page.getByRole('heading', { name: '用户e2e_student' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'e2e_student' })).toBeVisible();
   await expect(page.getByText('ID:e2e_student')).toBeVisible();
   await expect(page.getByText('00000000-0000-4000-8000-000000000001')).toHaveCount(0);
   await expect(page.getByText('Mina Park')).toHaveCount(0);
@@ -359,7 +359,7 @@ test('authenticated identity opens an empty real workspace', async ({
   await page.getByRole('button', { name: '修改信息' }).click();
   await expect(page.locator('.profile-account-id-row')).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
-    '用户e2e_student',
+    'e2e_student',
   );
 });
 
