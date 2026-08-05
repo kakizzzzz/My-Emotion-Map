@@ -28,6 +28,7 @@ import type {
   SpeechRecognitionLike,
 } from './speechRecognition';
 import { useDialogFocus } from '../../app/useDialogFocus';
+import { useNoteWizardGestures } from './useNoteWizardGestures';
 import {
   initialEditorExitState,
   reduceEditorExit,
@@ -201,6 +202,20 @@ export function NoteEditorSheet({
     setHighestStep((current) => Math.max(current, 2));
     setCurrentStep(2);
   };
+  const navigateWizard = (direction: -1 | 1) => {
+    const nextStep = Math.max(0, Math.min(2, currentStep + direction));
+    if (nextStep === currentStep) return false;
+    if (nextStep === 2 && direction > 0) {
+      goToPromptStep();
+      return true;
+    }
+    if (nextStep > currentStep) {
+      setHighestStep((current) => Math.max(current, nextStep));
+    }
+    setCurrentStep(nextStep);
+    return true;
+  };
+  const wizardGestureHandlers = useNoteWizardGestures(navigateWizard);
 
   const advancePrompt = () => {
     questionsTouchedRef.current = true;
@@ -494,7 +509,10 @@ export function NoteEditorSheet({
           </div>
         </header>
 
-        <div className="note-editor-scroll note-wizard-viewport">
+        <div
+          className="note-editor-scroll note-wizard-viewport"
+          {...wizardGestureHandlers}
+        >
           <motion.div
             className="note-wizard-track"
             animate={{ x: `-${currentStep * 100}%` }}
@@ -570,13 +588,6 @@ export function NoteEditorSheet({
                 </div>
                 <div className="wizard-step-actions">
                   <button
-                    className="wizard-arrow-button"
-                    onClick={() => goToStep(0)}
-                    aria-label={copy.note.backToEmotionStep}
-                  >
-                    <ChevronLeft size={22} strokeWidth={2.2} />
-                  </button>
-                  <button
                     className={`follow-up-toggle ${followUp ? 'is-active' : ''}`}
                     onClick={() => setFollowUp((current) => !current)}
                   >
@@ -584,13 +595,6 @@ export function NoteEditorSheet({
                     <i>
                       {followUp ? <Check size={11} strokeWidth={2.5} /> : null}
                     </i>
-                  </button>
-                  <button
-                    className="wizard-arrow-button is-primary"
-                    onClick={goToPromptStep}
-                    aria-label={copy.note.continueToQuestions}
-                  >
-                    <ChevronRight size={22} strokeWidth={2.2} />
                   </button>
                 </div>
               </section>

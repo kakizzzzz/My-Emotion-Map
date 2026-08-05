@@ -112,6 +112,36 @@ const McpChatHarness = () => {
   );
 };
 
+const dispatchWizardSwipe = (
+  startTarget: Element,
+  viewport: HTMLElement,
+  direction: 'next' | 'previous',
+) => {
+  Object.defineProperty(viewport, 'clientWidth', {
+    configurable: true,
+    value: 360,
+  });
+  const startX = direction === 'next' ? 280 : 80;
+  const endX = direction === 'next' ? 80 : 280;
+  const pointer = {
+    pointerId: 17,
+    pointerType: 'touch',
+    button: 0,
+    clientY: 180,
+  };
+  fireEvent.pointerDown(startTarget, { ...pointer, clientX: startX });
+  fireEvent.pointerMove(viewport, { ...pointer, clientX: endX });
+  fireEvent.pointerUp(viewport, { ...pointer, clientX: endX });
+};
+
+const swipeWizard = (direction: 'next' | 'previous') => {
+  const viewport = document.querySelector<HTMLElement>(
+    '.note-wizard-viewport',
+  );
+  if (!viewport) throw new Error('Wizard viewport was not rendered.');
+  dispatchWizardSwipe(viewport, viewport, direction);
+};
+
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
@@ -138,15 +168,14 @@ describe('core component flows', () => {
       '图书馆下午',
     );
     await user.click(screen.getByRole('button', { name: '平静' }));
-    await user.click(await screen.findByTitle('很安心'));
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: '继续到引导问题' }),
-      ).toBeInTheDocument();
+    await screen.findByRole('heading', {
+      name: '这个地方给你的感觉',
     });
-    await user.click(
-      screen.getByRole('button', { name: '继续到引导问题' }),
-    );
+    await user.click(screen.getByTitle('很安心'));
+    expect(
+      screen.queryByRole('button', { name: '继续到引导问题' }),
+    ).toBeNull();
+    swipeWizard('next');
     await screen.findByRole('heading', { name: '你去这做什么？' });
     await user.click(screen.getByRole('button', { name: '跳过问答' }));
     await user.click(await screen.findByRole('button', { name: '点击保存' }));
@@ -159,6 +188,59 @@ describe('core component flows', () => {
     expect(onSave.mock.calls[0][2]).toBe('calm');
     expect(onSave.mock.calls[0][3]).toBe('safe');
   }, 10_000);
+
+  it('swipes from a star without converting the gesture into a click', () => {
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={draftMoment}
+        note={draftNote}
+        onSave={() => undefined}
+        onClose={() => undefined}
+        onToast={() => undefined}
+      />,
+    );
+    const viewport = document.querySelector<HTMLElement>(
+      '.note-wizard-viewport',
+    );
+    if (!viewport) throw new Error('Wizard viewport was not rendered.');
+    const calm = screen.getByRole('button', { name: '平静' });
+    dispatchWizardSwipe(calm, viewport, 'next');
+    fireEvent.click(calm);
+    expect(
+      screen.getByRole('heading', { name: '这个地方给你的感觉' }),
+    ).toBeInTheDocument();
+    expect(calm).not.toHaveClass('is-selected');
+  });
+
+  it('changes pages with a fine-pointer wheel gesture', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: true,
+      media: '(hover: hover) and (pointer: fine)',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    renderWithLanguage(
+      <NoteEditorSheet
+        moment={draftMoment}
+        note={draftNote}
+        onSave={() => undefined}
+        onClose={() => undefined}
+        onToast={() => undefined}
+      />,
+    );
+    const viewport = document.querySelector<HTMLElement>(
+      '.note-wizard-viewport',
+    );
+    if (!viewport) throw new Error('Wizard viewport was not rendered.');
+    fireEvent.wheel(viewport, { deltaY: 80, deltaMode: 0 });
+    expect(
+      screen.getByRole('heading', { name: '这个地方给你的感觉' }),
+    ).toBeInTheDocument();
+  });
 
   it('uses delete instead of a second skip control for optional questions', async () => {
     const user = userEvent.setup();
@@ -173,18 +255,19 @@ describe('core component flows', () => {
     );
 
     await user.click(screen.getByRole('button', { name: '平静' }));
-    await user.click(await screen.findByTitle('很安心'));
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: '继续到引导问题' }),
-      ).toBeInTheDocument();
+    await screen.findByRole('heading', {
+      name: '这个地方给你的感觉',
     });
+    await user.click(screen.getByTitle('很安心'));
+    expect(
+      screen.queryByRole('button', { name: '继续到引导问题' }),
+    ).toBeNull();
     const followUpChoice = screen.getByRole('button', {
       name: '愿意不定期后续回访',
     });
     expect(followUpChoice).toBeVisible();
     expect(followUpChoice.closest('.place-rating-section')).not.toBeNull();
-    await user.click(screen.getByRole('button', { name: '继续到引导问题' }));
+    swipeWizard('next');
     expect(screen.getByRole('button', { name: '跳过问答' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: '跳过这个问题' }));
     await screen.findByRole('heading', { name: '这里有什么让你注意到的？' });
@@ -473,13 +556,13 @@ describe('core component flows', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: '用户student_01' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'student_01' })).toBeInTheDocument();
     expect(screen.getByText('ID:student_01')).toBeInTheDocument();
     expect(onPreferenceChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: '修改信息' }));
     expect(document.querySelector('.profile-account-id-row')).toBeNull();
     const profileNameInput = screen.getByRole('textbox', { name: '用户姓名' });
-    expect(profileNameInput).toHaveValue('用户student_01');
+    expect(profileNameInput).toHaveValue('student_01');
     await user.clear(profileNameInput);
     await user.type(profileNameInput, 'Kaki');
     await waitFor(() => {

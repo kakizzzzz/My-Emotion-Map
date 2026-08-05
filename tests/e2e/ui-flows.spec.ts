@@ -190,12 +190,36 @@ async function dispatchTouchTap(
   await session.detach();
 }
 
+async function swipeNoteWizard(
+  page: Page,
+  direction: 'next' | 'previous',
+) {
+  const viewport = page.locator('.note-wizard-viewport');
+  const box = await viewport.boundingBox();
+  if (!box) throw new Error('Wizard viewport is not visible.');
+  const startX = direction === 'next'
+    ? box.x + box.width * 0.78
+    : box.x + box.width * 0.22;
+  const endX = direction === 'next'
+    ? box.x + box.width * 0.22
+    : box.x + box.width * 0.78;
+  const event = {
+    pointerId: 31,
+    pointerType: 'touch',
+    button: 0,
+    clientY: box.y + Math.min(220, box.height * 0.45),
+  };
+  await viewport.dispatchEvent('pointerdown', { ...event, clientX: startX });
+  await viewport.dispatchEvent('pointermove', { ...event, clientX: endX });
+  await viewport.dispatchEvent('pointerup', { ...event, clientX: endX });
+}
+
 async function completeEditor(page: Page, title: string) {
   await page.getByRole('textbox', { name: '给这一刻起个名字' }).fill(title);
   await page.getByRole('button', { name: '平静' }).click();
   await page.getByTitle('有点不舒服').click();
   await page.getByRole('button', { name: '愿意不定期后续回访' }).click();
-  await page.getByRole('button', { name: '继续到引导问题' }).click();
+  await swipeNoteWizard(page, 'next');
 
   for (const [question, answer] of [
     ['你去这做什么？', '安静地完成作业。'],
@@ -351,7 +375,7 @@ test('authenticated identity opens an empty real workspace', async ({
   ).toHaveCount(0);
   await drawer.getByRole('button', { name: '设置' }).click();
 
-  await expect(page.getByRole('heading', { name: '用户e2e_student' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'e2e_student' })).toBeVisible();
   await expect(page.getByText('ID:e2e_student')).toBeVisible();
   await expect(page.getByText('00000000-0000-4000-8000-000000000001')).toHaveCount(0);
   await expect(page.getByText('Mina Park')).toHaveCount(0);
@@ -359,7 +383,7 @@ test('authenticated identity opens an empty real workspace', async ({
   await page.getByRole('button', { name: '修改信息' }).click();
   await expect(page.locator('.profile-account-id-row')).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
-    '用户e2e_student',
+    'e2e_student',
   );
 });
 
@@ -715,7 +739,7 @@ test('five-star neurodiversity journey covers choices, skips, revisits, inbox, c
     await page.getByRole('button', { name: scenario.emotion }).click();
     await page.getByTitle(scenario.rating).click();
     await page.getByRole('button', { name: '愿意不定期后续回访' }).click();
-    await page.getByRole('button', { name: '继续到引导问题' }).click();
+    await swipeNoteWizard(page, 'next');
     if (scenario.skip) {
       await page.getByRole('button', { name: '跳过问答' }).click();
     } else {

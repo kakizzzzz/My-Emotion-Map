@@ -228,7 +228,9 @@
 
 .note-wizard-viewport {
   overflow: hidden;
+  overscroll-behavior-x: contain;
   padding: 0;
+  touch-action: pan-y;
 }
 
 .note-wizard-track {
