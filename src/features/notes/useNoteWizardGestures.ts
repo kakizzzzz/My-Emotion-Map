@@ -11,8 +11,8 @@ type WizardDirection = -1 | 1;
 type NavigateWizard = (direction: WizardDirection) => boolean;
 type GestureAxis = 'pending' | 'horizontal' | 'vertical';
 
-type PointerGesture = {
-  pointerId: number;
+type SwipeGesture = {
+  identifier: number;
   startX: number;
   startY: number;
   lastX: number;
@@ -28,6 +28,7 @@ const WHEEL_THRESHOLD = 52;
 const WHEEL_RESET_MS = 220;
 const WHEEL_COOLDOWN_MS = 420;
 const CLICK_SUPPRESSION_MS = 360;
+const DUPLICATE_SWIPE_WINDOW_MS = 140;
 const TEXT_EDITING_TARGET =
   'input, textarea, select, [contenteditable="true"]';
 
@@ -62,10 +63,29 @@ const normalizedWheelDelta = (event: ReactWheelEvent<HTMLElement>) => {
   return raw * unit;
 };
 
+const updateGestureAxis = (
+  gesture: SwipeGesture,
+  clientX: number,
+  clientY: number,
+) => {
+  gesture.lastX = clientX;
+  gesture.lastY = clientY;
+  if (gesture.axis !== 'pending') return gesture.axis;
+  const absoluteX = Math.abs(clientX - gesture.startX);
+  const absoluteY = Math.abs(clientY - gesture.startY);
+  if (Math.max(absoluteX, absoluteY) < AXIS_LOCK_DISTANCE) return gesture.axis;
+  if (absoluteX > absoluteY * 1.15) gesture.axis = 'horizontal';
+  else if (absoluteY > absoluteX * 1.15) gesture.axis = 'vertical';
+  return gesture.axis;
+};
+
 export function useNoteWizardGestures(onNavigate: NavigateWizard) {
   const navigateRef = useRef(onNavigate);
-  const pointerRef = useRef<PointerGesture | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const pointerRef = useRef<SwipeGesture | null>(null);
+  const touchRef = useRef<SwipeGesture | null>(null);
   const suppressClickUntilRef = useRef(0);
+  const lastSwipeAtRef = useRef(0);
   const wheelTotalRef = useRef(0);
   const wheelSignRef = useRef(0);
   const wheelLockedUntilRef = useRef(0);
@@ -101,9 +121,97 @@ export function useNoteWizardGestures(onNavigate: NavigateWizard) {
     }, WHEEL_RESET_MS);
   }, []);
 
+  const completeSwipe = useCallback((
+    gesture: SwipeGesture,
+    endX: number,
+    viewportWidth: number,
+  ) => {
+    if (gesture.axis !== 'horizontal') return false;
+    const distanceX = endX - gesture.startX;
+    const absoluteX = Math.abs(distanceX);
+    const duration = Math.max(1, performance.now() - gesture.startedAt);
+    const velocity = absoluteX / duration;
+    const viewportThreshold = Math.min(
+      72,
+      Math.max(44, viewportWidth * 0.1),
+    );
+    const completed = absoluteX >= viewportThreshold ||
+      (absoluteX >= SWIPE_MIN_DISTANCE && velocity >= SWIPE_VELOCITY);
+    if (!completed) return false;
+    const now = performance.now();
+    if (now - lastSwipeAtRef.current < DUPLICATE_SWIPE_WINDOW_MS) return false;
+    const moved = navigateRef.current(distanceX < 0 ? 1 : -1);
+    if (!moved) return false;
+    lastSwipeAtRef.current = now;
+    suppressClickUntilRef.current = now + CLICK_SUPPRESSION_MS;
+    return true;
+  }, []);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+
+    const onTouchStart = (event: TouchEvent) => {
+      suppressClickUntilRef.current = 0;
+      if (event.touches.length !== 1 || isTextEditingTarget(event.target)) {
+        touchRef.current = null;
+        return;
+      }
+      const touch = event.touches[0];
+      touchRef.current = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        lastY: touch.clientY,
+        startedAt: performance.now(),
+        axis: 'pending',
+      };
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      const gesture = touchRef.current;
+      if (!gesture) return;
+      const touch = Array.from(event.touches).find(
+        (candidate) => candidate.identifier === gesture.identifier,
+      );
+      if (!touch) return;
+      const axis = updateGestureAxis(gesture, touch.clientX, touch.clientY);
+      if (axis === 'horizontal' && event.cancelable) event.preventDefault();
+    };
+
+    const finishTouch = (event: TouchEvent, cancelled: boolean) => {
+      const gesture = touchRef.current;
+      if (!gesture) return;
+      touchRef.current = null;
+      if (cancelled) return;
+      const touch = Array.from(event.changedTouches).find(
+        (candidate) => candidate.identifier === gesture.identifier,
+      );
+      completeSwipe(
+        gesture,
+        touch?.clientX ?? gesture.lastX,
+        viewport.clientWidth,
+      );
+    };
+
+    const onTouchEnd = (event: TouchEvent) => finishTouch(event, false);
+    const onTouchCancel = (event: TouchEvent) => finishTouch(event, true);
+
+    viewport.addEventListener('touchstart', onTouchStart, { passive: true });
+    viewport.addEventListener('touchmove', onTouchMove, { passive: false });
+    viewport.addEventListener('touchend', onTouchEnd, { passive: true });
+    viewport.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    return () => {
+      viewport.removeEventListener('touchstart', onTouchStart);
+      viewport.removeEventListener('touchmove', onTouchMove);
+      viewport.removeEventListener('touchend', onTouchEnd);
+      viewport.removeEventListener('touchcancel', onTouchCancel);
+      touchRef.current = null;
+    };
+  }, [completeSwipe]);
+
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
-    // A genuine new press must always remain clickable. Browser-generated
-    // click events after a swipe arrive without a new pointerdown.
     suppressClickUntilRef.current = 0;
     if (
       event.pointerType === 'mouse' ||
@@ -111,7 +219,7 @@ export function useNoteWizardGestures(onNavigate: NavigateWizard) {
       isTextEditingTarget(event.target)
     ) return;
     pointerRef.current = {
-      pointerId: event.pointerId,
+      identifier: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       lastX: event.clientX,
@@ -123,22 +231,9 @@ export function useNoteWizardGestures(onNavigate: NavigateWizard) {
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     const gesture = pointerRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    gesture.lastX = event.clientX;
-    gesture.lastY = event.clientY;
-    const distanceX = event.clientX - gesture.startX;
-    const distanceY = event.clientY - gesture.startY;
-    const absoluteX = Math.abs(distanceX);
-    const absoluteY = Math.abs(distanceY);
-    if (gesture.axis === 'pending') {
-      if (Math.max(absoluteX, absoluteY) < AXIS_LOCK_DISTANCE) return;
-      if (absoluteX > absoluteY * 1.15) gesture.axis = 'horizontal';
-      else if (absoluteY > absoluteX * 1.15) gesture.axis = 'vertical';
-      else return;
-    }
-    if (gesture.axis === 'horizontal' && event.cancelable) {
-      event.preventDefault();
-    }
+    if (!gesture || gesture.identifier !== event.pointerId) return;
+    const axis = updateGestureAxis(gesture, event.clientX, event.clientY);
+    if (axis === 'horizontal' && event.cancelable) event.preventDefault();
   }, []);
 
   const finishPointer = useCallback((
@@ -146,24 +241,15 @@ export function useNoteWizardGestures(onNavigate: NavigateWizard) {
     cancelled: boolean,
   ) => {
     const gesture = pointerRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture || gesture.identifier !== event.pointerId) return;
     pointerRef.current = null;
-    if (cancelled || gesture.axis !== 'horizontal') return;
-    const endX = Number.isFinite(event.clientX) ? event.clientX : gesture.lastX;
-    const distanceX = endX - gesture.startX;
-    const absoluteX = Math.abs(distanceX);
-    const duration = Math.max(1, performance.now() - gesture.startedAt);
-    const velocity = absoluteX / duration;
-    const viewportThreshold = Math.min(
-      72,
-      Math.max(44, event.currentTarget.clientWidth * 0.1),
+    if (cancelled) return;
+    completeSwipe(
+      gesture,
+      Number.isFinite(event.clientX) ? event.clientX : gesture.lastX,
+      event.currentTarget.clientWidth,
     );
-    const completed = absoluteX >= viewportThreshold ||
-      (absoluteX >= SWIPE_MIN_DISTANCE && velocity >= SWIPE_VELOCITY);
-    if (!completed) return;
-    suppressClickUntilRef.current = performance.now() + CLICK_SUPPRESSION_MS;
-    navigateRef.current(distanceX < 0 ? 1 : -1);
-  }, []);
+  }, [completeSwipe]);
 
   const onPointerUp = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     finishPointer(event, false);
@@ -214,6 +300,7 @@ export function useNoteWizardGestures(onNavigate: NavigateWizard) {
   }, [resetWheelAccumulator, scheduleWheelReset]);
 
   return {
+    ref: viewportRef,
     onPointerDown,
     onPointerMove,
     onPointerUp,
