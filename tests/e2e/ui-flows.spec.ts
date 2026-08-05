@@ -307,6 +307,41 @@ test('adding at the current location creates the star without opening the editor
   }, STORAGE_KEY)).toEqual([37.558, 127]);
 });
 
+test('selecting a star preserves a closer map zoom', async ({ page }) => {
+  await startBlank(page);
+  await dragNewStarToMap(page);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.moments?.length ?? 0;
+  }, STORAGE_KEY)).toBe(1);
+
+  await page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    const moment = snapshot.moments[0];
+    snapshot.lastViewport = {
+      latitude: moment.latitude,
+      longitude: moment.longitude,
+      zoom: 18,
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+  }, STORAGE_KEY);
+  await page.reload();
+  const locationPrompt = page.getByRole('dialog', { name: '使用定位？' });
+  if (await locationPrompt.isVisible()) {
+    await locationPrompt.getByRole('button', { name: '暂不' }).click();
+  }
+  await expect(page.locator('.map-star-button')).toHaveCount(1);
+
+  await page.locator('.map-star-button').click();
+  await expect(page.locator('.star-action-overlay')).toBeVisible();
+  await page.waitForTimeout(1_800);
+  const zoomAfterSelection = await page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.lastViewport?.zoom ?? 0;
+  }, STORAGE_KEY);
+  expect(zoomAfterSelection).toBeGreaterThanOrEqual(17.99);
+});
+
 test('touch can drag a saved star and a later tap still selects it', async ({
   page,
   browserName,

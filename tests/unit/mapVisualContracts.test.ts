@@ -70,6 +70,18 @@ describe('map visual geometry contracts', () => {
     expect(shellCss).not.toContain('.emotion-star.is-selected');
   });
 
+  it('never zooms out when selecting a star', async () => {
+    const mapScreen = await readSource('src/features/map/MapScreen.tsx');
+
+    expect(mapScreen).toContain(
+      'const targetZoom = Math.max(map.getZoom(), 16);',
+    );
+    expect(mapScreen).toContain(
+      'map.jumpTo({ center, zoom: targetZoom });',
+    );
+    expect(mapScreen).toMatch(/map\.flyTo\(\{[\s\S]*?zoom: targetZoom,/);
+  });
+
   it('centers the recoverable map loading error in the viewport', async () => {
     const mapCss = await readSource('src/styles/map.css');
     const loadError = extractRule(mapCss, '.map-load-error');

@@ -292,8 +292,9 @@ export function MapScreen({
     if (!map) return;
 
     const center = [moment.longitude, moment.latitude] as [number, number];
+    const targetZoom = Math.max(map.getZoom(), 16);
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      map.jumpTo({ center, zoom: 16 });
+      map.jumpTo({ center, zoom: targetZoom });
       return;
     }
 
@@ -309,13 +310,13 @@ export function MapScreen({
     ) || 1;
     const travelRatio = Math.min(distance / diagonal, 1);
     const duration =
-      Math.abs(map.getZoom() - 16) < 0.001
+      Math.abs(map.getZoom() - targetZoom) < 0.001
         ? 620 + travelRatio * 180
         : 1250 + travelRatio * 300;
 
     map.flyTo({
       center,
-      zoom: 16,
+      zoom: targetZoom,
       duration,
       curve: 1.15,
       essential: false,
