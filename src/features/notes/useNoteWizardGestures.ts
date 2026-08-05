@@ -102,6 +102,9 @@ export function useNoteWizardGestures(onNavigate: NavigateWizard) {
   }, []);
 
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    // A genuine new press must always remain clickable. Browser-generated
+    // click events after a swipe arrive without a new pointerdown.
+    suppressClickUntilRef.current = 0;
     if (
       event.pointerType === 'mouse' ||
       event.button !== 0 ||
