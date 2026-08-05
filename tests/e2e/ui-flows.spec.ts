@@ -359,7 +359,7 @@ test('authenticated identity opens an empty real workspace', async ({
   await page.getByRole('button', { name: '修改信息' }).click();
   await expect(page.locator('.profile-account-id-row')).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: '用户姓名' })).toHaveValue(
-    '用户e2e_student',
+    'e2e_student',
   );
 });
 
