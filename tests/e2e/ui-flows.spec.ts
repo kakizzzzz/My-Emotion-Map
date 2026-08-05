@@ -351,7 +351,7 @@ test('authenticated identity opens an empty real workspace', async ({
   ).toHaveCount(0);
   await drawer.getByRole('button', { name: '设置' }).click();
 
-  await expect(page.getByRole('heading', { name: '用户e2e_student' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'e2e_student' })).toBeVisible();
   await expect(page.getByText('ID:e2e_student')).toBeVisible();
   await expect(page.getByText('00000000-0000-4000-8000-000000000001')).toHaveCount(0);
   await expect(page.getByText('Mina Park')).toHaveCount(0);
