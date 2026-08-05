@@ -168,7 +168,10 @@ describe('core component flows', () => {
       '图书馆下午',
     );
     await user.click(screen.getByRole('button', { name: '平静' }));
-    await user.click(await screen.findByTitle('很安心'));
+    await screen.findByRole('heading', {
+      name: '这个地方给你的感觉',
+    });
+    await user.click(screen.getByTitle('很安心'));
     expect(
       screen.queryByRole('button', { name: '继续到引导问题' }),
     ).toBeNull();
@@ -252,7 +255,10 @@ describe('core component flows', () => {
     );
 
     await user.click(screen.getByRole('button', { name: '平静' }));
-    await user.click(await screen.findByTitle('很安心'));
+    await screen.findByRole('heading', {
+      name: '这个地方给你的感觉',
+    });
+    await user.click(screen.getByTitle('很安心'));
     expect(
       screen.queryByRole('button', { name: '继续到引导问题' }),
     ).toBeNull();
