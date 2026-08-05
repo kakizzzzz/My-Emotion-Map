@@ -408,6 +408,7 @@
 
 .place-rating-section .follow-up-toggle {
   width: auto;
+  grid-column: 2;
   min-height: 40px;
   justify-content: center;
   margin: 0;
