@@ -61,6 +61,9 @@ export const reconcileFollowUpsForNote = ({
       (left, right) =>
         new Date(right).getTime() - new Date(left).getTime(),
     )[0];
+  // A consent cycle begins only when an enabled note version is saved.
+  // An off/on slip inside one editor session never mutates these records, so
+  // saving it enabled again keeps the previous confirmed schedule.
   const cycleKey = wasEnabled && latestExistingCycle
     ? latestExistingCycle
     : now.toISOString();

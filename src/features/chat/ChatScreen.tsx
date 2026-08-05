@@ -49,6 +49,10 @@ import type {
   BeginChatInput,
   CompleteChatInput,
 } from '../../app/useChatDeliveryHandlers';
+import {
+  FollowUpFeelingFeedback,
+  useFollowUpFeelingFeedback,
+} from './FollowUpFeelingFeedback';
 
 export function ChatScreen({
   notes,
@@ -114,6 +118,11 @@ export function ChatScreen({
   const [sending, setSending] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const [activeMcpRequestId, setActiveMcpRequestId] = useState<string | null>(null);
+  const {
+    feedback: followUpFeedback,
+    showFeedback: showFollowUpFeedback,
+    clearFeedback: clearFollowUpFeedback,
+  } = useFollowUpFeelingFeedback();
   const [showJumpToEnd, setShowJumpToEnd] = useState(false);
   const [unreadBelow, setUnreadBelow] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -550,8 +559,10 @@ export function ChatScreen({
                       {followUpOptions.map((option) => (
                         <button
                           key={option.id}
+                          type="button"
                           data-option={option.id}
-                          onClick={() => {
+                          onClick={(event) => {
+                            showFollowUpFeedback(event, option.responseKind);
                             onAnswerFollowUp(
                               followUp.id,
                               option.label,
@@ -679,6 +690,11 @@ export function ChatScreen({
           {unreadBelow > 0 ? <span>{unreadBelow}</span> : null}
         </button>
       ) : null}
+
+      <FollowUpFeelingFeedback
+        feedback={followUpFeedback}
+        onFinish={clearFollowUpFeedback}
+      />
 
       <form
         className={`chat-composer ${available ? '' : 'chat-composer--disabled'}`}

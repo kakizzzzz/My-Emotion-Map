@@ -39,6 +39,71 @@ const record = (
 });
 
 describe('note follow-up reconciliation', () => {
+  it('anchors a first curve to the saved consent time, not the note time', () => {
+    const savedAt = new Date('2026-08-04T18:30:00.000Z');
+    const result = reconcileFollowUpsForNote({
+      records: [],
+      note,
+      language: 'zh',
+      intervals: [3, 7, 14],
+      enabled: true,
+      wasEnabled: false,
+      now: savedAt,
+    });
+    expect(result.map((item) => item.followUpConsentedAt))
+      .toEqual(Array(3).fill(savedAt.toISOString()));
+    expect(result.map((item) => item.dueAt)).toEqual([
+      '2026-08-07T18:30:00.000Z',
+      '2026-08-11T18:30:00.000Z',
+      '2026-08-18T18:30:00.000Z',
+    ]);
+  });
+
+  it('does not refresh consent after an off/on slip before saving', () => {
+    const result = reconcileFollowUpsForNote({
+      records: [record(3, 'queued'), record(7, 'queued'), record(14, 'queued')],
+      note,
+      language: 'zh',
+      intervals: [3, 7, 14],
+      enabled: true,
+      wasEnabled: true,
+      now: new Date('2026-08-20T00:00:00.000Z'),
+    });
+    expect(result.map((item) => item.followUpConsentedAt))
+      .toEqual(Array(3).fill(consentedAt));
+    expect(result.map((item) => item.dueAt)).toEqual([
+      '2026-08-04T10:00:00.000Z',
+      '2026-08-08T10:00:00.000Z',
+      '2026-08-15T10:00:00.000Z',
+    ]);
+  });
+
+  it('starts from a new saved consent only after an off version was saved', () => {
+    const disabled = reconcileFollowUpsForNote({
+      records: [record(3, 'queued'), record(7, 'queued'), record(14, 'queued')],
+      note,
+      language: 'zh',
+      intervals: [3, 7, 14],
+      enabled: false,
+      wasEnabled: true,
+    });
+    expect(disabled).toEqual([]);
+
+    const savedAt = new Date('2026-08-20T09:15:00.000Z');
+    const restarted = reconcileFollowUpsForNote({
+      records: disabled,
+      note,
+      language: 'zh',
+      intervals: [3, 7, 14],
+      enabled: true,
+      wasEnabled: false,
+      now: savedAt,
+    });
+    expect(restarted.map((item) => item.followUpConsentedAt))
+      .toEqual(Array(3).fill(savedAt.toISOString()));
+    expect(restarted[0]?.dueAt).toBe('2026-08-23T09:15:00.000Z');
+  });
+
   it('does not recreate an answered interval when an enabled note is saved again', () => {
     const result = reconcileFollowUpsForNote({
       records: [record(3, 'answered'), record(7, 'queued'), record(14, 'queued')],

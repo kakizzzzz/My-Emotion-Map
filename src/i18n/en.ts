@@ -175,7 +175,6 @@ export const enCopy: AppCopy = {
     noFollowUpTitle: 'No follow-up is due',
     noFollowUpBody: 'Consented follow-ups appear here after their scheduled time.',
     followUpSaved: 'Follow-up saved',
-    positiveCelebration: 'This lighter change has been saved.',
   },
   note: {
     recordLabel: 'Star record',

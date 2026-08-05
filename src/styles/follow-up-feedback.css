@@ -1,0 +1,231 @@
+.follow-up-feeling-feedback {
+  --feedback-color: var(--em-joy);
+  --feedback-soft: var(--em-joy-soft);
+  position: fixed;
+  z-index: var(--em-layer-feedback);
+  width: 84px;
+  height: 84px;
+  color: var(--feedback-color);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  contain: layout paint;
+}
+
+.follow-up-feeling-feedback[data-kind="lighter"] {
+  --feedback-color: var(--em-joy);
+  --feedback-soft: var(--em-joy-soft);
+}
+
+.follow-up-feeling-feedback[data-kind="stronger"] {
+  --feedback-color: var(--em-tender);
+  --feedback-soft: var(--em-tender-soft);
+}
+
+.follow-up-feeling-feedback[data-kind="different"] {
+  --feedback-color: var(--em-focused);
+  --feedback-soft: var(--em-focused-soft);
+}
+
+.follow-up-feeling-feedback[data-kind="same"] {
+  --feedback-color: var(--em-calm);
+  --feedback-soft: var(--em-calm-soft);
+}
+
+.follow-up-feeling-feedback[data-kind="skip"] {
+  --feedback-color: var(--em-restless);
+  --feedback-soft: var(--em-restless-soft);
+}
+
+.follow-up-feedback__halo,
+.follow-up-feedback__shape,
+.follow-up-feedback__part {
+  position: absolute;
+}
+
+.follow-up-feedback__halo {
+  inset: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  opacity: 0;
+  animation: follow-up-halo-release 1950ms var(--em-ease-out) forwards;
+}
+
+.follow-up-feedback__shape {
+  inset: 0;
+}
+
+.follow-up-feeling-feedback[data-kind="lighter"] .follow-up-feedback__part,
+.follow-up-feeling-feedback[data-kind="same"] .follow-up-feedback__part {
+  inset: 20px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.follow-up-feeling-feedback[data-kind="lighter"] .follow-up-feedback__part {
+  animation: follow-up-ring-release 1800ms var(--em-ease-out) forwards;
+}
+
+.follow-up-feeling-feedback[data-kind="lighter"] .follow-up-feedback__part:nth-child(2) {
+  animation-delay: 130ms;
+}
+
+.follow-up-feeling-feedback[data-kind="stronger"] .follow-up-feedback__part {
+  inset: 20px;
+  border-radius: 50%;
+  background: var(--feedback-soft);
+  opacity: 0;
+  animation: follow-up-soft-pulse 1840ms ease-out forwards;
+}
+
+.follow-up-feeling-feedback[data-kind="stronger"] .follow-up-feedback__part:nth-child(2) {
+  inset: 29px;
+  background: currentColor;
+  animation-delay: 110ms;
+}
+
+.follow-up-feeling-feedback[data-kind="different"] .follow-up-feedback__part {
+  top: calc(50% - 2px);
+  left: 50%;
+  width: 24px;
+  height: 4px;
+  border-radius: 4px;
+  background: currentColor;
+  opacity: 0;
+  transform-origin: 0 50%;
+  animation: follow-up-petal-release 1900ms var(--em-ease-out) forwards;
+}
+
+.follow-up-feeling-feedback[data-kind="same"] .follow-up-feedback__part {
+  animation: follow-up-calm-breathe 1880ms ease-in-out forwards;
+}
+
+.follow-up-feeling-feedback[data-kind="same"] .follow-up-feedback__part:nth-child(2) {
+  inset: 27px;
+  border-color: var(--feedback-soft);
+  animation-delay: 80ms;
+}
+
+.follow-up-feeling-feedback[data-kind="skip"] .follow-up-feedback__part {
+  top: calc(50% - 2px);
+  left: calc(50% - 12px);
+  width: 24px;
+  height: 4px;
+  border-radius: 4px;
+  background: currentColor;
+  opacity: 0;
+  animation: follow-up-gentle-turn 1860ms ease-in-out forwards;
+}
+
+.follow-up-feeling-feedback[data-kind="skip"] .follow-up-feedback__part:nth-child(2) {
+  background: var(--feedback-soft);
+  animation-delay: 90ms;
+}
+
+@keyframes follow-up-halo-release {
+  0% {
+    opacity: 0;
+    transform: scale(0.62);
+  }
+  28% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.38);
+  }
+}
+
+@keyframes follow-up-ring-release {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  30% {
+    opacity: 0.78;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.42);
+  }
+}
+
+@keyframes follow-up-soft-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  34% {
+    opacity: 0.62;
+    transform: scale(1.08);
+  }
+  70% {
+    opacity: 0.34;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes follow-up-petal-release {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--feedback-part-angle)) translateX(3px) scaleX(0.3);
+  }
+  30% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--feedback-part-angle)) translateX(26px) scaleX(0.82);
+  }
+}
+
+@keyframes follow-up-calm-breathe {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  38% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+  65% {
+    opacity: 0.42;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes follow-up-gentle-turn {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--feedback-part-angle)) scaleX(0.5);
+  }
+  35% {
+    opacity: 0.62;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(calc(var(--feedback-part-angle) + 150deg)) scaleX(0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .follow-up-feeling-feedback {
+    animation: follow-up-feedback-reduced 180ms ease-out forwards;
+  }
+
+  .follow-up-feedback__halo,
+  .follow-up-feedback__part {
+    animation: none !important;
+    opacity: 0.38;
+  }
+}
+
+@keyframes follow-up-feedback-reduced {
+  from { opacity: 0.7; }
+  to { opacity: 0; }
+}

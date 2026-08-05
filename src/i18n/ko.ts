@@ -175,7 +175,6 @@ export const koCopy: AppCopy = {
     noFollowUpTitle: '예정된 후속 확인이 없습니다',
     noFollowUpBody: '동의한 후속 확인은 예정 시간이 지나면 여기에 표시됩니다.',
     followUpSaved: '이번 후속 확인을 저장했습니다',
-    positiveCelebration: '이번에 가벼워진 변화를 기록했어요.',
   },
   note: {
     recordLabel: '별 기록',

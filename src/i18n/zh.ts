@@ -173,7 +173,6 @@ export const zhCopy = {
     noFollowUpTitle: '暂时没有待处理回访',
     noFollowUpBody: '到期且获得同意的回访会出现在这里。',
     followUpSaved: '已保存这次回访',
-    positiveCelebration: '已经记下这次轻了一些。',
   },
   note: {
     recordLabel: '星星记录',

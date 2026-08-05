@@ -610,9 +610,14 @@ test('add, complete, reopen, revisit, persist, and permanently delete', async ({
   await expect(followUpOptions).toHaveCount(5);
   await expect(followUpOptions).toHaveText(['轻了', '更强', '变了', '一样', '跳过']);
   await page.getByRole('button', { name: '轻了' }).click();
+  const feelingFeedback = page.locator(
+    '.follow-up-feeling-feedback[data-kind="lighter"]',
+  );
+  await expect(feelingFeedback).toBeVisible();
   await expect(page.locator('.positive-confetti')).toHaveCount(0);
   await expect(page.getByText('已保存这次回访')).toBeVisible();
   await expect(page.locator('.message-options')).toHaveCount(0);
+  await expect(feelingFeedback).toHaveCount(0, { timeout: 3_000 });
   await page.getByRole('button', { name: '记录现在的感受' }).click();
   await expect(
     page.getByRole('dialog', { name: /现在想起/ }),
