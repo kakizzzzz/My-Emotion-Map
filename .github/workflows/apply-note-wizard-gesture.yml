@@ -1,0 +1,332 @@
+name: Apply note wizard gestures
+
+on:
+  push:
+    branches:
+      - agent/note-wizard-swipe-wheel
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Patch wizard interaction and regression coverage
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(source: str, old: str, new: str, label: str) -> str:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 occurrence, found {count}')
+              return source.replace(old, new, 1)
+
+          note_path = Path('src/features/notes/NoteEditorSheet.tsx')
+          note = note_path.read_text(encoding='utf-8')
+          note = replace_once(
+              note,
+              "import { useDialogFocus } from '../../app/useDialogFocus';\n",
+              "import { useDialogFocus } from '../../app/useDialogFocus';\n"
+              "import { useNoteWizardGestures } from './useNoteWizardGestures';\n",
+              'gesture hook import',
+          )
+          note = replace_once(
+              note,
+              "  const goToPromptStep = () => {\n"
+              "    questionsTouchedRef.current = true;\n"
+              "    setHighestStep((current) => Math.max(current, 2));\n"
+              "    setCurrentStep(2);\n"
+              "  };\n\n"
+              "  const advancePrompt = () => {",
+              "  const goToPromptStep = () => {\n"
+              "    questionsTouchedRef.current = true;\n"
+              "    setHighestStep((current) => Math.max(current, 2));\n"
+              "    setCurrentStep(2);\n"
+              "  };\n"
+              "  const navigateWizard = (direction: -1 | 1) => {\n"
+              "    const nextStep = Math.max(0, Math.min(2, currentStep + direction));\n"
+              "    if (nextStep === currentStep) return false;\n"
+              "    if (nextStep === 2 && direction > 0) {\n"
+              "      goToPromptStep();\n"
+              "      return true;\n"
+              "    }\n"
+              "    if (nextStep > currentStep) {\n"
+              "      setHighestStep((current) => Math.max(current, nextStep));\n"
+              "    }\n"
+              "    setCurrentStep(nextStep);\n"
+              "    return true;\n"
+              "  };\n"
+              "  const wizardGestureHandlers = useNoteWizardGestures(navigateWizard);\n\n"
+              "  const advancePrompt = () => {",
+              'wizard navigation',
+          )
+          note = replace_once(
+              note,
+              '        <div className="note-editor-scroll note-wizard-viewport">',
+              '        <div\n'
+              '          className="note-editor-scroll note-wizard-viewport"\n'
+              '          {...wizardGestureHandlers}\n'
+              '        >',
+              'wizard viewport handlers',
+          )
+          note = replace_once(
+              note,
+              "                <div className=\"wizard-step-actions\">\n"
+              "                  <button\n"
+              "                    className=\"wizard-arrow-button\"\n"
+              "                    onClick={() => goToStep(0)}\n"
+              "                    aria-label={copy.note.backToEmotionStep}\n"
+              "                  >\n"
+              "                    <ChevronLeft size={22} strokeWidth={2.2} />\n"
+              "                  </button>\n"
+              "                  <button\n"
+              "                    className={`follow-up-toggle ${followUp ? 'is-active' : ''}`}\n"
+              "                    onClick={() => setFollowUp((current) => !current)}\n"
+              "                  >\n"
+              "                    <strong>{copy.note.followUpConsent}</strong>\n"
+              "                    <i>\n"
+              "                      {followUp ? <Check size={11} strokeWidth={2.5} /> : null}\n"
+              "                    </i>\n"
+              "                  </button>\n"
+              "                  <button\n"
+              "                    className=\"wizard-arrow-button is-primary\"\n"
+              "                    onClick={goToPromptStep}\n"
+              "                    aria-label={copy.note.continueToQuestions}\n"
+              "                  >\n"
+              "                    <ChevronRight size={22} strokeWidth={2.2} />\n"
+              "                  </button>\n"
+              "                </div>",
+              "                <div className=\"wizard-step-actions\">\n"
+              "                  <button\n"
+              "                    className={`follow-up-toggle ${followUp ? 'is-active' : ''}`}\n"
+              "                    onClick={() => setFollowUp((current) => !current)}\n"
+              "                  >\n"
+              "                    <strong>{copy.note.followUpConsent}</strong>\n"
+              "                    <i>\n"
+              "                      {followUp ? <Check size={11} strokeWidth={2.5} /> : null}\n"
+              "                    </i>\n"
+              "                  </button>\n"
+              "                </div>",
+              'remove page arrows',
+          )
+          note_path.write_text(note, encoding='utf-8')
+
+          shell_path = Path('src/styles/notes-shell.css')
+          shell = shell_path.read_text(encoding='utf-8')
+          shell = replace_once(
+              shell,
+              ".note-wizard-viewport {\n  overflow: hidden;\n  padding: 0;\n}",
+              ".note-wizard-viewport {\n"
+              "  overflow: hidden;\n"
+              "  overscroll-behavior-x: contain;\n"
+              "  padding: 0;\n"
+              "  touch-action: pan-y;\n"
+              "}",
+              'wizard touch action',
+          )
+          shell_path.write_text(shell, encoding='utf-8')
+
+          fields_path = Path('src/styles/notes-fields.css')
+          fields = fields_path.read_text(encoding='utf-8')
+          fields = replace_once(
+              fields,
+              ".place-rating-section .follow-up-toggle {\n  width: auto;",
+              ".place-rating-section .follow-up-toggle {\n"
+              "  width: auto;\n"
+              "  grid-column: 2;",
+              'center follow-up control',
+          )
+          fields_path.write_text(fields, encoding='utf-8')
+
+          component_path = Path('tests/components/coreFlows.test.tsx')
+          component = component_path.read_text(encoding='utf-8')
+          component = replace_once(
+              component,
+              "\nafterEach(() => {",
+              "\nconst dispatchWizardSwipe = (\n"
+              "  startTarget: Element,\n"
+              "  viewport: HTMLElement,\n"
+              "  direction: 'next' | 'previous',\n"
+              ") => {\n"
+              "  Object.defineProperty(viewport, 'clientWidth', {\n"
+              "    configurable: true,\n"
+              "    value: 360,\n"
+              "  });\n"
+              "  const startX = direction === 'next' ? 280 : 80;\n"
+              "  const endX = direction === 'next' ? 80 : 280;\n"
+              "  const pointer = {\n"
+              "    pointerId: 17,\n"
+              "    pointerType: 'touch',\n"
+              "    button: 0,\n"
+              "    clientY: 180,\n"
+              "  };\n"
+              "  fireEvent.pointerDown(startTarget, { ...pointer, clientX: startX });\n"
+              "  fireEvent.pointerMove(viewport, { ...pointer, clientX: endX });\n"
+              "  fireEvent.pointerUp(viewport, { ...pointer, clientX: endX });\n"
+              "};\n\n"
+              "const swipeWizard = (direction: 'next' | 'previous') => {\n"
+              "  const viewport = document.querySelector<HTMLElement>(\n"
+              "    '.note-wizard-viewport',\n"
+              "  );\n"
+              "  if (!viewport) throw new Error('Wizard viewport was not rendered.');\n"
+              "  dispatchWizardSwipe(viewport, viewport, direction);\n"
+              "};\n\n"
+              "afterEach(() => {",
+              'component swipe helper',
+          )
+          wait_block = (
+              "    await waitFor(() => {\n"
+              "      expect(\n"
+              "        screen.getByRole('button', { name: '继续到引导问题' }),\n"
+              "      ).toBeInTheDocument();\n"
+              "    });"
+          )
+          if component.count(wait_block) != 2:
+              raise SystemExit(
+                  f'component continue waits: expected 2, found {component.count(wait_block)}'
+              )
+          component = component.replace(
+              wait_block,
+              "    expect(\n"
+              "      screen.queryByRole('button', { name: '继续到引导问题' }),\n"
+              "    ).toBeNull();",
+          )
+          component = replace_once(
+              component,
+              "    await user.click(\n"
+              "      screen.getByRole('button', { name: '继续到引导问题' }),\n"
+              "    );",
+              "    swipeWizard('next');",
+              'first component continue gesture',
+          )
+          component = replace_once(
+              component,
+              "    await user.click(screen.getByRole('button', { name: '继续到引导问题' }));",
+              "    swipeWizard('next');",
+              'second component continue gesture',
+          )
+          component = replace_once(
+              component,
+              "\n  it('uses delete instead of a second skip control for optional questions', async () => {",
+              "\n  it('swipes from a star without converting the gesture into a click', () => {\n"
+              "    renderWithLanguage(\n"
+              "      <NoteEditorSheet\n"
+              "        moment={draftMoment}\n"
+              "        note={draftNote}\n"
+              "        onSave={() => undefined}\n"
+              "        onClose={() => undefined}\n"
+              "        onToast={() => undefined}\n"
+              "      />,\n"
+              "    );\n"
+              "    const viewport = document.querySelector<HTMLElement>(\n"
+              "      '.note-wizard-viewport',\n"
+              "    );\n"
+              "    if (!viewport) throw new Error('Wizard viewport was not rendered.');\n"
+              "    const calm = screen.getByRole('button', { name: '平静' });\n"
+              "    dispatchWizardSwipe(calm, viewport, 'next');\n"
+              "    fireEvent.click(calm);\n"
+              "    expect(\n"
+              "      screen.getByRole('heading', { name: '这个地方给你的感觉' }),\n"
+              "    ).toBeInTheDocument();\n"
+              "    expect(calm).not.toHaveClass('is-selected');\n"
+              "  });\n\n"
+              "  it('changes pages with a fine-pointer wheel gesture', () => {\n"
+              "    vi.stubGlobal('matchMedia', vi.fn(() => ({\n"
+              "      matches: true,\n"
+              "      media: '(hover: hover) and (pointer: fine)',\n"
+              "      onchange: null,\n"
+              "      addListener: vi.fn(),\n"
+              "      removeListener: vi.fn(),\n"
+              "      addEventListener: vi.fn(),\n"
+              "      removeEventListener: vi.fn(),\n"
+              "      dispatchEvent: vi.fn(),\n"
+              "    })));\n"
+              "    renderWithLanguage(\n"
+              "      <NoteEditorSheet\n"
+              "        moment={draftMoment}\n"
+              "        note={draftNote}\n"
+              "        onSave={() => undefined}\n"
+              "        onClose={() => undefined}\n"
+              "        onToast={() => undefined}\n"
+              "      />,\n"
+              "    );\n"
+              "    const viewport = document.querySelector<HTMLElement>(\n"
+              "      '.note-wizard-viewport',\n"
+              "    );\n"
+              "    if (!viewport) throw new Error('Wizard viewport was not rendered.');\n"
+              "    fireEvent.wheel(viewport, { deltaY: 80, deltaMode: 0 });\n"
+              "    expect(\n"
+              "      screen.getByRole('heading', { name: '这个地方给你的感觉' }),\n"
+              "    ).toBeInTheDocument();\n"
+              "  });\n\n"
+              "  it('uses delete instead of a second skip control for optional questions', async () => {",
+              'gesture regression tests',
+          )
+          component_path.write_text(component, encoding='utf-8')
+
+          e2e_path = Path('tests/e2e/ui-flows.spec.ts')
+          e2e = e2e_path.read_text(encoding='utf-8')
+          e2e = replace_once(
+              e2e,
+              "\nasync function completeEditor(page: Page, title: string) {",
+              "\nasync function swipeNoteWizard(\n"
+              "  page: Page,\n"
+              "  direction: 'next' | 'previous',\n"
+              ") {\n"
+              "  const viewport = page.locator('.note-wizard-viewport');\n"
+              "  const box = await viewport.boundingBox();\n"
+              "  if (!box) throw new Error('Wizard viewport is not visible.');\n"
+              "  const startX = direction === 'next'\n"
+              "    ? box.x + box.width * 0.78\n"
+              "    : box.x + box.width * 0.22;\n"
+              "  const endX = direction === 'next'\n"
+              "    ? box.x + box.width * 0.22\n"
+              "    : box.x + box.width * 0.78;\n"
+              "  const event = {\n"
+              "    pointerId: 31,\n"
+              "    pointerType: 'touch',\n"
+              "    button: 0,\n"
+              "    clientY: box.y + Math.min(220, box.height * 0.45),\n"
+              "  };\n"
+              "  await viewport.dispatchEvent('pointerdown', { ...event, clientX: startX });\n"
+              "  await viewport.dispatchEvent('pointermove', { ...event, clientX: endX });\n"
+              "  await viewport.dispatchEvent('pointerup', { ...event, clientX: endX });\n"
+              "}\n\n"
+              "async function completeEditor(page: Page, title: string) {",
+              'e2e swipe helper',
+          )
+          continue_click = (
+              "  await page.getByRole('button', { name: '继续到引导问题' }).click();"
+          )
+          if e2e.count(continue_click) != 2:
+              raise SystemExit(
+                  f'e2e continue controls: expected 2, found {e2e.count(continue_click)}'
+              )
+          e2e = e2e.replace(continue_click, "  await swipeNoteWizard(page, 'next');")
+          e2e_path.write_text(e2e, encoding='utf-8')
+          PY
+          rm .github/workflows/apply-note-wizard-gesture.yml
+
+      - name: Commit gesture navigation
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/features/notes/NoteEditorSheet.tsx \
+            src/features/notes/useNoteWizardGestures.ts \
+            src/styles/notes-shell.css \
+            src/styles/notes-fields.css \
+            tests/components/coreFlows.test.tsx \
+            tests/e2e/ui-flows.spec.ts \
+            .github/workflows/apply-note-wizard-gesture.yml
+          git commit -m 'add note wizard swipe and wheel navigation'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
