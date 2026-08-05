@@ -1,4 +1,9 @@
-import { useRef } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { Layer, Marker, Source } from 'react-map-gl/maplibre';
 import { motion } from 'motion/react';
 import { EmotionStar } from '../../EmotionStar';
@@ -12,26 +17,90 @@ import type { UserLocation } from '../../useLocationController';
 import type { CoordinatePair } from './coordinateTransforms';
 import { MAP_STYLES } from './mapPreferences';
 
+const STAR_TOUCH_TOLERANCE = 16;
+const NATIVE_CLICK_SUPPRESSION_MS = 700;
+
 function SavedMomentMarker({
   moment,
   selected,
   isTagging,
   onSelectMoment,
+  onDragStart,
+  onMoveMoment,
 }: {
   moment: EmotionMoment;
   selected: boolean;
   isTagging: boolean;
   onSelectMoment: (momentId: string) => void;
+  onDragStart: (momentId: string) => void;
+  onMoveMoment: (momentId: string, latitude: number, longitude: number) => void;
 }) {
   const { copy, language } = useAppLanguage();
   const touchRef = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
   const suppressClickUntilRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const onSelectMomentRef = useRef(onSelectMoment);
+  const [markerPosition, setMarkerPosition] = useState({
+    latitude: moment.latitude,
+    longitude: moment.longitude,
+  });
+
+  useEffect(() => {
+    onSelectMomentRef.current = onSelectMoment;
+  }, [onSelectMoment]);
+
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    setMarkerPosition({
+      latitude: moment.latitude,
+      longitude: moment.longitude,
+    });
+  }, [moment.latitude, moment.longitude]);
+
+  const releasePointerCapture = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   return (
     <Marker
-      longitude={moment.longitude}
-      latitude={moment.latitude}
+      longitude={markerPosition.longitude}
+      latitude={markerPosition.latitude}
       anchor="center"
+      draggable={!isTagging}
+      clickTolerance={STAR_TOUCH_TOLERANCE}
+      onClick={(event) => {
+        event.originalEvent.stopPropagation();
+        if (performance.now() < suppressClickUntilRef.current) return;
+        onSelectMomentRef.current(moment.id);
+      }}
+      onDragStart={() => {
+        isDraggingRef.current = true;
+        if (touchRef.current) touchRef.current.moved = true;
+        suppressClickUntilRef.current =
+          performance.now() + NATIVE_CLICK_SUPPRESSION_MS;
+        onDragStart(moment.id);
+      }}
+      onDrag={(event) => {
+        setMarkerPosition({
+          latitude: event.lngLat.lat,
+          longitude: event.lngLat.lng,
+        });
+      }}
+      onDragEnd={(event) => {
+        const next = {
+          latitude: event.lngLat.lat,
+          longitude: event.lngLat.lng,
+        };
+        setMarkerPosition(next);
+        isDraggingRef.current = false;
+        suppressClickUntilRef.current =
+          performance.now() + NATIVE_CLICK_SUPPRESSION_MS;
+        onMoveMoment(moment.id, next.latitude, next.longitude);
+      }}
     >
       <div className="map-star-anchor" data-moment-id={moment.id}>
         <motion.button
@@ -40,11 +109,6 @@ function SavedMomentMarker({
           animate={{ opacity: 1, scale: 1 }}
           whileTap={{ scale: 0.94 }}
           transition={moment.isNew ? MOTION.placement : MOTION.press}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (performance.now() < suppressClickUntilRef.current) return;
-            onSelectMoment(moment.id);
-          }}
           onPointerDown={(event) => {
             if (event.pointerType === 'mouse' || !event.isPrimary) return;
             touchRef.current = {
@@ -53,12 +117,14 @@ function SavedMomentMarker({
               y: event.clientY,
               moved: false,
             };
-            if (isTagging) event.currentTarget.setPointerCapture(event.pointerId);
+            event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerMove={(event) => {
             const touch = touchRef.current;
             if (!touch || touch.id !== event.pointerId) return;
-            if (Math.hypot(event.clientX - touch.x, event.clientY - touch.y) >= 16) {
+            const movement = Math.abs(event.clientX - touch.x) +
+              Math.abs(event.clientY - touch.y);
+            if (movement >= STAR_TOUCH_TOLERANCE) {
               touch.moved = true;
             }
           }}
@@ -66,20 +132,21 @@ function SavedMomentMarker({
             const touch = touchRef.current;
             if (!touch || touch.id !== event.pointerId) return;
             touchRef.current = null;
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              event.currentTarget.releasePointerCapture(event.pointerId);
-            }
-            suppressClickUntilRef.current = performance.now() + 700;
-            if (!touch.moved) {
+            releasePointerCapture(event);
+            const shouldSelect = !touch.moved && !isDraggingRef.current &&
+              performance.now() >= suppressClickUntilRef.current;
+            suppressClickUntilRef.current =
+              performance.now() + NATIVE_CLICK_SUPPRESSION_MS;
+            if (shouldSelect) {
               event.stopPropagation();
-              onSelectMoment(moment.id);
+              queueMicrotask(() => onSelectMomentRef.current(moment.id));
             }
           }}
           onPointerCancel={(event) => {
             touchRef.current = null;
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              event.currentTarget.releasePointerCapture(event.pointerId);
-            }
+            releasePointerCapture(event);
+            suppressClickUntilRef.current =
+              performance.now() + NATIVE_CLICK_SUPPRESSION_MS;
           }}
           aria-label={
             moment.isNew
@@ -109,6 +176,8 @@ export function MapMarkers({
   userLocation,
   starDragPreview,
   onSelectMoment,
+  onMomentDragStart,
+  onMoveMoment,
 }: {
   moments: EmotionMoment[];
   selectedId: string | null;
@@ -118,6 +187,8 @@ export function MapMarkers({
   userLocation: UserLocation | null;
   starDragPreview: CoordinatePair | null;
   onSelectMoment: (momentId: string) => void;
+  onMomentDragStart: (momentId: string) => void;
+  onMoveMoment: (momentId: string, latitude: number, longitude: number) => void;
 }) {
   const { copy } = useAppLanguage();
 
@@ -185,6 +256,8 @@ export function MapMarkers({
           selected={selectedId === moment.id}
           isTagging={isTagging}
           onSelectMoment={onSelectMoment}
+          onDragStart={onMomentDragStart}
+          onMoveMoment={onMoveMoment}
         />
       ))}
     </>

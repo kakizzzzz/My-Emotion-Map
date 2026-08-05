@@ -135,27 +135,59 @@ async function dragNewStarToMap(
   const box = await star.boundingBox();
   if (!box) throw new Error('Star tool is not visible');
   const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  await star.dispatchEvent('pointerdown', {
-    pointerId: 1,
-    pointerType: 'mouse',
-    isPrimary: true,
-    button: 0,
-    buttons: 1,
-    clientX: start.x,
-    clientY: start.y,
-  });
-  await page.evaluate(({ x, y }) => {
-    window.dispatchEvent(new PointerEvent('pointermove', {
-      pointerId: 1, pointerType: 'mouse', isPrimary: true,
-      buttons: 1, clientX: x, clientY: y,
-    }));
-    window.dispatchEvent(new PointerEvent('pointerup', {
-      pointerId: 1, pointerType: 'mouse', isPrimary: true,
-      button: 0, clientX: x, clientY: y,
-    }));
-  }, target);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 8 });
+  await page.mouse.up();
   await expect(page.getByRole('dialog', { name: '给这一刻起个名字' })).toHaveCount(0);
   await expect(page.locator('.map-star-button')).toHaveCount(expectedCount);
+}
+
+async function dispatchTouchDrag(
+  page: Page,
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+) {
+  const session = await page.context().newCDPSession(page);
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ ...start, id: 1, radiusX: 6, radiusY: 6, force: 1 }],
+  });
+  for (let step = 1; step <= 8; step += 1) {
+    const progress = step / 8;
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{
+        x: start.x + (end.x - start.x) * progress,
+        y: start.y + (end.y - start.y) * progress,
+        id: 1,
+        radiusX: 6,
+        radiusY: 6,
+        force: 1,
+      }],
+    });
+  }
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+  });
+  await session.detach();
+}
+
+async function dispatchTouchTap(
+  page: Page,
+  point: { x: number; y: number },
+) {
+  const session = await page.context().newCDPSession(page);
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ ...point, id: 1, radiusX: 6, radiusY: 6, force: 1 }],
+  });
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+  });
+  await session.detach();
 }
 
 async function completeEditor(page: Page, title: string) {
@@ -249,6 +281,55 @@ test('adding at the current location creates the star without opening the editor
       ? [snapshot.moments[0].latitude, snapshot.moments[0].longitude]
       : null;
   }, STORAGE_KEY)).toEqual([37.558, 127]);
+});
+
+test('touch can drag a saved star and a later tap still selects it', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'CDP touch input is Chromium-only.');
+  await startBlank(page);
+  await dragNewStarToMap(page);
+
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.moments?.length ?? 0;
+  }, STORAGE_KEY)).toBe(1);
+  const coordinatesBeforeDrag = await page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return {
+      latitude: snapshot.moments[0].latitude,
+      longitude: snapshot.moments[0].longitude,
+    };
+  }, STORAGE_KEY);
+  expect(coordinatesBeforeDrag).not.toBeNull();
+
+  const marker = page.locator('.map-star-button').first();
+  const box = await marker.boundingBox();
+  if (!box) throw new Error('Saved star is not visible');
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await dispatchTouchDrag(page, start, { x: start.x + 56, y: start.y + 30 });
+
+  await expect(page.locator('.star-action-overlay')).toHaveCount(0);
+  await expect.poll(() => page.evaluate((storageKey) => {
+    const snapshot = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
+    return snapshot.moments?.[0]
+      ? {
+          latitude: snapshot.moments[0].latitude,
+          longitude: snapshot.moments[0].longitude,
+        }
+      : null;
+  }, STORAGE_KEY)).not.toEqual(coordinatesBeforeDrag);
+
+  await page.waitForTimeout(750);
+  const movedBox = await marker.boundingBox();
+  if (!movedBox) throw new Error('Moved star is not visible');
+  const tap = {
+    x: movedBox.x + movedBox.width / 2,
+    y: movedBox.y + movedBox.height / 2,
+  };
+  await dispatchTouchTap(page, tap);
+  await expect(page.locator('.star-action-overlay')).toBeVisible();
 });
 
 test('authenticated identity opens an empty real workspace', async ({

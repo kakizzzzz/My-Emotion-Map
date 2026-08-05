@@ -95,9 +95,6 @@ export function MapScreen({
   };
   const starActionOverlayRef = useRef<HTMLDivElement | null>(null);
   const starNavigationOverlayRef = useRef<HTMLDivElement | null>(null);
-  const skipNextMapClickRef = useRef(false);
-  const draggedMomentIdRef = useRef<string | null>(null);
-  const momentPointerPressedRef = useRef(false);
   const handledLocationRequestRef = useRef(0);
   const cloudUserIdRef = useRef(cloudAuth?.userId ?? '');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -243,91 +240,6 @@ export function MapScreen({
 
     return () => window.cancelAnimationFrame(frame);
   }, [focusMomentId, mapRef, moments, moveMapTo, setFocusMomentId]);
-
-  useEffect(() => {
-    let cleanupDrag: (() => void) | null = null;
-    const getMomentId = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return null;
-      const anchor =
-        target.closest<HTMLElement>('.map-star-anchor') ??
-        target
-          .closest('.maplibregl-marker')
-          ?.querySelector<HTMLElement>('.map-star-anchor');
-      return anchor?.dataset.momentId ?? null;
-    };
-    const begin = (event: MouseEvent) => {
-      const momentId = getMomentId(event.target);
-      if (!momentId || tagMode || event.button !== 0 || momentPointerPressedRef.current) {
-        return;
-      }
-      momentPointerPressedRef.current = true;
-      event.stopPropagation();
-      const start = { x: event.clientX, y: event.clientY };
-      let moved = false;
-      const move = (moveEvent: Event) => {
-        if (!(moveEvent instanceof MouseEvent)) return;
-        const distance = Math.hypot(
-          moveEvent.clientX - start.x,
-          moveEvent.clientY - start.y,
-        );
-        if (distance < 4 && !moved) return;
-        moveEvent.preventDefault();
-        if (!moved) {
-          moved = true;
-          draggedMomentIdRef.current = momentId;
-          setSelectedId(null);
-          setActiveTag(null);
-        }
-        const map = mapRef.current;
-        if (!map) return;
-        const bounds = map.getContainer().getBoundingClientRect();
-        const coordinate = map.unproject([
-          moveEvent.clientX - bounds.left,
-          moveEvent.clientY - bounds.top,
-        ]);
-        setMoments((current) =>
-          current.map((moment) =>
-            moment.id === momentId
-              ? {
-                  ...moment,
-                  latitude: coordinate.lat,
-                  longitude: coordinate.lng,
-                }
-              : moment,
-          ),
-        );
-      };
-      const cleanup = () => {
-        momentPointerPressedRef.current = false;
-        window.removeEventListener('pointermove', move, true);
-        window.removeEventListener('mousemove', move, true);
-        window.removeEventListener('pointerup', cleanup, true);
-        window.removeEventListener('mouseup', cleanup, true);
-        window.removeEventListener('pointercancel', cleanup, true);
-        cleanupDrag = null;
-      };
-      cleanupDrag?.();
-      window.addEventListener('pointermove', move, {
-        capture: true,
-        passive: false,
-      });
-      window.addEventListener('mousemove', move, {
-        capture: true,
-        passive: false,
-      });
-      window.addEventListener('pointerup', cleanup, true);
-      window.addEventListener('mouseup', cleanup, true);
-      window.addEventListener('pointercancel', cleanup, true);
-      cleanupDrag = cleanup;
-    };
-    window.addEventListener('pointerdown', begin, true);
-    window.addEventListener('mousedown', begin, true);
-    return () => {
-      window.removeEventListener('pointerdown', begin, true);
-      window.removeEventListener('mousedown', begin, true);
-      cleanupDrag?.();
-    };
-  }, [mapRef, setMoments, tagMode]);
 
   const tagLine = useMemo(() => {
     const groups = new Map<number, EmotionMoment[]>();
@@ -762,7 +674,25 @@ export function MapScreen({
   };
 
   return (
-    <section className={`map-screen theme-${mapStyle}`} aria-label={copy.map.label}>
+    <section
+      className={`map-screen theme-${mapStyle}`}
+      aria-label={copy.map.label}
+      onPointerDownCapture={(event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        const target = event.target;
+        if (!(target instanceof Element) ||
+          !target.closest('.maplibregl-map') ||
+          target.closest(
+            'button, [role="button"], .map-star-anchor, .star-action-overlay, .star-navigation-overlay, .maplibregl-ctrl',
+          )) return;
+        mapRef.current?.stop();
+        setSelectedId(null);
+        setActiveTag(null);
+        setActiveStarTab(null);
+        setCustomPickerOpen(false);
+        setMapChooserOpen(false);
+      }}
+    >
       <MapGL
         key={`${workspaceKey}:${mapReloadKey}`}
         ref={mapRef}
@@ -789,16 +719,6 @@ export function MapScreen({
             zoom: event.viewState.zoom,
           })
         }
-        onClick={(event) => {
-          if (skipNextMapClickRef.current) {
-            skipNextMapClickRef.current = false;
-            return;
-          }
-          const clickTarget = event.originalEvent.target;
-          if (clickTarget instanceof Element && clickTarget.closest('.map-star-anchor')) return;
-          setSelectedId(null);
-          setActiveTag(null);
-        }}
       >
         <MapMarkers
           moments={moments}
@@ -808,16 +728,23 @@ export function MapScreen({
           isTagging={Boolean(tagMode)}
           userLocation={userLocation}
           starDragPreview={starDragPreview}
-          onSelectMoment={(momentId) => {
-            if (draggedMomentIdRef.current === momentId) {
-              draggedMomentIdRef.current = null;
-              return;
-            }
-            skipNextMapClickRef.current = true;
-            window.setTimeout(() => {
-              skipNextMapClickRef.current = false;
-            }, 80);
-            selectStar(momentId);
+          onSelectMoment={selectStar}
+          onMomentDragStart={() => {
+            mapRef.current?.stop();
+            setSelectedId(null);
+            setActiveTag(null);
+            setActiveStarTab(null);
+            setCustomPickerOpen(false);
+            setMapChooserOpen(false);
+          }}
+          onMoveMoment={(momentId, latitude, longitude) => {
+            setMoments((current) =>
+              current.map((moment) =>
+                moment.id === momentId
+                  ? { ...moment, latitude, longitude }
+                  : moment,
+              ),
+            );
           }}
         />
       </MapGL>
