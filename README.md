@@ -6,9 +6,9 @@
 
 [Live demo](https://kakizzzzz.github.io/My-Emotion-Map/) · [Devpost](https://devpost.com/software/my-emotion-map) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md)
 
-<img src="docs/readme/hero.svg" alt="My Emotion Map product overview showing eight mobile screens" width="100%" />
-
 </div>
+
+![My Emotion Map product overview showing eight mobile screens](docs/readme/hero.webp)
 
 ## A quieter way to understand emotional patterns
 
@@ -18,14 +18,14 @@ There are no streaks, positivity scores, forced completion, or penalties for int
 
 ## Product flow
 
-<img src="docs/readme/product-flow.svg" alt="Product flow across the map, calendar, saved moments, Star Inbox, AI follow-up, and settings" width="100%" />
+![Product flow across the map, calendar, saved moments, Star Inbox, AI follow-up, and settings](docs/readme/product-flow.webp)
 
-- **Discover** · Place a star directly on the map, enter coordinates, or import GPS and capture information from a photo.
-- **Record** · Type, use voice input, add context, or skip anything the user does not want to provide.
-- **Review** · Return to past moments through both the map and calendar.
-- **Revisit** · Schedule a future check-in or receive an optional reminder when returning near an older star.
-- **Reflect** · Use grounded AI to compare past and present records without diagnosis or invented certainty.
-- **Control** · Manage appearance, AI preferences, data access, and optional MCP connections inside the application.
+- **Discover:** Place a star directly on the map, enter coordinates, or import GPS and capture information from a photo.
+- **Record:** Type, use voice input, add context, or skip anything the user does not want to provide.
+- **Review:** Return to past moments through both the map and calendar.
+- **Revisit:** Schedule a future check-in or receive an optional reminder when returning near an older star.
+- **Reflect:** Use grounded AI to compare past and present records without diagnosis or invented certainty.
+- **Control:** Manage appearance, AI preferences, data access, and optional MCP connections inside the application.
 
 ## Designed without pressure
 
@@ -85,8 +85,8 @@ npm run check:all
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) · state and module ownership
-- [Security](docs/SECURITY.md) · secrets, RLS, synchronization, and AI grounding
-- [Emotion Map MCP](docs/EMOTION_MAP_MCP.md) · read-only external access and confirmed actions
-- [My Life Memory connection](docs/MY_LIFE_MEMORY_CONNECTION.md) · fixed read-only input connection
-- [Map data and licenses](docs/MAP_DATA_LICENSES.md) · map sources and attribution
+- [Architecture](docs/ARCHITECTURE.md): state and module ownership
+- [Security](docs/SECURITY.md): secrets, RLS, synchronization, and AI grounding
+- [Emotion Map MCP](docs/EMOTION_MAP_MCP.md): read-only external access and confirmed actions
+- [My Life Memory connection](docs/MY_LIFE_MEMORY_CONNECTION.md): fixed read-only input connection
+- [Map data and licenses](docs/MAP_DATA_LICENSES.md): map sources and attribution
