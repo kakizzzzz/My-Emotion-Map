@@ -1,67 +1,59 @@
-<div align="center">
-
 # My Emotion Map
 
-**A minimalist emotion map for neurodivergent minds, powered by AI.**
+My Emotion Map is a local-first web application for recording emotional moments together with places, dates, notes, and images. It provides map and calendar views, scheduled follow-ups, AI-assisted reflection, and optional MCP access.
 
-[Live demo](https://kakizzzzz.github.io/My-Emotion-Map/) · [Devpost](https://devpost.com/software/my-emotion-map) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md)
+[Live demo](https://kakizzzzz.github.io/My-Emotion-Map/) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md)
 
-</div>
+## Features
 
-![My Emotion Map product overview showing eight mobile screens](docs/readme/hero.webp)
+- Place stars directly on the map, enter coordinates, or import GPS and capture information from a photo.
+- Create short or detailed records with typed or voice input.
+- Review records through map and calendar views.
+- Schedule future follow-ups for saved records.
+- Store additional follow-up messages in the Star Inbox while keeping one active conversation at a time.
+- Compare past and present records through AI-assisted conversations.
+- Configure language, appearance, AI preferences, and data access.
+- Connect external MCP-compatible tools through optional, permission-controlled access.
 
-## A quieter way to understand emotional patterns
+## Data behavior
 
-My Emotion Map is a local-first tool for connecting feelings with places, dates, memories, and images. It brings discovery, recording, review, and reflection into one continuous experience without turning emotional awareness into another task to maintain.
+- Records may remain incomplete.
+- Unknown emotions are preserved as unknown.
+- Later reflections are stored separately from the original record.
+- Reminders are optional and can be ignored.
+- Local changes are synchronized through a revision-aware process.
+- Signed-in account data is isolated through Supabase Auth and row-level security.
 
-There are no streaks, positivity scores, forced completion, or penalties for interrupted use. A record can stay small. A feeling can remain unknown. A later reflection never overwrites the original moment.
+## AI and MCP behavior
 
-## Product flow
+AI responses are grounded in records authorized by the user. The system distinguishes between stored information, missing information, and model-generated interpretation. AI responses do not overwrite original records or store speculative conclusions as facts.
 
-![Product flow across the map, calendar, saved moments, Star Inbox, AI follow-up, and settings](docs/readme/product-flow.webp)
+The optional MCP interface is read-only by default. Operations that could modify application data create proposals that require confirmation inside My Emotion Map before they are applied.
 
-- **Discover:** Place a star directly on the map, enter coordinates, or import GPS and capture information from a photo.
-- **Record:** Type, use voice input, add context, or skip anything the user does not want to provide.
-- **Review:** Return to past moments through both the map and calendar.
-- **Revisit:** Schedule a future check-in or receive an optional reminder when returning near an older star.
-- **Reflect:** Use grounded AI to compare past and present records without diagnosis or invented certainty.
-- **Control:** Manage appearance, AI preferences, data access, and optional MCP connections inside the application.
-
-## Designed without pressure
-
-- No streaks or completion metrics
-- No rewards for so-called positive emotions
-- No punishment for interrupted use
-- Unknown emotions remain unknown
-- Original records remain separate from later reflections
-- Only one follow-up stays active; additional messages wait in the Star Inbox
-- Every reminder is optional and can be ignored
-
-## AI, with boundaries
-
-AI responses are grounded in records the user has authorized. The system distinguishes between known information, missing information, and speculation. It does not diagnose the user, rewrite the user’s original record, or silently store an interpretation as fact.
-
-The optional MCP interface is read-only by default. Any action that could modify data becomes a proposal and requires confirmation inside My Emotion Map before it can be applied.
-
-## Architecture at a glance
+## Architecture
 
 ```mermaid
 flowchart LR
-  UI[Map · Calendar · Inbox · Chat] --> LOCAL[Local-first app state]
-  LOCAL --> SYNC[Revision-aware sync]
+  UI[Map · Calendar · Inbox · Chat] --> LOCAL[Local-first application state]
+  LOCAL --> SYNC[Revision-aware synchronization]
   SYNC --> DB[(Supabase Postgres)]
-  AUTH[Supabase Auth + RLS] --> DB
+  AUTH[Supabase Auth and RLS] --> DB
   LOCAL --> EDGE[Supabase Edge Functions]
-  EDGE --> AI[Grounded AI]
-  MCP[MCP-compatible tools] --> ACCESS[Read-only access / confirmed proposals]
+  EDGE --> AI[Grounded AI services]
+  MCP[MCP-compatible tools] --> ACCESS[Read access and confirmed proposals]
   ACCESS --> DB
 ```
 
-Account data is isolated between signed-in users. Browser code contains only the public Supabase URL and publishable key; model credentials and service-role credentials stay in Edge Function secrets.
+Browser code contains only the public Supabase URL and publishable key. Model credentials and service-role credentials are stored in Edge Function secrets.
 
-## Built with
+## Technology
 
-React 19 · TypeScript · Vite · MapLibre GL · react-map-gl · Supabase Auth, Postgres, and Edge Functions · exifr · Motion · Lucide React · Vitest · Testing Library · Playwright · axe-core
+- React 19, TypeScript, and Vite
+- MapLibre GL and react-map-gl
+- Supabase Auth, Postgres, Storage, and Edge Functions
+- exifr for photo metadata extraction
+- Motion and Lucide React
+- Vitest, Testing Library, Playwright, and axe-core
 
 ## Run locally
 
@@ -81,12 +73,12 @@ npm run check
 npm run check:all
 ```
 
-`check` runs TypeScript, ESLint, unit and component tests, architecture checks, and the production build. `check:all` also runs the mobile Chromium and iPhone WebKit flows. CI repeats both groups.
+`check` runs TypeScript, ESLint, unit and component tests, architecture checks, and the production build. `check:all` also runs the mobile Chromium and iPhone WebKit flows.
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md): state and module ownership
 - [Security](docs/SECURITY.md): secrets, RLS, synchronization, and AI grounding
-- [Emotion Map MCP](docs/EMOTION_MAP_MCP.md): read-only external access and confirmed actions
-- [My Life Memory connection](docs/MY_LIFE_MEMORY_CONNECTION.md): fixed read-only input connection
+- [Emotion Map MCP](docs/EMOTION_MAP_MCP.md): external access and confirmed actions
+- [My Life Memory connection](docs/MY_LIFE_MEMORY_CONNECTION.md): optional read-only input connection
 - [Map data and licenses](docs/MAP_DATA_LICENSES.md): map sources and attribution
