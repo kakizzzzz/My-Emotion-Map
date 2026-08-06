@@ -2,6 +2,7 @@
 @import './styles/shell.css';
 @import './styles/auth.css';
 @import './styles/chrome.css';
+@import './styles/chat-badge.css';
 @import './styles/map.css';
 @import './styles/calendar.css';
 @import './styles/chat-shell.css';
