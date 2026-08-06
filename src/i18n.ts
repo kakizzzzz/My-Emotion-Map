@@ -60,7 +60,13 @@ export type AppCopy = CopyShape<typeof zhCopy>;
 
 export const APP_COPY: Record<AppLanguage, AppCopy> = {
   zh: zhCopy,
-  en: enCopy,
+  en: {
+    ...enCopy,
+    navigation: {
+      ...enCopy.navigation,
+      chat: 'Check-in Chats',
+    },
+  },
   ko: koCopy,
 };
 
