@@ -130,12 +130,23 @@ export function CloudSyncNotice({
       errorInfo?.kind === 'authorization' ||
       errorInfo?.kind === 'storage'
     ));
+  const chatIsOpen = typeof document !== 'undefined' &&
+    Boolean(document.querySelector('.chat-screen'));
+  const suppressRoutineChatSync =
+    chatIsOpen &&
+    isUserOperationSync &&
+    (status === 'checking' ||
+      status === 'local' ||
+      status === 'syncing' ||
+      status === 'synced');
   const visibleStatus =
-    !isUserOperationSync && !requiresAttention
+    suppressRoutineChatSync
       ? null
-      : status === 'synced' && !showSynced
+      : !isUserOperationSync && !requiresAttention
         ? null
-        : status;
+        : status === 'synced' && !showSynced
+          ? null
+          : status;
   const copy = COPY[language];
   const message =
     visibleStatus === 'checking'
