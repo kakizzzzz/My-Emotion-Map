@@ -1,12 +1,53 @@
-# My Emotion Map
-
-My Emotion Map is a local-first web application for recording emotional moments together with places, dates, notes, and images. It combines a map, calendar, follow-up system, grounded AI chat, private cloud synchronization, and optional MCP access.
-
-The application is designed so that a record does not need to be complete before it is useful. Emotions may remain unknown, reminders may be ignored, and later reflections are stored separately from the original record.
-
-[Live demo](https://kakizzzzz.github.io/My-Emotion-Map/) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md)
-
 ![My Emotion Map product overview showing the map, calendar, saved record, Star Inbox, AI chat, and settings](docs/screenshots/overview.webp)
+
+<div align="center">
+  <h1>My Emotion Map</h1>
+  <p>A local-first emotion map for recording, revisiting, and reflecting on emotional moments together with places, dates, notes, and images.</p>
+  <p><a href="https://kakizzzzz.github.io/My-Emotion-Map/"><strong>Live Demo</strong></a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/SECURITY.md">Security</a></p>
+</div>
+
+---
+
+## Screenshots
+
+The six views below follow the app's core journey: place emotional moments on the map, review them by date, preserve context, manage follow-ups, and reflect through grounded AI.
+
+<table>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/map.webp" alt="Emotion map with saved stars and map controls" width="160"><br><br>
+      <strong>Emotion map</strong><br>
+      <sub>Place, move, recolor, search, connect, and revisit emotional moments spatially.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/calendar.webp" alt="Calendar view of saved emotional moments" width="160"><br><br>
+      <strong>Emotion calendar</strong><br>
+      <sub>Review saved moments by their original local date.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/note-detail.webp" alt="Saved emotion record with note details and photo" width="160"><br><br>
+      <strong>Saved record</strong><br>
+      <sub>Keep place, emotion, answers, time, and an optional private image together.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/star-inbox.webp" alt="Star Inbox with queued follow-up reflection" width="160"><br><br>
+      <strong>Star Inbox</strong><br>
+      <sub>Keep due follow-ups available without turning reflection into a stream of interruptions.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/ai-chat.webp" alt="Grounded AI check-in conversation" width="160"><br><br>
+      <strong>Check-in Chats</strong><br>
+      <sub>Reflect on authorized records while keeping later reflections separate from the original moment.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/settings.webp" alt="Settings and account controls" width="160"><br><br>
+      <strong>Settings</strong><br>
+      <sub>Manage appearance, AI, follow-ups, data access, backup, and optional MCP connections.</sub>
+    </td>
+  </tr>
+</table>
 
 ## Core workflow
 
