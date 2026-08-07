@@ -1,24 +1,10 @@
 name: README transfer probe
 
 on:
-  push:
-    branches:
-      - readme-clean-fix
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  probe:
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Write probe marker
-        run: |
-          mkdir -p .readme-transfer
-          printf 'ok\n' > .readme-transfer/probe-ok.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .readme-transfer/probe-ok.txt
-          git commit -m 'temp: verify README asset transfer' || exit 0
-          git push
+      - run: echo disabled
