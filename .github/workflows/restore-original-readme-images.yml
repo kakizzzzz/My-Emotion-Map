@@ -1,0 +1,56 @@
+name: Restore original README images
+
+on:
+  push:
+    branches:
+      - fix/readme-original-quality
+    paths:
+      - .readme-restore/READY
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild original WebP files and verify hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/screenshots
+
+          restore() {
+            name="$1"
+            expected="$2"
+            cat .readme-restore/${name}.part*.b64 | tr -d '\n\r' | base64 -d > "docs/screenshots/${name}"
+            actual="$(git hash-object "docs/screenshots/${name}")"
+            if [ "$actual" != "$expected" ]; then
+              echo "Hash mismatch for ${name}: expected ${expected}, got ${actual}" >&2
+              exit 1
+            fi
+          }
+
+          restore overview.webp 8f9f364991c21bd7bbe148308a2c122e2cc4f8e3
+          restore calendar.webp 402a8c805d7b2574db44bc756c9616b86471ad8a
+          restore ai-chat.webp 5d1999d68978435afb583ce75c56df9e38e73355
+          restore settings.webp b25b796a9c73e881ea676f2523e15e0e1c665e86
+          restore note-detail.webp 39a2260aa1152c2dddb8cde25dcf87fa6bac5ab0
+          restore star-inbox.webp b0eecd3d28795a4984c551a0da4308490e19b0ff
+          restore map.webp 67dedbde4b685edeec66670df77a65addf20d74f
+
+      - name: Commit verified originals
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .readme-restore
+          rm -f .github/workflows/restore-original-readme-images.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: restore original README image quality"
+          git push origin HEAD:fix/readme-original-quality
