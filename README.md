@@ -6,6 +6,49 @@ The application is designed so that a record does not need to be complete before
 
 [Live demo](https://kakizzzzz.github.io/My-Emotion-Map/) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md)
 
+![My Emotion Map product overview showing the map, calendar, saved record, Star Inbox, AI chat, and settings](docs/screenshots/overview.webp)
+
+## Screenshots
+
+The six views below follow the app's core flow: place emotional moments on the map, record context, review moments by date, revisit saved records, manage follow-ups, and reflect through grounded AI.
+
+<table>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/map.webp" alt="Emotion map with saved stars and map controls" width="160"><br><br>
+      <strong>Emotion map</strong><br>
+      <sub>Place, move, recolor, search, and revisit emotional moments spatially.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/note-detail.webp" alt="Saved emotion record with note details and photo" width="160"><br><br>
+      <strong>Saved record</strong><br>
+      <sub>Keep place, emotion, answers, time, and an optional private image together.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/calendar.webp" alt="Calendar view of saved emotional moments" width="160"><br><br>
+      <strong>Calendar</strong><br>
+      <sub>Review saved moments by their stored local date.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/star-inbox.webp" alt="Star Inbox with queued follow-up reflection" width="160"><br><br>
+      <strong>Star Inbox</strong><br>
+      <sub>Keep additional due follow-ups available without opening parallel interruptions.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/ai-chat.webp" alt="Grounded AI check-in conversation" width="160"><br><br>
+      <strong>Check-in Chats</strong><br>
+      <sub>Reflect on authorized records while keeping evidence and later reflections separate.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="docs/screenshots/settings.webp" alt="Settings and account controls" width="160"><br><br>
+      <strong>Settings</strong><br>
+      <sub>Manage appearance, AI, follow-ups, data access, backup, and optional MCP connections.</sub>
+    </td>
+  </tr>
+</table>
+
 ## Core workflow
 
 ### 1. Discover and place
