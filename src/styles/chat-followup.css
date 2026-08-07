@@ -1,0 +1,3 @@
+.message-row:has(.message-options button[data-option]) .message-note-links {
+  display: none;
+}
